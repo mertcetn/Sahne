@@ -153,7 +153,7 @@ Canvas/WebGL/SVG, custom shaders, network access, audio analysis, additional med
 
 For each task, update its checkbox only after appropriate checks pass and evidence is recorded. Record blocked work with the missing evidence and next action; do not mark it complete because a workaround skips a gate. Keep architecture changes reflected in architecture.md and user-facing changes in the relevant docs/ document.
 
-At delivery, summarize changes, completed checks, untested cases, and concrete user testing/review steps. Ask the user to test or review, and commit only after their approval. Do not create extra branches or push to release without explicit instruction. The user's earlier repository-initialization commit does not approve future commits.
+At delivery, summarize changes, completed checks, untested cases, and useful review steps. Run agent-executable checks autonomously; request user testing only when necessary input, visual judgment or physical/unavailable hardware is required. Commit after validation and user authorization without requesting duplicate automatic test runs. Do not create extra branches or push to release without explicit instruction. The user's earlier repository-initialization commit does not approve future commits.
 
 ## 12. Next task
 
@@ -205,3 +205,7 @@ The user tested healthy and hang successfully and approved the initial sandbox, 
 ### M2 process/handle continuation
 
 The user confirmed network-egress and memory and authorized commit 3b9f93f. The next change adds process (Job quota error 1816 for a suspended trusted child) and handles (excluded inheritable sentinel handle, with verified strict-policy fatal handling). Both passed locally; three new reader regressions prevent unarmed/truncated/mismatched output from satisfying the handle case. These are partial G2 checks, not blanket process/handle isolation certification. Broader network/endpoint/escape, CPU/flood and JS work remains. New changes await user testing/approval; see [Detailed boundary and commands](m2-sandbox.md#continuation-process-quota-and-excluded-handles).
+
+### M2 IPC fault/pressure continuation
+
+The validated process/handle changes were approved and committed in 9d53b81, with the user's instruction to run executable tests autonomously. The next change requires EOF after the final result and rejects unsolicited trailing data immediately. Actual restricted-process fixtures cover flood, partial-body stall/EOF, sequence replay and a peer that does not close after a valid report. The scope is fixed-conversation failure containment; persistent valid-message rate budgets, host-write backpressure, restart behavior, full OS isolation coverage and JS remain open. See [IPC fault validation](m2-ipc-validation.md).

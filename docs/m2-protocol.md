@@ -38,6 +38,8 @@ read_frame returns clean EOF only before any length-prefix byte. Partial prefixe
 
 A synchronous reader can block on a stalled peer. The upcoming sandbox host must enforce external deadlines, bounded queues/rates and connection counts, process memory/CPU limits and termination. A 64 KiB frame cap is not complete denial-of-service protection. Unknown protocol/kind/versions and malformed input should end the future session without a weak fallback.
 
+The trusted one-shot sandbox probe now requires EOF after the final report and rejects the first unsolicited trailing byte without draining further frames. Its fixed host deadline applies to incomplete bodies and peers that keep the stream open. Flood, truncation and replay are exercised through the actual AppContainer channel in [IPC fault validation](m2-ipc-validation.md). This host policy does not change the codec's clean-EOF semantics or introduce persistent scene messages.
+
 Scene SetText/SetStyle transactions, ACKs, resource ownership, node-generation checks and atomic application remain planned M4 integration. They are not implemented by these control messages and must get explicit tags/schema validation before being accepted.
 
 ## Verification

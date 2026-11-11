@@ -406,6 +406,11 @@ pub fn spawn_probe(
         "hang",
         "oversized",
         "crash",
+        "ipc-flood",
+        "ipc-stall",
+        "ipc-truncated",
+        "ipc-replay",
+        "ipc-open",
     ]
     .contains(&case)
     {

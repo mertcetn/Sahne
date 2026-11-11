@@ -17,6 +17,26 @@ enum ProbeReply {
     Report(u32),
     InvalidHandleTermination,
 }
+#[derive(Debug)]
+struct TrailingData;
+impl std::fmt::Display for TrailingData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Unsolicited data after the final probe result")
+    }
+}
+impl Error for TrailingData {}
+
+fn require_eof(output: &mut impl io::Read) -> Result<()> {
+    let mut byte = [0];
+    loop {
+        match output.read(&mut byte) {
+            Ok(0) => return Ok(()),
+            Ok(_) => return Err(TrailingData.into()),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
 pub fn run() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|arg| arg == "--worker") {
@@ -71,15 +91,19 @@ fn read_response(
             return Ok(ProbeReply::InvalidHandleTermination);
         };
         final_report.check_context(session, 4, 0)?;
-        return match final_report.body {
-            Body::ProbeResult { denied } => Ok(ProbeReply::Report(denied)),
-            other => Err(format!("Handle probe failed: {other:?}").into()),
+        let reply = match final_report.body {
+            Body::ProbeResult { denied } => ProbeReply::Report(denied),
+            other => return Err(format!("Handle probe failed: {other:?}").into()),
         };
+        require_eof(output)?;
+        return Ok(reply);
     }
-    match report.body {
-        Body::ProbeResult { denied } => Ok(ProbeReply::Report(denied)),
-        _ => Err("Unexpected report".into()),
-    }
+    let reply = match report.body {
+        Body::ProbeResult { denied } => ProbeReply::Report(denied),
+        _ => return Err("Unexpected report".into()),
+    };
+    require_eof(output)?;
+    Ok(reply)
 }
 fn worker(args: &[String]) -> Result<()> {
     if !wallpaper_sandbox::is_appcontainer()? {
@@ -117,7 +141,27 @@ fn worker(args: &[String]) -> Result<()> {
             return Ok(());
         }
         "crash" => std::process::exit(42),
-        "healthy" | "network" | "network-egress" | "memory" | "process" | "handles" => {}
+        "ipc-stall" | "ipc-truncated" => {
+            // Declare a Pong-sized payload, emit one byte, then stop mid-body.
+            output.write_all(&35u32.to_le_bytes())?;
+            output.write_all(&[1])?;
+            output.flush()?;
+            if case == "ipc-truncated" {
+                return Ok(());
+            }
+            loop {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        "ipc-replay" => {
+            write_frame(&mut output, &envelope(session, 1, Body::Pong { nonce }))?;
+            output.flush()?;
+            loop {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
+        | "ipc-flood" | "ipc-open" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -208,12 +252,25 @@ fn worker(args: &[String]) -> Result<()> {
         &envelope(session, 3, Body::ProbeResult { denied }),
     )?;
     output.flush()?;
+    if case == "ipc-flood" {
+        // This one-shot channel permits no messages after the final report.
+        // Keep trying small frames until the host rejects/closes/terminates us.
+        loop {
+            write_frame(&mut output, &envelope(session, 4, Body::Ping { nonce }))?;
+            output.flush()?;
+        }
+    }
+    if case == "ipc-open" {
+        loop {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
     Ok(())
 }
 fn host(args: &[String]) -> Result<()> {
     if args == ["--help"] {
         println!(
-            "Usage: wallpaper-sandbox-probe [--case healthy|network|network-egress|memory|process|handles|hang|oversized|crash]\nTrusted Windows AppContainer/Job/IPC spike; no JavaScript or packages. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile. Network tests require explicit access denial; timeout is inconclusive and fails. network uses loopback; network-egress tries TEST-NET-1 192.0.2.1:9 with no DNS or application payload. memory checks a small allocation succeeds and a 257 MiB commit fails under the 256 MiB Job limit; pages are never touched. process requires Job quota denial of a suspended child. handles requires INVALID_HANDLE for a host file omitted from the explicit inheritance list, or verified strict-policy termination after the armed IPC stage; WER is suppressed only for this intentional worker fault."
+            "Usage: wallpaper-sandbox-probe [--case CASE]\nCases: healthy, network, network-egress, memory, process, handles, hang, oversized, crash, ipc-flood, ipc-stall, ipc-truncated, ipc-replay, ipc-open.\nTrusted Windows AppContainer/Job/IPC spike; no JavaScript or packages. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile.\nNetwork tests require explicit access denial; timeout is inconclusive and fails. network uses loopback; network-egress tries TEST-NET-1 192.0.2.1:9 without DNS or application payload.\nmemory checks a small allocation succeeds and an over-limit commit fails. process requires Job quota denial of a suspended child. handles checks an excluded host handle, including verified strict-policy termination after arming; WER is suppressed only for that intentional fault.\nIPC cases exercise unsolicited trailing-message flood, stalled partial body, truncated body at EOF, replayed sequence, and an open stream after a valid report. Every successful one-shot response requires EOF; a peer that keeps the stream open is stopped by the host deadline."
         );
         return Ok(());
     }
@@ -232,6 +289,11 @@ fn host(args: &[String]) -> Result<()> {
         "hang",
         "oversized",
         "crash",
+        "ipc-flood",
+        "ipc-stall",
+        "ipc-truncated",
+        "ipc-replay",
+        "ipc-open",
     ]
     .contains(&case)
     {
@@ -315,11 +377,11 @@ fn host(args: &[String]) -> Result<()> {
                     return Err("Healthy worker did not exit cleanly".into());
                 }
             }
-            ("hang", Err(mpsc::RecvTimeoutError::Timeout)) => {
+            ("hang" | "ipc-stall" | "ipc-open", Err(mpsc::RecvTimeoutError::Timeout)) => {
                 let detection = Instant::now();
                 sandbox.stop()?;
                 println!(
-                    "Watchdog terminated native stall in {:?} after detection",
+                    "Watchdog terminated {case} in {:?} after detection",
                     detection.elapsed()
                 );
             }
@@ -344,6 +406,38 @@ fn host(args: &[String]) -> Result<()> {
                 println!(
                     "Oversized worker frame rejected before payload allocation; worker stopped."
                 );
+            }
+            ("ipc-flood", Ok(Err(error))) if error.downcast_ref::<TrailingData>().is_some() => {
+                let detection = Instant::now();
+                sandbox.stop()?;
+                println!(
+                    "Unsolicited-message flood rejected after one trailing byte; Job stopped in {:?} after detection.",
+                    detection.elapsed()
+                );
+            }
+            ("ipc-replay", Ok(Err(error)))
+                if matches!(
+                    error.downcast_ref::<wallpaper_protocol::Error>(),
+                    Some(wallpaper_protocol::Error::Invalid(
+                        "unexpected session, sequence or revision"
+                    ))
+                ) =>
+            {
+                let detection = Instant::now();
+                sandbox.stop()?;
+                println!(
+                    "Replayed sequence rejected; Job stopped in {:?} after detection.",
+                    detection.elapsed()
+                );
+            }
+            ("ipc-truncated", Ok(Err(error)))
+                if matches!(error.downcast_ref::<wallpaper_protocol::Error>(),
+                Some(wallpaper_protocol::Error::Io(io_error)) if io_error.kind() == io::ErrorKind::UnexpectedEof) =>
+            {
+                if sandbox.wait(1000)? != Some(0) {
+                    return Err("Truncation fixture did not exit cleanly".into());
+                }
+                println!("Truncated worker frame rejected as UnexpectedEof; host survived.");
             }
             ("crash", Ok(Err(_))) => {
                 if sandbox.wait(1000)? != Some(42) {
@@ -470,5 +564,40 @@ mod tests {
             },
         ));
         assert!(parse(bytes(&messages)).is_err());
+    }
+    #[test]
+    fn completed_response_rejects_flood_after_only_one_extra_byte() {
+        for handles in [false, true] {
+            let mut messages = prefix();
+            messages.push(envelope(
+                42,
+                3,
+                Body::ProbeResult {
+                    denied: if handles { HANDLES_ARMED } else { EXPECTED },
+                },
+            ));
+            if handles {
+                messages.push(envelope(
+                    42,
+                    4,
+                    Body::ProbeResult {
+                        denied: EXPECTED | 128,
+                    },
+                ));
+            }
+            let valid = bytes(&messages);
+            let (ready, _receive) = mpsc::sync_channel(1);
+            assert_eq!(
+                read_response(&mut io::Cursor::new(&valid), 42, 77, handles, &ready).unwrap(),
+                ProbeReply::Report(EXPECTED | if handles { 128 } else { 0 })
+            );
+            let mut flood = valid.clone();
+            flood.extend_from_slice(&[0; 64 * 1024]);
+            let mut stream = io::Cursor::new(flood);
+            let (ready, _receive) = mpsc::sync_channel(1);
+            let error = read_response(&mut stream, 42, 77, handles, &ready).unwrap_err();
+            assert!(error.downcast_ref::<TrailingData>().is_some());
+            assert_eq!(stream.position() as usize, valid.len() + 1);
+        }
     }
 }
