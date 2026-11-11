@@ -373,3 +373,7 @@ samples/ contains ignored optional local research inputs, never CI prerequisites
 ### Application-device recovery validation
 
 A dedicated test mode destroys only the preview's own wgpu device. Generation-tagged callbacks plus a later-generation presented frame are required for success. Normal and desktop runs passed on the recorded RTX 3050 configuration. The fixed font is now embedded with its OFL notice and loaded without system discovery. No new Rust dependency or relaxed isolation policy was introduced. Real driver loss, hotplug and changed-DPI behavior remain separate unverified cases.
+
+## 19. M2 control-frame foundation
+
+The workspace now includes crates/wallpaper-protocol as a safe std-only transport-neutral codec for bounded Hello/Ping/Pong/Reject control messages. Encoding and complete structural validation are independent from OS channel security and host state acceptance; envelope checks do not mutate scene/sequence state. Scene transactions remain planned M4 work. No worker, sandbox or JS execution is enabled by this step. See [M2 wire contract and tests](m2-protocol.md).

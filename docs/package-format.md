@@ -1,6 +1,6 @@
 # Package and IPC Contract
 
-Status: M0 draft; schemas and concrete validators are pending implementation.
+Status: native package/scene schemas remain drafts. The M2 control-frame subset is implemented; see [Control-frame foundation](m2-protocol.md).
 
 ## Package v1
 
@@ -21,3 +21,7 @@ Import proposal: 1024 entries, 64 MiB expanded package, 16 MiB source file, 4096
 ## Planned imported-source frontend
 
 Wallpaper Engine inputs are not native packages and are not currently accepted. After M4, a separate importer may translate the approved local web subset into this format. I1 must specify source provenance, adapter version and capability/report metadata before adding fields; do not accept arbitrary manifest extensions in the meantime. Native format versions, resource IDs, host validation and limits apply unchanged. Rejection/unknown or explicitly selected lossy conversion are valid outcomes. See [Import plan](wallpaper-engine-import-plan.md).
+
+## Implemented M2 control subset
+
+The safe dependency-free wallpaper-protocol crate implements bounded length-prefixed Hello/Ping/Pong/Reject messages and expected-envelope comparison. See [Exact wire encoding, limits and tests](m2-protocol.md). Scene operations and ACKs described above remain planned; unknown tags are rejected until their schemas exist. The codec is not a sandbox or authenticated IPC channel, and adds no script/package execution path.

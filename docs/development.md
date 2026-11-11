@@ -34,3 +34,13 @@ The separate wallpaper-preview executable provides a trusted Windows/D3D12 scene
 ## Local research samples
 
 The root samples/ directory is Git-ignored and optional. Do not add it to release archives, Actions inputs or default test requirements. Derived sample artifacts stay under ignored samples/ or target/. Tracked docs/ records may describe observed capabilities without copying third-party source/media. Future importer CI uses original synthetic fixtures so a clean checkout remains self-contained. See [Import plan](wallpaper-engine-import-plan.md).
+
+## Protocol boundary checks
+
+The M2 std-only codec can be checked without opening windows or running samples:
+
+```powershell
+cargo test -p wallpaper-protocol --locked
+```
+
+See [M2 control-frame foundation](m2-protocol.md) for wire format and pending sandbox/channel work. This adds no user-facing package execution support.

@@ -17,8 +17,8 @@ Dates and effort estimates will be added after the first technical spikes establ
 | Milestone | Deliverable | Prerequisites | Exit gate | Status |
 | --- | --- | --- | --- | --- |
 | M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence committed |
-| M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Implementation present; device/font follow-up awaits review; extended display matrix open |
-| M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | Pending |
+| M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Implementation and font/device follow-up approved; extended display matrix open |
+| M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | In progress: control codec only; OS isolation pending |
 | M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | Pending |
 | M4 | Sandboxed scripted end-to-end Windows prototype | M1, M2, M3 | Integrated G2 regression and prototype acceptance | Pending |
 | I2 | Selective web import and compatibility report | M4; I1 contracts | Import-specific acceptance; does not block native M5/M6 by default | Planned |
@@ -189,3 +189,7 @@ The supplied web example is a complex incompatibility fixture, not a required fu
 ### M1 implementation checklist follow-up
 
 The prototype implementation checklist is checked: a bundled fixed font replaces system-font discovery, and normal/desktop application-device destruction tests observed the real loss callback and successful reconstruction. This does not close G1's extended configuration matrix or imply driver-fault/hotplug/mixed-DPI certification. Source/font/license and test details are in [Lifecycle validation](m1-lifecycle-validation.md) and [Font record](bundled-font.md). New changes await user visual/test review before commit; next remaining G1 work is Show Desktop and available display/DPI transitions.
+
+### Current continuation
+
+Font and application-device recovery were approved and committed in d50eb30. Show Desktop, physical hotplug and changed DPI remain unverified; no new display support claim is made. M2 proceeds independently with a std-only bounded control codec and malformed-input regressions, documented in [M2 foundation](m2-protocol.md). A codec is not the actual sandbox channel, so the M2 IPC and isolation checklist items remain open.

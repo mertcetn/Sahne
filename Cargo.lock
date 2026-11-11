@@ -1677,6 +1677,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "wallpaper-protocol"
+version = "0.1.0-dev"
+
+[[package]]
 name = "wasm-bindgen"
 version = "0.2.130"
 source = "registry+https://github.com/rust-lang/crates.io-index"

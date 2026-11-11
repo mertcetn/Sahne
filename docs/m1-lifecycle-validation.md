@@ -1,6 +1,6 @@
 # M1 Lifecycle Validation Record
 
-Date: November 11, 2026. Implementation: working tree based on prototype commit f0cf31a. The earlier lifecycle changes were approved and committed in 2ea71de; the bundled-font/device-test follow-up below awaits separate user review.
+Date: November 11, 2026. Implementation: working tree based on prototype commit f0cf31a. The earlier lifecycle changes were approved and committed in 2ea71de; the bundled-font/device-test follow-up was subsequently approved and committed in d50eb30.
 
 ## Confirmed environment and visual feedback
 
@@ -64,3 +64,7 @@ The fixed text now uses embedded Noto Sans with its [license/provenance record](
 Release-build --test-device-loss runs passed in normal-window (8 seconds) and desktop (10 seconds) mode. Each recorded device.destroy on generation 1, the actual Destroyed loss callback, one recovery, and a presented frame in generation 2, with exit code 0. No Explorer or OS-driver restart was used in these runs. This exercises the actual callback/reconstruction path, but not hardware driver removal. The earlier ten real Explorer cycles and successful manual resize/minimize/lock/sleep observations remain valid evidence of their tested revision; the changed font still requires visual review.
 
 Outstanding matrix cases are Show Desktop, hotplug and changed DPI, plus real driver-fault behavior. They remain untested; do not infer a stable Windows-wide product support claim. M1 implementation tasks can be tracked separately from this incomplete acceptance matrix.
+
+## Desktop-control check follow-up
+
+The available computer-use window inventory did not expose the taskbar or Show Desktop control as a target. No Show Desktop action was issued, so this case remains manual/unverified. No display resolution, scaling or connection settings were changed. This does not block the roadmap's independent M2 control-protocol work.
