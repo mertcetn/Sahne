@@ -14,7 +14,14 @@ use windows_sys::Win32::{
     Foundation::*,
     Security::{Authorization::*, Cryptography::*, Isolation::*, *},
     Storage::FileSystem::{FILE_GENERIC_EXECUTE, FILE_GENERIC_READ},
-    System::{JobObjects::*, Memory::*, Pipes::*, Threading::*},
+    System::{
+        Diagnostics::Debug::{GetErrorMode, SEM_NOGPFAULTERRORBOX, SetErrorMode},
+        JobObjects::*,
+        Memory::*,
+        Pipes::*,
+        SystemServices::PROCESS_MITIGATION_STRICT_HANDLE_CHECK_POLICY,
+        Threading::*,
+    },
 };
 
 fn wide(value: impl AsRef<std::ffi::OsStr>) -> io::Result<Vec<u16>> {
@@ -329,9 +336,14 @@ impl Drop for Child {
 pub struct Sandbox {
     child: Child,
     job: OwnedHandle,
+    _excluded: Option<File>,
+    strict_handles: bool,
     _profile: Profile,
 }
 impl Sandbox {
+    pub fn strict_handle_checks(&self) -> bool {
+        self.strict_handles
+    }
     pub fn stop(&self) -> io::Result<()> {
         // SAFETY: Job/process belong to this sandbox and never target unrelated processes.
         unsafe {
@@ -389,6 +401,8 @@ pub fn spawn_probe(
         "network",
         "network-egress",
         "memory",
+        "process",
+        "handles",
         "hang",
         "oversized",
         "crash",
@@ -410,8 +424,33 @@ pub fn spawn_probe(
     std::fs::copy(executable, &copied)?;
     let app = wide(&copied)?;
     let cwd = wide(&bin)?;
+    // Deliberately inheritable, but omitted from PROC_THREAD_ATTRIBUTE_HANDLE_LIST.
+    // Keep it open through worker termination so a stale/recycled host handle cannot pass.
+    let excluded = if case == "handles" {
+        let file = File::open(&marker)?;
+        // SAFETY: Changes only the inheritance flag of our fresh test-file handle.
+        check(unsafe {
+            SetHandleInformation(
+                file.as_raw_handle(),
+                HANDLE_FLAG_INHERIT,
+                HANDLE_FLAG_INHERIT,
+            )
+        })?;
+        let mut flags = 0;
+        // SAFETY: Borrowed live file handle and initialized output slot.
+        check(unsafe { GetHandleInformation(file.as_raw_handle(), &mut flags) })?;
+        if flags & HANDLE_FLAG_INHERIT == 0 {
+            return Err(io::Error::other("Excluded test handle is not inheritable"));
+        }
+        Some(file)
+    } else {
+        None
+    };
+    let excluded_value = excluded
+        .as_ref()
+        .map_or(0, |file| file.as_raw_handle() as usize);
     let command = format!(
-        "\"{}\" --worker {session} {case} \"{}\" {} {port}",
+        "\"{}\" --worker {session} {case} \"{}\" {} {port} {excluded_value}",
         copied.display(),
         marker.display(),
         std::process::id()
@@ -507,9 +546,27 @@ pub fn spawn_probe(
     // SAFETY: Assign before any worker code can run.
     check(unsafe { AssignProcessToJobObject(job.as_raw_handle(), child.process.as_raw_handle()) })?;
     verify_token(child.process.as_raw_handle(), profile.sid)?;
+    let strict_handles = if case == "handles" {
+        let mut policy = PROCESS_MITIGATION_STRICT_HANDLE_CHECK_POLICY::default();
+        // SAFETY: Query only the new suspended process; correctly sized initialized output.
+        check(unsafe {
+            GetProcessMitigationPolicy(
+                child.process.as_raw_handle(),
+                ProcessStrictHandleCheckPolicy,
+                &mut policy as *mut _ as *mut c_void,
+                size_of::<PROCESS_MITIGATION_STRICT_HANDLE_CHECK_POLICY>(),
+            )
+        })?;
+        // SAFETY: This API fills the DWORD Flags member of the documented union.
+        unsafe { policy.Anonymous.Flags & 1 != 0 }
+    } else {
+        false
+    };
     let sandbox = Sandbox {
         child,
         job,
+        _excluded: excluded,
+        strict_handles,
         _profile: profile,
     };
     // Drop host copies of child-side endpoints before resuming, so EOF works on termination.
@@ -592,5 +649,97 @@ pub fn probe_memory_limit() -> io::Result<i32> {
     }
     Err(io::Error::other(
         "Allocation above Job limit unexpectedly succeeded",
+    ))
+}
+
+/// Query a known host-only handle value without borrowing ownership or closing it.
+/// Numeric collisions or errors other than INVALID_HANDLE fail this trusted fixture.
+/// Strict-handle policy may terminate the worker instead; the host verifies that path.
+pub fn probe_excluded_handle(value: usize) -> io::Result<()> {
+    if !is_appcontainer()? || value == 0 || value == usize::MAX {
+        return Err(io::Error::other("Invalid excluded-handle fixture"));
+    }
+    // SAFETY: Only this trusted single-threaded probe process changes its error mode.
+    // Suppress WER for this intentional fatal reference, retaining all other bits.
+    // This does not change strict-handle mitigation, isolation, or the host deadline.
+    unsafe {
+        SetErrorMode(GetErrorMode() | SEM_NOGPFAULTERRORBOX);
+    }
+    let mut flags = 0;
+    // SAFETY: GetHandleInformation validates the opaque value; no pointer is dereferenced
+    // and no ownership is assumed. Output storage remains live for the synchronous query.
+    if unsafe { GetHandleInformation(value as HANDLE, &mut flags) } != 0 {
+        return Err(io::Error::other(
+            "Excluded handle was inherited or its value collided",
+        ));
+    }
+    let error = io::Error::last_os_error();
+    if error.raw_os_error() != Some(ERROR_INVALID_HANDLE as i32) {
+        return Err(error);
+    }
+    Ok(())
+}
+
+/// Attempt only the current trusted executable, suspended and with no inherited handles.
+/// Any unexpectedly created process is terminated without running its primary thread.
+pub fn probe_child_process_limit() -> io::Result<()> {
+    if !is_appcontainer()? {
+        return Err(io::Error::other("Process probe requires AppContainer"));
+    }
+    let mut limits = JOBOBJECT_BASIC_LIMIT_INFORMATION::default();
+    // SAFETY: Null selects this worker's immediate Job; output has the required layout.
+    check(unsafe {
+        QueryInformationJobObject(
+            ptr::null_mut(),
+            JobObjectBasicLimitInformation,
+            &mut limits as *mut _ as *mut c_void,
+            size_of::<JOBOBJECT_BASIC_LIMIT_INFORMATION>() as u32,
+            ptr::null_mut(),
+        )
+    })?;
+    if limits.LimitFlags & JOB_OBJECT_LIMIT_ACTIVE_PROCESS == 0 || limits.ActiveProcessLimit != 1 {
+        return Err(io::Error::other("Unexpected worker active-process limit"));
+    }
+    let app = wide(std::env::current_exe()?)?;
+    let startup = STARTUPINFOW {
+        cb: size_of::<STARTUPINFOW>() as u32,
+        ..Default::default()
+    };
+    let mut process = PROCESS_INFORMATION::default();
+    // SAFETY: Explicit trusted executable, no PATH lookup, no inheritance; strings and
+    // output slots live through creation. Suspension prevents any unexpected child code.
+    let created = unsafe {
+        CreateProcessW(
+            app.as_ptr(),
+            ptr::null_mut(),
+            ptr::null(),
+            ptr::null(),
+            0,
+            CREATE_SUSPENDED | CREATE_NO_WINDOW,
+            ptr::null(),
+            ptr::null(),
+            &startup,
+            &mut process,
+        )
+    };
+    if created == 0 {
+        let error = io::Error::last_os_error();
+        // Access denied, missing image or other launch errors are not proof of Job quota.
+        return if error.raw_os_error() == Some(ERROR_NOT_ENOUGH_QUOTA as i32) {
+            Ok(())
+        } else {
+            Err(error)
+        };
+    }
+    // SAFETY: Successful creation transferred both handles; Child kills/waits on drop.
+    let unexpected = unsafe {
+        Child {
+            process: own(process.hProcess)?,
+            thread: own(process.hThread)?,
+        }
+    };
+    drop(unexpected);
+    Err(io::Error::other(
+        "Child process creation unexpectedly succeeded",
     ))
 }

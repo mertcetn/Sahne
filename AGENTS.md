@@ -20,8 +20,8 @@ This file must contain only rules for working on this project. Under no circumst
 - Use Git and GitHub for version control.
 - Maintain exactly two branches: `main` and `release`.
 - Every commit pushed to `release` must automatically trigger a GitHub Actions workflow that builds the project and publishes the resulting artifacts through GitHub Releases.
-- After every task, ask the user to test the changes. Create a commit only after the user approves the changes following testing.
-- Provide concrete testing or review steps. Never treat the user's silence as approval.
+- Run and verify tests that the agent can execute without asking the user to repeat them. Request user testing only when visual judgment, physical interaction, unavailable hardware, or another necessary user input is required.
+- Create commits after applicable validation and user authorization. Do not request repeated testing approval for checks the agent can verify. Never treat the user's silence as authorization.
 - Without an explicit user instruction, do not discard user changes, rewrite Git history, force-push, or push to `release`.
 
 ## Validation and Task Delivery

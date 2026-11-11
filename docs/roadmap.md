@@ -201,3 +201,7 @@ The approved codec was committed in 5a245f8. The next working-tree change adds a
 ### M2 network/resource continuation
 
 The user tested healthy and hang successfully and approved the initial sandbox, now committed in 49c0a3f. New separate network-egress and memory cases passed locally: outbound IPv4 TCP to a reserved test destination was explicitly denied, and a Job-verified 256 MiB memory policy rejected a single 257 MiB commit after a successful 64 KiB control allocation. The original loopback case remains inconclusive; full network, memory-exhaustion, handle, process-creation, flood and JS gates remain open. New continuation changes await user testing/approval. See [Commands and scoped evidence](m2-sandbox.md#continuation-outbound-tcp-and-memory-limit).
+
+### M2 process/handle continuation
+
+The user confirmed network-egress and memory and authorized commit 3b9f93f. The next change adds process (Job quota error 1816 for a suspended trusted child) and handles (excluded inheritable sentinel handle, with verified strict-policy fatal handling). Both passed locally; three new reader regressions prevent unarmed/truncated/mismatched output from satisfying the handle case. These are partial G2 checks, not blanket process/handle isolation certification. Broader network/endpoint/escape, CPU/flood and JS work remains. New changes await user testing/approval; see [Detailed boundary and commands](m2-sandbox.md#continuation-process-quota-and-excluded-handles).

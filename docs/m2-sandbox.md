@@ -33,15 +33,15 @@ For each launch the host generates nonzero session/nonce values with Windows BCr
 
 The worker starts suspended with SECURITY_CAPABILITIES and no capability entries. Before resuming it, the host assigns a Job and independently queries the process token for AppContainer identity, the exact profile SID and zero capabilities. Failure ends the launch; there is no unrestricted fallback. This is a standard AppContainer experiment, not LPAC. Windows library/system reads and AppContainer-owned storage remain possible under OS policy; this is not a claim of zero filesystem access.
 
-The Job sets kill-on-close, one active process and a 256 MiB per-process committed-memory limit. No breakaway flag is enabled. The continuation below tests a single over-limit commit; incremental exhaustion and JS allocator behavior remain untested. Attempted child creation, CPU limits, host-crash kill-on-close behavior and nested-Job compatibility have not yet been exercised. Configuration alone does not complete those tests.
+The Job sets kill-on-close, one active process and a 256 MiB per-process committed-memory limit. No breakaway flag is enabled. The continuations below test a single over-limit commit and a suspended child-creation request; incremental exhaustion and JS allocator behavior remain untested. CPU limits, host-crash kill-on-close behavior and broader nested-Job compatibility have not yet been exercised. Configuration alone does not complete those tests.
 
-The explicit inherited-handle list contains only the child ends of two anonymous pipes. Parent ends are non-inheritable. The worker receives no Job/process handle or source-file handle. Standard error shares the protocol output pipe, so unexpected diagnostics invalidate the stream rather than forming an unbounded diagnostic channel. Direct unrelated-handle/endpoint tests are still pending. Concurrent host launches and inheritable-handle races have not been audited for production use.
+The explicit inherited-handle list contains only the child ends of two anonymous pipes. Parent ends are non-inheritable. The worker receives no Job/process handle or source-file handle. Standard error shares the protocol output pipe, so unexpected diagnostics invalidate the stream rather than forming an unbounded diagnostic channel. One intentionally inheritable but excluded host file is now tested below; unrelated endpoints and broader handle classes remain pending. Concurrent host launches and inheritable-handle races have not been audited for production use.
 
 The child receives a curated Unicode environment containing APPDATA, LOCALAPPDATA, SystemRoot and USERPROFILE location metadata, not the host's complete environment, PATH, proxy settings or tokens. With only SystemRoot the initial launch failed with Windows error 203; adding the OS location metadata enabled launch without changing ACL/capability policy. Windows may adjust these locations for the AppContainer. This observation is specific to this host environment.
 
 ## IPC and lifetime
 
-The [bounded codec](m2-protocol.md) supplies exact wire parsing. The host requires Hello(sequence 1), matching Pong(sequence 2) and ProbeResult(sequence 3), with its selected session and revision zero. Host Ping uses sequence 1 in the other direction. ProbeResult is trusted test telemetry, not an authoritative security assertion from untrusted content.
+The [bounded codec](m2-protocol.md) supplies exact wire parsing. Normally the host requires Hello(sequence 1), matching Pong(sequence 2) and ProbeResult(sequence 3), with its selected session and revision zero. The handles fixture adds the explicitly validated stage/final exchange described below. Host Ping uses sequence 1 in the other direction. ProbeResult is trusted test telemetry, not an authoritative security assertion from untrusted content.
 
 One reader thread and one-slot result/handshake queues serve one worker. Handshake and subsequent response each have a three-second deadline. On failure or completion the host terminates the Job and waits at most one second before joining the pipe reader; child pipe copies in the parent are closed before resume so worker termination releases the reader. The fixture writes one small Ping; blocked large writes, stream floods, trailing-frame floods, restart policy and production backpressure are not covered. There is no automatic restart.
 
@@ -108,7 +108,7 @@ Memory queries the worker's associated Job and requires the process-memory flag 
 
 Final workspace release verification repeated both new cases successfully (`7804-0c07f5ac51ca024c`, `17296-81158e5b79211a51`). The original loopback case still reported TimedOut/no raw OS error and exited 1; its acceptance was not relaxed. All eleven workspace tests, release build, formatting, Clippy, documentation-link and diff checks passed. Cargo emitted the existing incremental-cache hardlink/copy notices. Hosted CI and non-Windows execution were not run. These continuation changes remain uncommitted pending user testing/approval.
 
-The user subsequently confirmed that both network-egress and memory worked and explicitly authorized committing this continuation. No additional timing, error-code or platform evidence is inferred from that confirmation.
+The user subsequently confirmed that both network-egress and memory worked and explicitly authorized committing this continuation, recorded in 3b9f93f. No additional timing, error-code or platform evidence is inferred from that confirmation.
 
 The memory helper adds only windows-sys's System_Memory binding feature; external package versions and lockfile remain unchanged. Existing source/license/security assessment applies; the native helper's pointer ownership and allocation release were reviewed against current VirtualAlloc/VirtualFree documentation. Resource limits and AppContainer policy are unchanged. Unrelated handles, child-process attempts, aggregate/incremental memory exhaustion, CPU budgets, protocol floods, restart behavior and JS remain future work.
 
@@ -121,3 +121,45 @@ Primary references consulted November 11, 2026:
 - [VirtualFree ownership and release rules](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualfree)
 - [Job committed-memory limit semantics](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information)
 - [Querying the calling process's Job](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-queryinformationjobobject)
+
+## Continuation: process quota and excluded handles
+
+Run these new cases from the repository root on Windows:
+
+```powershell
+cargo run --release -p wallpaper-sandbox-probe --locked -- --case process
+cargo run --release -p wallpaper-sandbox-probe --locked -- --case handles
+```
+
+Both must exit zero and print `Probe passed`. These changes await user testing/approval; they are not part of 3b9f93f.
+
+Process queries the worker's actual Job and requires an active-process limit of exactly one. It calls CreateProcessW for its own staged trusted executable with CREATE_SUSPENDED, no inherited handles and no PATH search. Only ERROR_NOT_ENOUGH_QUOTA (1816) satisfies the case; access denied or an image/environment error does not. Unexpected success fails the case and an ownership guard terminates/waits for the suspended child without resuming it. A normal Pong, mask 0x57, worker exit zero and unchanged sentinel are then required. This tests this child-creation path, not brokered launches, every creation flag or every process API.
+
+Handles opens the host's synthetic sentinel for read and marks that host-only file handle inheritable. The host verifies the inherit flag and keeps the file open through worker termination. It deliberately omits the handle from the existing two-pipe inheritance list and passes only its numeric value as a trusted test argument. No ACL or list permission is added for the worker. The worker attempts GetHandleInformation on that value without owning or closing it. A numeric handle collision or a successful query fails acceptance; the fixture does not guess another value until it passes.
+
+Windows can apply strict invalid-handle checks, causing the attempted query to terminate the worker instead of returning error 6. The initial fixture exposed this as missing output/timeout; the observed exit was 0xc0000008. The host now queries the actual suspended worker's strict-handle mitigation before resume. The worker sends its successful baseline Pong and an exact armed ProbeResult (0x117, sequence 3), then flushes before the query. Only clean EOF after this stage, independently verified strict policy, and exactly 0xc0000008 satisfy the fatal path. If the API returns error 6 normally, a final mask 0x97 at sequence 4 and worker exit zero are required instead. Other errors, partial frames, unarmed EOF, mismatched context and timeouts remain failures. The fatal outcome is expected containment evidence for this trusted fixture; it does not turn arbitrary worker crashes into valid replies.
+
+Only the intentional invalid-reference worker uses SetErrorMode to add SEM_NOGPFAULTERRORBOX while preserving previous flags. This suppresses Windows Error Reporting for that intentional fault and removes its observed delay; no host/system-wide error-reporting settings change. Strict-handle mitigation, AppContainer capabilities, Job limits and the three-second host deadlines stay unchanged. No third-party package is executed and no exception handler bypasses the mitigation.
+
+| Case | Local release result, November 11, 2026 | Retained run |
+| --- | --- | --- |
+| process | Pass; quota error 1816, mask 0x57, worker exit 0 | `8420-59bf3578f335e637` |
+| handles | Pass; host queried strict policy enabled, validated armed stage, worker exit 0xc0000008, host survives | `25852-bb1a67368b124798` |
+
+Three host-reader regressions check that EOF before arming is rejected, only clean EOF after the exact armed stage becomes a candidate, truncated/rejected frames stay errors, and stage session/sequence/revision and Pong nonce must match. These tests do not replace real OS-policy/exit checks.
+
+Final continuation validation passed the workspace release build, all fourteen tests (nine codec, two preview lifecycle, three host-reader), formatting, Clippy with warnings denied, documentation links and diff checks. The unchanged lockfile was verified against 3b9f93f. All eight expected-success native cases passed on the final binary: healthy, network-egress, memory, process, handles, hang, oversized and crash. Final process/handles runs were `25148-eae6893d8cd7d50e` and `10308-96a8cb8b35cc6e33`; hang termination measured 2.8905 ms after detection. The original loopback investigation remains open and was not reclassified. Existing incremental-cache hardlink/copy notices were emitted; hosted CI, non-Windows targets and broader Windows configurations were not run. New source remains uncommitted pending user testing/approval.
+
+The user subsequently instructed the agent to verify executable tests autonomously rather than request duplicate user runs, and authorized committing this validated continuation. This is approval based on the recorded local evidence, not additional user-run hardware evidence.
+
+Only SystemServices and Diagnostics_Debug features of the existing exact windows-sys 0.61.2 are added for the mitigation structure and process-local error-mode calls. Registry packages, versions, license/provenance assessment and lockfile remain unchanged. Native pointer/handle ownership and API preconditions were reviewed against the current primary references below. This fixture temporarily owns an inheritable host handle; production launch concurrency/races still require review. Network coverage, unrelated IPC endpoints, comprehensive handle/process escape attempts, CPU limits, floods, restart behavior and JS-engine gates remain open.
+
+Primary references consulted November 11, 2026:
+
+- [Active-process Job limits](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information)
+- [CreateProcessW suspension, inheritance and executable selection](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw)
+- [Explicit inherited-handle list](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)
+- [GetHandleInformation](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-gethandleinformation)
+- [Strict invalid-handle mitigation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocessmitigationpolicy)
+- [Strict-handle policy structure](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-process_mitigation_strict_handle_check_policy)
+- [Process-local error mode and WER](https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-seterrormode)
