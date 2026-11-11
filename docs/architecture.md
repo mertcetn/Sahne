@@ -12,7 +12,7 @@ This project is not a browser. It does not aim to run arbitrary websites, React 
 
 HTML/CSS is converted into a validated scene description. JavaScript is not translated into Rust; it runs in a separate restricted process. Performance targets require comparative measurements; Rust alone does not guarantee better performance.
 
-See [Feasibility research](feasibility-research.md) for sources, unresolved assumptions, and technical validation gates. M0 now includes a dependency-free CLI workspace and local Windows build checks. Rendering, sandbox, Linux, and hosted CI/release validation have not been completed.
+See [Feasibility research](feasibility-research.md) for sources, unresolved assumptions, and technical validation gates. M0 now includes a dependency-free CLI workspace and local Windows build checks. Hosted CI and a development release have now been validated; see [M0 validation record](m0-validation.md). Rendering, sandbox, and Linux validation remain pending.
 
 See [Development roadmap](roadmap.md) for task sequencing, milestone dependencies, completion evidence, and release readiness.
 

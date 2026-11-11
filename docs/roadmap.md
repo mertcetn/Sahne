@@ -6,7 +6,7 @@ Updated: November 11, 2026.
 
 Deliver a restricted HTML/CSS/JavaScript wallpaper engine on Windows first, then stable Linux support on selected mainstream configurations. Android is deferred until desktop milestones are complete. macOS requires a future scope decision.
 
-The repository has working rules, an architecture, source-based feasibility research, and a Linux support plan. The repository has been created and the existing documentation committed. M0 is in progress: a minimal dependency-free CLI workspace, draft contracts, and local Windows build checks are present. Sandbox/platform validation, hosted CI/release execution, and performance measurements remain pending.
+The repository has working rules, an architecture, source-based feasibility research, and a Linux support plan. The repository has been created and the existing documentation committed. M0 foundation validation is complete: a minimal workspace, draft contracts, clean-source build, hosted CI, and a downloaded development release have been verified. Rendering/sandbox validation and performance measurements remain pending in later milestones. See [M0 validation record](m0-validation.md).
 
 This roadmap sequences the existing design; it does not introduce a new architecture. Technical decisions belong in [Project architecture](architecture.md), research and gate definitions in [Feasibility research](feasibility-research.md), and Linux acceptance details in [Linux support plan](linux-support.md).
 
@@ -16,7 +16,7 @@ Dates and effort estimates will be added after the first technical spikes establ
 
 | Milestone | Deliverable | Prerequisites | Exit gate | Status |
 | --- | --- | --- | --- | --- |
-| M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | In progress; local checks pass, remote verification pending |
+| M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence recorded, review update awaiting commit |
 | M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Pending |
 | M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | Pending |
 | M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | Pending |
@@ -31,15 +31,15 @@ M1 and M2 are independent once their M0 prerequisites are ready. The sandbox spi
 
 ### Work
 
-- [ ] Record the development toolchain and target Windows/GPU test configuration.
-- [ ] Recheck current primary documentation for adopted technologies. Review direct/transitive dependency security, maintenance, licenses, provenance, and platform compatibility before adoption; record retrieval dates for cached references.
-- [ ] Establish a minimal Cargo workspace, lockfile, formatting, linting, and relevant automated checks. Keep the initial crate count small where practical.
-- [ ] Create the planned content-feature, scripting-API, package-format, and threat-model documents under docs/. Specify supported behavior and explicit exclusions before implementing it.
-- [ ] Specify IPC envelopes, transaction/acknowledgement semantics, resource ownership, and provisional host-enforced limits in project documentation.
-- [ ] Define direct OS access tests, worker/native-stall tests, malformed-input cases, and evidence recording for G1–G3.
-- [ ] Investigate GNOME, Plasma, and Cinnamon integration options and record unresolved blockers against the Linux candidate matrix. Do not claim tested support.
-- [ ] Establish CI on main and the release publication workflow required by AGENTS.md. Every release push must build and publish uniquely identifiable artifacts through GitHub Releases; failed required checks must prevent publication. Add platform artifacts only as their builds become available.
-- [ ] Document local build/check commands and the release procedure. Any end-to-end publication test requires an explicit user instruction to push to release.
+- [x] Record the development toolchain and target Windows/GPU test configuration.
+- [x] Recheck current primary documentation for adopted technologies. Review direct/transitive dependency security, maintenance, licenses, provenance, and platform compatibility before adoption; record retrieval dates for cached references.
+- [x] Establish a minimal Cargo workspace, lockfile, formatting, linting, and relevant automated checks. Keep the initial crate count small where practical.
+- [x] Create the planned content-feature, scripting-API, package-format, and threat-model documents under docs/. Specify supported behavior and explicit exclusions before implementing it.
+- [x] Specify IPC envelopes, transaction/acknowledgement semantics, resource ownership, and provisional host-enforced limits in project documentation.
+- [x] Define direct OS access tests, worker/native-stall tests, malformed-input cases, and evidence recording for G1–G3.
+- [x] Investigate GNOME, Plasma, and Cinnamon integration options and record unresolved blockers against the Linux candidate matrix. Do not claim tested support.
+- [x] Establish CI on main and the release publication workflow required by AGENTS.md. Every release push must build and publish uniquely identifiable artifacts through GitHub Releases; failed required checks must prevent publication. Add platform artifacts only as their builds become available.
+- [x] Document local build/check commands and the release procedure. Any end-to-end publication test requires an explicit user instruction to push to release.
 
 ### Completion evidence
 
@@ -154,8 +154,8 @@ At delivery, summarize changes, completed checks, untested cases, and concrete u
 
 ## 12. Next task
 
-Start M0 with the minimal workspace, dependency verification, and threat-model/contract sections needed to run G1 and G2. Then implement the two small Windows spikes before expanding the feature set. This roadmap does not itself authorize implementation, commits, or release publication.
+Proceed to the G1 Windows surface spike (M1) and G2 sandbox spike (M2) using the M0 contracts. Keep spike evidence separate from stable product claims.
 
 ## 13. M0 progress — November 11, 2026
 
-Prepared the minimal workspace/lockfile, pinned toolchain, development CLI, Windows check/release workflow, draft content/scripting/package/IPC/threat contracts, Linux integration backlog, and dependency review. Local build, formatting, Clippy, test-target compilation, release build, and CLI smoke checks passed. No behavioral tests exist yet. The checklist remains open for exact hardware capture, complete future dependency reviews, clean-checkout reproduction, and hosted CI/release validation; no remote push/publication has occurred. See [Development guide](development.md) for user review commands.
+Completed the foundation checks and recorded the Windows/GPU inventory, clean-source build, main CI, release workflow, downloaded artifact checksum, and CLI smoke results in [M0 validation record](m0-validation.md). Draft content/API/security contracts are ready for the spikes; they are not implemented functionality. Active display topology and renderer adapter choice are G1 measurements. No external Rust dependencies have been adopted. The checkout runtime deprecation notice is recorded for maintenance. This evidence/documentation update awaits user review before commit.

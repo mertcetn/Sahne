@@ -21,3 +21,7 @@ Primary references consulted on the review date:
 
 Hosted CI, branch policy and release publication require remote validation after an authorized push. No remote repository settings have been changed.
 
+
+## M0 validation follow-up
+
+Hosted checkout/toolchain/build and release publication passed on November 11, 2026; see [M0 validation record](m0-validation.md). That record supersedes the earlier pending environment/hosted-validation statements above and includes the checkout Node-runtime migration warning. No additional dependency was adopted. Exact active display topology remains a G1 test measurement.
