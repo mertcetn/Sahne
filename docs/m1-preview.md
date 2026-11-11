@@ -11,7 +11,7 @@ cargo run -p wallpaper-preview -- --seconds 15
 cargo run -p wallpaper-preview -- --desktop --seconds 15
 ```
 
-Use the normal window first. Expected scene: dark background, Sahne text, a green rectangle, and an orange/teal checkerboard image uploaded as an RGBA texture. No external image decoding, package, JavaScript, or user font loading is exposed. Text uses installed system fonts for this spike; a bundled fixed font is still needed for portable visual references. Shape/image positions scale with the surface; text uses the reported DPI scale.
+Use the normal window first. Expected scene: dark background, Sahne text, a green rectangle, and an orange/teal checkerboard image uploaded as an RGBA texture. No external image decoding, package, JavaScript, or user font loading is exposed. Text now uses only the embedded Noto Sans font; see [Font provenance and license](bundled-font.md). Earlier system-font runs are historical observations, not the current font configuration. Shape/image positions scale with the surface; text uses the reported DPI scale.
 
 Close the normal window or press Escape. Desktop mode may not receive keyboard focus; always use --seconds for the first trials. Ctrl+C in the launching terminal is also available. Duration is 1..3600 seconds; a run with no presented frame fails. The application does not change the stored Windows wallpaper selection, install autostart, or restart Explorer.
 
@@ -43,3 +43,14 @@ cargo run -p wallpaper-preview -- --desktop --seconds 40 --test-recreate 10
 This development-only flag accepts 1..10 cycles. Each cycle waits for a presented frame, then drops and recreates the application's own native window and GPU resources. It never restarts Explorer. Expect eleven generations for ten cycles; the run fails if its deadline/closure interrupts completion. Without --seconds the preview remains open after the test. Real Explorer restart testing requires separate explicit user authorization because it can close File Explorer windows.
 
 For manual lifecycle checks use --seconds 300 (or a longer 1..3600 duration if sleep will exceed it). Monitor/generation/surface/frame evidence is printed to the terminal. See [Lifecycle validation and remaining user checks](m1-lifecycle-validation.md).
+
+## Application-device loss test
+
+```powershell
+cargo run -p wallpaper-preview -- --seconds 10 --test-device-loss
+cargo run -p wallpaper-preview -- --desktop --seconds 10 --test-device-loss
+```
+
+This mutually exclusive alternative to --test-recreate calls destroy on this application's own wgpu Device once, after its first frame. It does not reset Windows graphics drivers or other applications. A pass requires the actual Destroyed callback for the injected generation and a subsequently presented frame from a newer generation. A timeout or closing early fails the test. Without --seconds the restored scene remains open until closed. Ordinary mode still ignores expected Destroyed notifications from intentional teardown; real unexpected loss is always reported.
+
+Both modes passed on the recorded dual-1080p RTX 3050/D3D12 configuration: callback_seen=true, restored=true, two generations and clean exit code 0. This validates application-level device recreation, not real GPU removal/driver failure. Logs: ignored target/m1-device-loss-window.log and target/m1-device-loss-desktop.log. The synthetic check does not certify hotplug or mixed DPI.

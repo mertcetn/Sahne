@@ -16,8 +16,8 @@ Dates and effort estimates will be added after the first technical spikes establ
 
 | Milestone | Deliverable | Prerequisites | Exit gate | Status |
 | --- | --- | --- | --- | --- |
-| M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence recorded, review update awaiting commit |
-| M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | In progress; visual feedback and 10 Explorer reconnects recorded; display/power matrix pending |
+| M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence committed |
+| M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Implementation present; device/font follow-up awaits review; extended display matrix open |
 | M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | Pending |
 | M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | Pending |
 | M4 | Sandboxed scripted end-to-end Windows prototype | M1, M2, M3 | Integrated G2 regression and prototype acceptance | Pending |
@@ -50,11 +50,11 @@ A clean checkout builds the initial workspace and runs its declared checks. Cont
 
 ### Work
 
-- [ ] Draw a shape, bundled-font text, and an image in a normal development window.
-- [ ] Add an isolated Windows desktop attachment adapter and explicit native surface lifetimes.
-- [ ] Implement change-driven redraw, resize/DPI handling, and surface/device recovery as needed for the spike.
-- [ ] Handle Explorer restart with bounded reattachment and a clear failure state.
-- [ ] Record results on the target Windows build, graphics backend, GPU, and driver.
+- [x] Draw a shape, bundled-font text, and an image in a normal development window.
+- [x] Add an isolated Windows desktop attachment adapter and explicit native surface lifetimes.
+- [x] Implement change-driven redraw, resize/DPI handling, and surface/device recovery as needed for the spike.
+- [x] Handle Explorer restart with bounded reattachment and a clear failure state.
+- [x] Record results on the target Windows build, graphics backend, GPU, and driver.
 
 ### Completion evidence — G1
 
@@ -185,3 +185,7 @@ The approved sequence is I0 static local sample assessment now, I1 contract prep
 - [ ] I3: scope bounded PKG/TEX extraction separately after web-import evaluation.
 
 The supplied web example is a complex incompatibility fixture, not a required full-fidelity success case. Two samples cannot establish broad compatibility coverage. No importer has been implemented. See [Sample assessment](wallpaper-engine-samples.md).
+
+### M1 implementation checklist follow-up
+
+The prototype implementation checklist is checked: a bundled fixed font replaces system-font discovery, and normal/desktop application-device destruction tests observed the real loss callback and successful reconstruction. This does not close G1's extended configuration matrix or imply driver-fault/hotplug/mixed-DPI certification. Source/font/license and test details are in [Lifecycle validation](m1-lifecycle-validation.md) and [Font record](bundled-font.md). New changes await user visual/test review before commit; next remaining G1 work is Show Desktop and available display/DPI transitions.

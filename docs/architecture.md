@@ -356,7 +356,7 @@ The initial workspace contains only apps/wallpaper-cli; other crates remain plan
 
 ## 17. M1 implementation snapshot
 
-The workspace adds apps/wallpaper-preview and crates/wallpaper-platform. The preview renders only a trusted built-in shape, text and RGBA image with wgpu/D3D12, winit and glyphon. The Windows adapter creates an Explorer WorkerW child window before GPU surface creation and bounds reconnect attempts. Native FFI stays in the platform crate; its narrowly documented unsafe-lint exception does not apply to CLI/preview or future workers. Text currently uses installed system fonts for the spike; no external input is exposed. Per-monitor layout, full device recovery and G1 lifecycle certification remain pending. See [M1 preview](m1-preview.md) and [Dependency assessment](m1-dependencies.md).
+The workspace adds apps/wallpaper-preview and crates/wallpaper-platform. The preview renders only a trusted built-in shape, text and RGBA image with wgpu/D3D12, winit and glyphon. The Windows adapter creates an Explorer WorkerW child window before GPU surface creation and bounds reconnect attempts. Native FFI stays in the platform crate; its narrowly documented unsafe-lint exception does not apply to CLI/preview or future workers. Text now uses a single embedded Noto Sans font and a dedicated font database; no external input is exposed. See [Font provenance](bundled-font.md). Per-monitor layout, full device recovery and G1 lifecycle certification remain pending. See [M1 preview](m1-preview.md) and [Dependency assessment](m1-dependencies.md).
 
 ### M1 lifecycle refinement
 
@@ -369,3 +369,7 @@ Compatibility planning proceeds alongside native development; importer implement
 During M2/M3, specify capability reporting, settings/default/update semantics, host-capped FPS, pause behavior and source provenance. Do not silently supply browser APIs or expand the feature contract to fit a complex example. Canvas/WebGL/audio/network and dynamic filesystem access remain separate scope decisions. Scene PKG/TEX extraction is a later independent track; extraction does not imply scene/SceneScript playback. No browser backend is currently selected.
 
 samples/ contains ignored optional local research inputs, never CI prerequisites or release contents. Static findings and required original synthetic fixtures are documented under docs/. Original samples remain unmodified and unexecuted during inspection. See [Import plan](wallpaper-engine-import-plan.md) and [Sample assessment](wallpaper-engine-samples.md). This is an approved planning boundary, not implemented compatibility support.
+
+### Application-device recovery validation
+
+A dedicated test mode destroys only the preview's own wgpu device. Generation-tagged callbacks plus a later-generation presented frame are required for success. Normal and desktop runs passed on the recorded RTX 3050 configuration. The fixed font is now embedded with its OFL notice and loaded without system discovery. No new Rust dependency or relaxed isolation policy was introduced. Real driver loss, hotplug and changed-DPI behavior remain separate unverified cases.

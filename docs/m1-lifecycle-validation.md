@@ -1,6 +1,6 @@
 # M1 Lifecycle Validation Record
 
-Date: November 11, 2026. Implementation: working tree based on prototype commit f0cf31a. These lifecycle changes await user review and are not yet committed.
+Date: November 11, 2026. Implementation: working tree based on prototype commit f0cf31a. The earlier lifecycle changes were approved and committed in 2ea71de; the bundled-font/device-test follow-up below awaits separate user review.
 
 ## Confirmed environment and visual feedback
 
@@ -55,4 +55,12 @@ Primary API documentation consulted on the test date: [wgpu device-loss callback
 
 ## User test update — November 11, 2026
 
-The user explicitly reported successful resizing, minimizing, sleep/wake and lock/unlock checks. Preserve these as successful manual observations on the existing dual-1080p setup. Mixed-DPI/hotplug and forced GPU loss were not reported and remain open. This update does not authorize committing the current lifecycle changes.
+The user explicitly reported successful resizing, minimizing, sleep/wake and lock/unlock checks. Preserve these as successful manual observations on the existing dual-1080p setup. Mixed-DPI/hotplug and forced GPU loss were not reported and remain open. Subsequent user instruction authorized the lifecycle commit 2ea71de.
+
+## Bundled font and device-destruction follow-up
+
+The fixed text now uses embedded Noto Sans with its [license/provenance record](bundled-font.md); system fonts are not scanned. Two regression tests pass: a finite recovery budget and device-test evidence ordering (a new frame without the matching actual callback, a stale callback, an unrelated reason or an old-generation frame cannot pass).
+
+Release-build --test-device-loss runs passed in normal-window (8 seconds) and desktop (10 seconds) mode. Each recorded device.destroy on generation 1, the actual Destroyed loss callback, one recovery, and a presented frame in generation 2, with exit code 0. No Explorer or OS-driver restart was used in these runs. This exercises the actual callback/reconstruction path, but not hardware driver removal. The earlier ten real Explorer cycles and successful manual resize/minimize/lock/sleep observations remain valid evidence of their tested revision; the changed font still requires visual review.
+
+Outstanding matrix cases are Show Desktop, hotplug and changed DPI, plus real driver-fault behavior. They remain untested; do not infer a stable Windows-wide product support claim. M1 implementation tasks can be tracked separately from this incomplete acceptance matrix.

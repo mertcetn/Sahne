@@ -21,20 +21,23 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 struct DeviceLost {
     generation: u64,
     reason: String,
+    explicitly_destroyed: bool,
 }
 
 fn main() -> Result<()> {
     let (mut seconds, mut desktop_mode, mut recreate) = (None, false, 0u32);
+    let mut test_device_loss = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--seconds 1..3600] [--test-recreate 1..10]\nTrusted Windows D3D12 scene. Escape closes window mode. Test recreation does not restart Explorer."
+                    "Usage: wallpaper-preview [--desktop] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scene. Escape closes window mode. Test recreation does not restart Explorer."
                 );
                 return Ok(());
             }
             "--desktop" => desktop_mode = true,
+            "--test-device-loss" => test_device_loss = true,
             "--seconds" => {
                 let n = args.next().ok_or("Missing seconds")?.parse::<u64>()?;
                 if !(1..=3600).contains(&n) {
@@ -50,6 +53,9 @@ fn main() -> Result<()> {
             }
             _ => return Err(format!("Unsupported argument: {arg}").into()),
         }
+    }
+    if test_device_loss && recreate > 0 {
+        return Err("Choose one test mode per run".into());
     }
     let events = EventLoop::<DeviceLost>::with_user_event().build()?;
     events.set_control_flow(ControlFlow::Wait);
@@ -67,12 +73,18 @@ fn main() -> Result<()> {
         frames: 0,
         recreate_remaining: recreate,
         next_recreate: None,
+        loss_test: lifecycle::DeviceLossTest::new(test_device_loss),
+        next_device_test: None,
     };
     events.run_app(&mut app)?;
     eprintln!(
         "Preview stopped; presented frames={}; generations={}; pending recreations={}",
         app.frames, app.generation, app.recreate_remaining
     );
+    eprintln!("Device loss test: {:?}", app.loss_test);
+    if !app.loss_test.complete() {
+        return Err("Device loss test did not observe callback and restored frame".into());
+    }
     if app.recreate_remaining > 0 || app.next_recreate.is_some() {
         return Err("Recreation test interrupted before completion".into());
     }
@@ -95,6 +107,8 @@ struct App {
     frames: u64,
     recreate_remaining: u32,
     next_recreate: Option<Instant>,
+    loss_test: lifecycle::DeviceLossTest,
+    next_device_test: Option<Instant>,
 }
 impl App {
     fn fail(&mut self, events: &ActiveEventLoop, error: impl std::fmt::Display) {
@@ -142,6 +156,7 @@ impl App {
                 events,
                 self.proxy.clone(),
                 self.generation,
+                !self.loss_test.complete(),
             ))
         })();
         match result {
@@ -182,6 +197,8 @@ impl ApplicationHandler<DeviceLost> for App {
     }
     fn user_event(&mut self, events: &ActiveEventLoop, loss: DeviceLost) {
         if loss.generation == self.generation && self.state.is_some() {
+            self.loss_test
+                .callback(loss.generation, loss.explicitly_destroyed);
             self.recover(events, &loss.reason);
         }
     }
@@ -210,6 +227,15 @@ impl ApplicationHandler<DeviceLost> for App {
                 "Injected window/GPU teardown (not an Explorer restart)",
             );
         }
+        if self.next_device_test.is_some_and(|d| now >= d) {
+            self.next_device_test = None;
+            if let Some(state) = self.state.as_ref() {
+                self.loss_test.request(self.generation);
+                eprintln!("Injecting device.destroy generation={}", self.generation);
+                state.device.destroy();
+                let _ = state.device.poll(wgpu::PollType::Poll);
+            }
+        }
         if self.desktop_mode && now >= self.next_probe {
             let size = self.desktop.as_ref().map(|d| d.size());
             match size {
@@ -230,6 +256,7 @@ impl ApplicationHandler<DeviceLost> for App {
             self.deadline,
             self.next_retry,
             self.next_recreate,
+            self.next_device_test,
             self.desktop_mode.then_some(self.next_probe),
         ]
         .into_iter()
@@ -280,6 +307,10 @@ impl ApplicationHandler<DeviceLost> for App {
             }
             WindowEvent::RedrawRequested => state.draw().map(|presented| {
                 if presented {
+                    self.loss_test.frame(self.generation);
+                    if self.loss_test.needs_request() && self.next_device_test.is_none() {
+                        self.next_device_test = Some(Instant::now() + Duration::from_secs(1));
+                    }
                     self.frames += 1;
                     eprintln!(
                         "Presented frame {} generation={}",
@@ -324,6 +355,7 @@ impl State {
         events: &ActiveEventLoop,
         proxy: EventLoopProxy<DeviceLost>,
         generation: u64,
+        report_destroyed: bool,
     ) -> Result<Self> {
         let mut desc = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
             events.owned_display_handle(),
@@ -346,10 +378,11 @@ impl State {
             .request_device(&wgpu::DeviceDescriptor::default())
             .await?;
         device.set_device_lost_callback(move |reason, message| {
-            if reason != wgpu::DeviceLostReason::Destroyed {
+            if reason != wgpu::DeviceLostReason::Destroyed || report_destroyed {
                 let _ = proxy.send_event(DeviceLost {
                     generation,
-                    reason: format!("Device lost: {message}"),
+                    reason: format!("Device lost: {reason:?}: {message}"),
+                    explicitly_destroyed: reason == wgpu::DeviceLostReason::Destroyed,
                 });
             }
         });
@@ -441,16 +474,22 @@ impl State {
                 },
             ],
         });
-        let mut fonts = FontSystem::new();
+        let mut db = glyphon::fontdb::Database::new();
+        db.load_font_data(include_bytes!("../../../assets/fonts/NotoSans.ttf").to_vec());
+        db.set_sans_serif_family("Noto Sans");
+        let mut fonts = FontSystem::new_with_locale_and_db("en-US".into(), db);
         let mut text = Buffer::new(&mut fonts, Metrics::new(32.0, 44.0));
         text.set_size(Some(820.0), Some(140.0));
         text.set_text(
             "Sahne / M1\nStatic GPU scene: shape + text + image",
-            &Attrs::new().family(Family::SansSerif),
+            &Attrs::new().family(Family::Name("Noto Sans")),
             Shaping::Advanced,
             None,
         );
         text.shape_until_scroll(&mut fonts, false);
+        if text.layout_runs().all(|run| run.glyphs.is_empty()) {
+            return Err("Bundled font produced no text glyphs".into());
+        }
         let cache = Cache::new(&device);
         let viewport = Viewport::new(&device, &cache);
         let mut atlas = TextAtlas::new(&device, &queue, &cache, config.format);
