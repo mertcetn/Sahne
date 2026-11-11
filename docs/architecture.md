@@ -14,6 +14,8 @@ HTML/CSS is converted into a validated scene description. JavaScript is not tran
 
 See [Feasibility research](feasibility-research.md) for sources, unresolved assumptions, and technical validation gates. No implementation or platform validation has been completed yet.
 
+See [Development roadmap](roadmap.md) for task sequencing, milestone dependencies, completion evidence, and release readiness.
+
 ## 2. Core decisions
 
 | Area | Decision | Rationale |
