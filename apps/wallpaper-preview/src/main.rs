@@ -1,3 +1,4 @@
+mod lifecycle;
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
     TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
@@ -11,80 +12,115 @@ use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
     event::{ElementState, WindowEvent},
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::{Key, NamedKey},
     window::{Window, WindowId},
 };
-
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+#[derive(Debug)]
+struct DeviceLost {
+    generation: u64,
+    reason: String,
+}
 
 fn main() -> Result<()> {
-    let mut seconds = None;
-    let mut desktop_mode = false;
+    let (mut seconds, mut desktop_mode, mut recreate) = (None, false, 0u32);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--seconds 1..3600]\nTrusted built-in Windows D3D12 scene. Escape closes the preview."
+                    "Usage: wallpaper-preview [--desktop] [--seconds 1..3600] [--test-recreate 1..10]\nTrusted Windows D3D12 scene. Escape closes window mode. Test recreation does not restart Explorer."
                 );
                 return Ok(());
             }
-            "--desktop" => {
-                desktop_mode = true;
-            }
+            "--desktop" => desktop_mode = true,
             "--seconds" => {
-                let n: u64 = args.next().ok_or("Missing seconds")?.parse()?;
+                let n = args.next().ok_or("Missing seconds")?.parse::<u64>()?;
                 if !(1..=3600).contains(&n) {
                     return Err("Seconds must be 1..3600".into());
                 }
                 seconds = Some(n);
             }
+            "--test-recreate" => {
+                recreate = args.next().ok_or("Missing recreation count")?.parse()?;
+                if !(1..=10).contains(&recreate) {
+                    return Err("Recreation count must be 1..10".into());
+                }
+            }
             _ => return Err(format!("Unsupported argument: {arg}").into()),
         }
     }
-    let event_loop = EventLoop::new()?;
-    event_loop.set_control_flow(ControlFlow::Wait);
+    let events = EventLoop::<DeviceLost>::with_user_event().build()?;
+    events.set_control_flow(ControlFlow::Wait);
     let mut app = App {
         state: None,
-        desktop_mode,
         desktop: None,
-        next_probe: Instant::now(),
-        recoveries: 0,
+        desktop_mode,
+        next_probe: Instant::now() + Duration::from_secs(2),
+        next_retry: None,
+        budget: Default::default(),
+        generation: 0,
+        proxy: events.create_proxy(),
         deadline: seconds.map(|s| Instant::now() + Duration::from_secs(s)),
         error: None,
         frames: 0,
+        recreate_remaining: recreate,
+        next_recreate: None,
     };
-    event_loop.run_app(&mut app)?;
-    eprintln!("Preview stopped; presented frames={}", app.frames);
-    if let Some(error) = app.error {
-        return Err(error.into());
+    events.run_app(&mut app)?;
+    eprintln!(
+        "Preview stopped; presented frames={}; generations={}; pending recreations={}",
+        app.frames, app.generation, app.recreate_remaining
+    );
+    if app.recreate_remaining > 0 || app.next_recreate.is_some() {
+        return Err("Recreation test interrupted before completion".into());
+    }
+    if let Some(e) = app.error {
+        return Err(e.into());
     }
     Ok(())
 }
-
 struct App {
-    desktop_mode: bool,
-    desktop: Option<wallpaper_platform::Desktop>,
-    next_probe: Instant,
-    recoveries: u32,
     state: Option<State>,
+    desktop: Option<wallpaper_platform::Desktop>,
+    desktop_mode: bool,
+    next_probe: Instant,
+    next_retry: Option<Instant>,
+    budget: lifecycle::RecoveryBudget,
+    generation: u64,
+    proxy: EventLoopProxy<DeviceLost>,
     deadline: Option<Instant>,
     error: Option<String>,
     frames: u64,
+    recreate_remaining: u32,
+    next_recreate: Option<Instant>,
 }
 impl App {
     fn fail(&mut self, events: &ActiveEventLoop, error: impl std::fmt::Display) {
         self.error = Some(error.to_string());
         self.state = None;
+        self.desktop = None;
         events.exit();
     }
-}
-impl ApplicationHandler for App {
-    fn resumed(&mut self, events: &ActiveEventLoop) {
+    fn recover(&mut self, events: &ActiveEventLoop, reason: &str) {
+        match self.budget.consume() {
+            Ok(attempt) => {
+                eprintln!("Recovery {attempt}/10: {reason}");
+                self.state = None;
+                self.desktop = None;
+                self.next_retry = Some(Instant::now() + Duration::from_millis(500));
+                self.next_recreate = None;
+            }
+            Err(e) => self.fail(events, e),
+        }
+    }
+    fn create(&mut self, events: &ActiveEventLoop) {
         if self.state.is_some() {
             return;
         }
+        self.next_retry = None;
+        self.generation += 1;
         let result = (|| -> Result<State> {
             let desktop = if self.desktop_mode {
                 Some(wallpaper_platform::Desktop::connect()?)
@@ -101,59 +137,123 @@ impl ApplicationHandler for App {
             };
             let window = Arc::new(events.create_window(attrs)?);
             self.desktop = desktop;
-            pollster::block_on(State::new(window, events))
+            pollster::block_on(State::new(
+                window,
+                events,
+                self.proxy.clone(),
+                self.generation,
+            ))
         })();
         match result {
             Ok(state) => {
+                eprintln!(
+                    "Generation {} created: size={:?}, scale={}",
+                    self.generation,
+                    state.window.inner_size(),
+                    state.window.scale_factor()
+                );
+                for monitor in events.available_monitors() {
+                    eprintln!(
+                        "Monitor: {:?} {:?} position={:?} scale={} refresh={:?}",
+                        monitor.name(),
+                        monitor.size(),
+                        monitor.position(),
+                        monitor.scale_factor(),
+                        monitor.refresh_rate_millihertz()
+                    );
+                }
                 state.window.request_redraw();
                 self.state = Some(state);
             }
-            Err(e) if self.desktop_mode && self.recoveries < 10 => {
-                self.recoveries += 1;
-                eprintln!("Desktop connection attempt {} failed: {e}", self.recoveries);
-                self.next_probe = Instant::now() + Duration::from_secs(2);
-            }
-            Err(e) => self.fail(events, e),
+            Err(e) => self.recover(events, &format!("Initialization failed: {e}")),
+        }
+    }
+}
+impl ApplicationHandler<DeviceLost> for App {
+    fn resumed(&mut self, events: &ActiveEventLoop) {
+        if self.next_retry.is_none() {
+            self.create(events);
         }
     }
     fn suspended(&mut self, _: &ActiveEventLoop) {
         self.state = None;
+        self.desktop = None;
+        self.next_recreate = None;
+    }
+    fn user_event(&mut self, events: &ActiveEventLoop, loss: DeviceLost) {
+        if loss.generation == self.generation && self.state.is_some() {
+            self.recover(events, &loss.reason);
+        }
     }
     fn about_to_wait(&mut self, events: &ActiveEventLoop) {
         let now = Instant::now();
         if self.deadline.is_some_and(|d| now >= d) {
-            if self.frames == 0 {
-                self.error = Some("No frame was presented before the deadline".into());
+            if self.frames == 0
+                || self.state.is_none()
+                || self.next_retry.is_some()
+                || self.recreate_remaining > 0
+                || self.next_recreate.is_some()
+            {
+                self.error =
+                    Some("Deadline reached before a healthy final scene/test completion".into());
             }
             events.exit();
             return;
         }
+        if self.next_retry.is_some_and(|d| now >= d) {
+            self.create(events);
+        }
+        if self.next_recreate.is_some_and(|d| now >= d) {
+            self.recreate_remaining -= 1;
+            self.recover(
+                events,
+                "Injected window/GPU teardown (not an Explorer restart)",
+            );
+        }
         if self.desktop_mode && now >= self.next_probe {
-            if self.desktop.as_ref().is_some_and(|d| !d.alive()) {
-                self.state = None;
-                self.desktop = None;
-            }
-            if self.state.is_none() {
-                self.resumed(events);
+            let size = self.desktop.as_ref().map(|d| d.size());
+            match size {
+                Some(Ok(size)) => {
+                    if let Some(state) = self.state.as_ref()
+                        && state.window.inner_size() != size
+                    {
+                        let _ = state.window.request_inner_size(size);
+                        eprintln!("Desktop size changed: {size:?}");
+                    }
+                }
+                Some(Err(e)) => self.recover(events, &format!("Desktop invalid: {e}")),
+                None => {}
             }
             self.next_probe = Instant::now() + Duration::from_secs(2);
         }
-        let wake = match (self.deadline, self.desktop_mode) {
-            (Some(d), true) => Some(d.min(self.next_probe)),
-            (None, true) => Some(self.next_probe),
-            (d, false) => d,
-        };
+        let wake = [
+            self.deadline,
+            self.next_retry,
+            self.next_recreate,
+            self.desktop_mode.then_some(self.next_probe),
+        ]
+        .into_iter()
+        .flatten()
+        .min();
         events.set_control_flow(wake.map_or(ControlFlow::Wait, ControlFlow::WaitUntil));
     }
     fn window_event(&mut self, events: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        let Some(state) = self.state.as_mut().filter(|s| s.window.id() == id) else {
-            return;
-        };
-        if matches!(event, WindowEvent::Destroyed) {
-            self.state = None;
-            self.desktop = None;
+        if !self.state.as_ref().is_some_and(|s| s.window.id() == id) {
             return;
         }
+        if matches!(event, WindowEvent::Destroyed) {
+            self.recover(events, "Native window destroyed");
+            return;
+        }
+        if self
+            .desktop
+            .as_ref()
+            .is_some_and(|desktop| !desktop.alive())
+        {
+            self.recover(events, "Desktop owner invalid before window event");
+            return;
+        }
+        let state = self.state.as_mut().expect("checked window");
         let result = match event {
             WindowEvent::CloseRequested
             | WindowEvent::KeyboardInput {
@@ -169,6 +269,11 @@ impl ApplicationHandler for App {
                 Ok(())
             }
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                eprintln!(
+                    "Surface event: size={:?} scale={}",
+                    state.window.inner_size(),
+                    state.window.scale_factor()
+                );
                 state.resize();
                 state.window.request_redraw();
                 Ok(())
@@ -176,7 +281,13 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => state.draw().map(|presented| {
                 if presented {
                     self.frames += 1;
-                    eprintln!("Presented frame {}", self.frames);
+                    eprintln!(
+                        "Presented frame {} generation={}",
+                        self.frames, self.generation
+                    );
+                    if self.recreate_remaining > 0 && self.next_recreate.is_none() {
+                        self.next_recreate = Some(Instant::now() + Duration::from_secs(1));
+                    }
                 }
             }),
             WindowEvent::Occluded(false) => {
@@ -185,12 +296,11 @@ impl ApplicationHandler for App {
             }
             _ => Ok(()),
         };
-        if let Err(error) = result {
-            self.fail(events, error);
+        if let Err(e) = result {
+            self.recover(events, &format!("Renderer error: {e}"));
         }
     }
 }
-
 struct State {
     surface_retries: u8,
     surface: wgpu::Surface<'static>,
@@ -209,7 +319,12 @@ struct State {
     window: Arc<Window>,
 }
 impl State {
-    async fn new(window: Arc<Window>, events: &ActiveEventLoop) -> Result<Self> {
+    async fn new(
+        window: Arc<Window>,
+        events: &ActiveEventLoop,
+        proxy: EventLoopProxy<DeviceLost>,
+        generation: u64,
+    ) -> Result<Self> {
         let mut desc = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
             events.owned_display_handle(),
         ));
@@ -230,6 +345,14 @@ impl State {
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor::default())
             .await?;
+        device.set_device_lost_callback(move |reason, message| {
+            if reason != wgpu::DeviceLostReason::Destroyed {
+                let _ = proxy.send_event(DeviceLost {
+                    generation,
+                    reason: format!("Device lost: {message}"),
+                });
+            }
+        });
         let size = window.inner_size();
         let config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
@@ -375,7 +498,11 @@ impl State {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(f)
             | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+            wgpu::CurrentSurfaceTexture::Timeout => {
+                self.retry_surface()?;
+                return Ok(false);
+            }
+            wgpu::CurrentSurfaceTexture::Occluded => {
                 return Ok(false);
             }
             wgpu::CurrentSurfaceTexture::Outdated => {
@@ -409,8 +536,8 @@ impl State {
             &self.viewport,
             [TextArea {
                 buffer: &self.text,
-                left: 40.0,
-                top: 32.0,
+                left: 40.0 * self.window.scale_factor() as f32,
+                top: 32.0 * self.window.scale_factor() as f32,
                 scale: self.window.scale_factor() as f32,
                 bounds: TextBounds {
                     left: 0,

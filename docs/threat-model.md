@@ -25,3 +25,7 @@ Exercise supported and unsupported HTML/CSS syntax with source diagnostics; arch
 GNOME background-surface integration remains unresolved for Ubuntu/Fedora targets. Plasma/Cinnamon stacking and shell lifecycle require separate target-session validation. Layer-shell availability does not establish GNOME support. Kernel namespace/seccomp/Landlock policy and packaging remain unvalidated. Freeze exact distribution/session/hardware versions before G6; see the Linux support plan. Android remains deferred.
 
 Record each test with source revision, environment, expected/observed outcome, timing/resource data, and evidence location. Passing a limited corpus is not proof of absolute sandbox safety.
+
+## Imported content discovery
+
+Treat ignored samples/ data and all Wallpaper Engine manifests, archives, JS, textures, shaders and media as untrusted. Static discovery must not execute sample code, eval manifest conditions, contact referenced endpoints or load shaders merely to identify capabilities. Future unpacking/decoding occurs in bounded helpers, with archive-path and decoded-memory checks, before conversion into independently validated native packages. Report dynamic/obfuscated unknowns instead of weakening isolation to classify them.

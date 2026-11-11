@@ -30,3 +30,7 @@ For an authorized release: review the exact commit and checks, update the releas
 ## M1 preview
 
 The separate wallpaper-preview executable provides a trusted Windows/D3D12 scene; it does not extend wallpaper-cli package support. See [M1 preview](m1-preview.md) for launch/stop commands, expected appearance and open validation cases. A future authorized release build packages both executables; the existing M0 release remains unchanged. Review M1 dependency risks and prepare required dependency notices before publishing the new artifact.
+
+## Local research samples
+
+The root samples/ directory is Git-ignored and optional. Do not add it to release archives, Actions inputs or default test requirements. Derived sample artifacts stay under ignored samples/ or target/. Tracked docs/ records may describe observed capabilities without copying third-party source/media. Future importer CI uses original synthetic fixtures so a clean checkout remains self-contained. See [Import plan](wallpaper-engine-import-plan.md).

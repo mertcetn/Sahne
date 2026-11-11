@@ -17,10 +17,11 @@ Dates and effort estimates will be added after the first technical spikes establ
 | Milestone | Deliverable | Prerequisites | Exit gate | Status |
 | --- | --- | --- | --- | --- |
 | M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence recorded, review update awaiting commit |
-| M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | In progress; static window/desktop smoke runs pass, lifecycle matrix pending |
+| M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | In progress; visual feedback and 10 Explorer reconnects recorded; display/power matrix pending |
 | M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | Pending |
 | M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | Pending |
 | M4 | Sandboxed scripted end-to-end Windows prototype | M1, M2, M3 | Integrated G2 regression and prototype acceptance | Pending |
+| I2 | Selective web import and compatibility report | M4; I1 contracts | Import-specific acceptance; does not block native M5/M6 by default | Planned |
 | M5 | Windows product foundations and performance report | M4 | G5 and Windows release checklist | Pending |
 | M6 | Stable Linux configurations | M5; early Linux investigation | G6 for each supported configuration | Pending |
 | M7 | Deferred Android evaluation | Windows and selected Linux milestones complete | G4 if Android work is activated | Deferred |
@@ -64,6 +65,7 @@ Pass the research report's Windows surface gate, including 10 Explorer restarts 
 ### Work
 
 - [ ] Launch a minimal worker in the selected AppContainer/LPAC policy with Job limits and restricted handles.
+- [ ] Prepare I1 adapter capability boundaries with the native contracts: no imported permission escalation, raw filesystem paths or execution during inspection.
 - [ ] Establish the actual permitted IPC channel with schema, size, ownership, and queue limits.
 - [ ] Embed the selected engine with recorded source revision and minimal features; accept source only.
 - [ ] Add runtime memory/stack limits, cooperative interruption, and an independent host watchdog.
@@ -78,6 +80,7 @@ Allowed IPC succeeds, prohibited access fails as specified, and the host remains
 
 ### Work
 
+- [ ] Prepare I1 metadata/resource/diagnostic mappings and original synthetic import fixtures; imported semantics do not override the supported native subset.
 - [ ] Implement manifest/source loading, resource references, and versioned initial scene output.
 - [ ] Parse the agreed HTML/CSS subset and report unsupported constructs with useful source locations.
 - [ ] Implement fixed-size absolute layout, agreed text-box behavior, colors/backgrounds, static images, and ID/class selection.
@@ -163,3 +166,22 @@ Completed the foundation checks and recorded the Windows/GPU inventory, clean-so
 ## 14. M1 progress — November 11, 2026
 
 Implemented normal-window rendering, a WorkerW child-surface adapter, static event-driven submission, resize/DPI events, timed shutdown, bounded surface/reconnection attempts, and adapter/frame logging. Local smoke runs presented one frame each on RTX 3050 DX12 in window and desktop modes. G1 is not complete: visual confirmation, ten Explorer restarts, device loss and display/sleep lifecycle evidence remain open. See [M1 preview and user checks](m1-preview.md). Dependencies have two documented advisories; trusted fixtures only.
+
+### M1 lifecycle follow-up
+
+Prototype f0cf31a was committed after user confirmation of both visual modes. The current working tree adds owner/size validation, generation-tagged GPU-loss recovery, bounded reconnects and a synthetic teardown harness. Ten synthetic cycles and ten real user-authorized Explorer restarts each reached eleven generations; see [Lifecycle validation](m1-lifecycle-validation.md). Remaining G1 cases include recorded resize/DPI, display hotplug, lock/suspend/resume and hardware GPU-loss behavior. These are not inferred from baseline visuals.
+
+### User lifecycle feedback — November 11, 2026
+
+Resize/minimize, sleep/wake and lock/unlock were reported successful by the user. Remaining unverified cases include changed DPI, display hotplug, Show Desktop and forced GPU loss. No additional cycle counts or timings are inferred. Wallpaper Engine import was researched separately in [Import feasibility note](wallpaper-engine-import-research.md); selective planning and the post-M4 importer track have now been approved as recorded in section 15.
+
+## 15. Wallpaper Engine compatibility track
+
+The approved sequence is I0 static local sample assessment now, I1 contract preparation alongside M2/M3, and I2 selective web import after M4. I2 can proceed alongside product work and is not a prerequisite for native Windows/Linux releases by default. PKG resource extraction and scene playback remain separate later decisions. See [Import plan and acceptance](wallpaper-engine-import-plan.md).
+
+- [x] I0: ignore the local samples/ corpus and record its initial file/feature inventory without execution.
+- [ ] I1: finalize capability/report schema, metadata/settings/resource mapping and callback semantics against native contracts.
+- [ ] I2: implement reporting, supported conversion and bounded API mapping after M4; test positive original fixtures and negative complex samples.
+- [ ] I3: scope bounded PKG/TEX extraction separately after web-import evaluation.
+
+The supplied web example is a complex incompatibility fixture, not a required full-fidelity success case. Two samples cannot establish broad compatibility coverage. No importer has been implemented. See [Sample assessment](wallpaper-engine-samples.md).

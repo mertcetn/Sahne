@@ -34,6 +34,7 @@ mod desktop {
     }
     pub struct Desktop {
         parent: HWND,
+        owner_pid: u32,
     }
     impl Desktop {
         pub fn connect() -> io::Result<Self> {
@@ -68,22 +69,41 @@ mod desktop {
                         "No compatible WorkerW surface; ordinary-window fallback is disabled",
                     ));
                 }
-                Ok(Self { parent })
+                let mut owner_pid = 0;
+                if GetWindowThreadProcessId(parent, &mut owner_pid) == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(Self { parent, owner_pid })
             }
         }
         pub fn alive(&self) -> bool {
-            // SAFETY: IsWindow checks the opaque OS handle; no Rust memory is dereferenced.
-            unsafe { IsWindow(self.parent) != 0 }
+            let mut pid = 0;
+            let mut class = [0u16; 32];
+            // SAFETY: All output pointers are writable stack storage; handles are OS-validated.
+            unsafe {
+                IsWindow(self.parent) != 0
+                    && GetWindowThreadProcessId(self.parent, &mut pid) != 0
+                    && pid == self.owner_pid
+                    && GetClassNameW(self.parent, class.as_mut_ptr(), class.len() as i32) == 7
+                    && class[..7] == wide("WorkerW")[..7]
+            }
         }
-        pub fn attributes(&self, attrs: WindowAttributes) -> io::Result<WindowAttributes> {
+        pub fn size(&self) -> io::Result<PhysicalSize<u32>> {
+            if !self.alive() {
+                return Err(io::Error::other("Desktop owner changed or disappeared"));
+            }
             let mut rect = RECT::default();
-            // SAFETY: rect is initialized and writable; parent is validated by the OS.
+            // SAFETY: rect is initialized writable storage and the OS checks the handle again.
             if unsafe { GetClientRect(self.parent, &mut rect) } == 0 {
                 return Err(io::Error::last_os_error());
             }
             if rect.right <= 0 || rect.bottom <= 0 {
-                return Err(io::Error::other("Desktop has an empty client area"));
+                return Err(io::Error::other("Desktop client area is empty"));
             }
+            Ok(PhysicalSize::new(rect.right as u32, rect.bottom as u32))
+        }
+        pub fn attributes(&self, attrs: WindowAttributes) -> io::Result<WindowAttributes> {
+            let size = self.size()?;
             // SAFETY: winit receives the live Explorer-owned HWND; App monitors its lifetime.
             Ok(unsafe {
                 attrs.with_parent_window(Some(winit::raw_window_handle::RawWindowHandle::Win32(
@@ -96,7 +116,7 @@ mod desktop {
             .with_decorations(false)
             .with_skip_taskbar(true)
             .with_position(PhysicalPosition::new(0, 0))
-            .with_inner_size(PhysicalSize::new(rect.right as u32, rect.bottom as u32)))
+            .with_inner_size(size))
         }
     }
 }

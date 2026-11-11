@@ -357,3 +357,15 @@ The initial workspace contains only apps/wallpaper-cli; other crates remain plan
 ## 17. M1 implementation snapshot
 
 The workspace adds apps/wallpaper-preview and crates/wallpaper-platform. The preview renders only a trusted built-in shape, text and RGBA image with wgpu/D3D12, winit and glyphon. The Windows adapter creates an Explorer WorkerW child window before GPU surface creation and bounds reconnect attempts. Native FFI stays in the platform crate; its narrowly documented unsafe-lint exception does not apply to CLI/preview or future workers. Text currently uses installed system fonts for the spike; no external input is exposed. Per-monitor layout, full device recovery and G1 lifecycle certification remain pending. See [M1 preview](m1-preview.md) and [Dependency assessment](m1-dependencies.md).
+
+### M1 lifecycle refinement
+
+The preview uses generation-tagged device-loss notifications to rebuild native/GPU state and ignore stale callbacks. Desktop ownership checks include PID and class; periodic size checks update the child surface. Real faults and synthetic teardown share a bounded run-wide recovery budget. No dependency or sandbox policy changed. Ten actual Explorer restart cycles each reached a new presented generation; hardware GPU loss and the remaining display/power matrix are not certified. See [Lifecycle validation](m1-lifecycle-validation.md).
+
+## 18. Planned Wallpaper Engine import boundary
+
+Compatibility planning proceeds alongside native development; importer implementation starts only after M4's compiler and sandboxed scripting path work end to end. The first target is a declared subset of local web-project conversion and explicit compatibility reporting. A separate frontend translates supported metadata/assets into Sahne's validated package format; a narrow API adapter stays within existing worker/host permissions. Core scene, renderer and sandbox behavior remain authoritative.
+
+During M2/M3, specify capability reporting, settings/default/update semantics, host-capped FPS, pause behavior and source provenance. Do not silently supply browser APIs or expand the feature contract to fit a complex example. Canvas/WebGL/audio/network and dynamic filesystem access remain separate scope decisions. Scene PKG/TEX extraction is a later independent track; extraction does not imply scene/SceneScript playback. No browser backend is currently selected.
+
+samples/ contains ignored optional local research inputs, never CI prerequisites or release contents. Static findings and required original synthetic fixtures are documented under docs/. Original samples remain unmodified and unexecuted during inspection. See [Import plan](wallpaper-engine-import-plan.md) and [Sample assessment](wallpaper-engine-samples.md). This is an approved planning boundary, not implemented compatibility support.

@@ -9,3 +9,7 @@ Timers use monotonic deadlines; formatting uses host-provided calendar time and 
 Host budgets cover callbacks, microtasks, execution time, messages, and memory. A rejected mutation batch closes the session and preserves the last accepted scene. No filesystem, network, process, native modules, browser globals, or externally supplied bytecode. Resource limits cannot be raised by script.
 
 Animation uses the host monotonic clock. A script write to a property under active native animation is rejected in the prototype; stopping/changing animations requires a later explicit API contract. All errors and logs are bounded. The initial API does not promise browser event-loop compatibility.
+
+## Planned compatibility adapter
+
+During M2/M3, specify a separate Wallpaper Engine adapter contract for selected user settings, FPS and pause/resume callbacks. Implementation waits until after M4. Preserve initial versus change-only delivery semantics where compatibility is claimed. Imported scripts remain in the same validated worker budget and permission boundary. This does not enable window/browser globals, Canvas/WebGL, network, media or filesystem APIs in the native contract. Unknown and unsupported APIs must be reported, not silently replaced by successful no-ops. See [Import plan](wallpaper-engine-import-plan.md).
