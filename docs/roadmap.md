@@ -17,7 +17,7 @@ Dates and effort estimates will be added after the first technical spikes establ
 | Milestone | Deliverable | Prerequisites | Exit gate | Status |
 | --- | --- | --- | --- | --- |
 | M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence recorded, review update awaiting commit |
-| M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Pending |
+| M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | In progress; static window/desktop smoke runs pass, lifecycle matrix pending |
 | M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | Pending |
 | M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | Pending |
 | M4 | Sandboxed scripted end-to-end Windows prototype | M1, M2, M3 | Integrated G2 regression and prototype acceptance | Pending |
@@ -159,3 +159,7 @@ Proceed to the G1 Windows surface spike (M1) and G2 sandbox spike (M2) using the
 ## 13. M0 progress — November 11, 2026
 
 Completed the foundation checks and recorded the Windows/GPU inventory, clean-source build, main CI, release workflow, downloaded artifact checksum, and CLI smoke results in [M0 validation record](m0-validation.md). Draft content/API/security contracts are ready for the spikes; they are not implemented functionality. Active display topology and renderer adapter choice are G1 measurements. No external Rust dependencies have been adopted. The checkout runtime deprecation notice is recorded for maintenance. This evidence/documentation update awaits user review before commit.
+
+## 14. M1 progress — November 11, 2026
+
+Implemented normal-window rendering, a WorkerW child-surface adapter, static event-driven submission, resize/DPI events, timed shutdown, bounded surface/reconnection attempts, and adapter/frame logging. Local smoke runs presented one frame each on RTX 3050 DX12 in window and desktop modes. G1 is not complete: visual confirmation, ten Explorer restarts, device loss and display/sleep lifecycle evidence remain open. See [M1 preview and user checks](m1-preview.md). Dependencies have two documented advisories; trusted fixtures only.
