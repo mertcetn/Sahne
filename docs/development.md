@@ -2,7 +2,7 @@
 
 ## Local setup
 
-Use Rust 1.99.1 (pinned in rust-toolchain.toml). Windows development requires MSVC x64 build tools and the Windows SDK. The initial workspace contains only a dependency-free development CLI; it does not render or execute wallpaper packages.
+Use Rust 1.99.1 (pinned in rust-toolchain.toml). Windows development requires MSVC x64 build tools and the Windows SDK. The workspace contains the development CLI, trusted renderer preview, control codec and trusted Windows sandbox probe. It does not execute wallpaper packages.
 
 Run from the repository root:
 
@@ -15,7 +15,7 @@ cargo run -p wallpaper-cli -- --help
 cargo run -p wallpaper-cli -- --version
 ```
 
-The CLI prints help with no arguments, accepts --help/-h and --version/-V, and rejects other arguments with exit code 2. It does not accept package paths. There are no behavioral unit tests yet; cargo test currently verifies test-target compilation only. Rendering, parser, and sandbox tests belong to the later spikes.
+The CLI prints help with no arguments, accepts --help/-h and --version/-V, and rejects other arguments with exit code 2. It does not accept package paths. Workspace tests include protocol-boundary and preview-lifecycle regressions; real AppContainer tests are explicit manual commands, not ordinary unit tests.
 
 ## Branches and publication
 
@@ -43,4 +43,8 @@ The M2 std-only codec can be checked without opening windows or running samples:
 cargo test -p wallpaper-protocol --locked
 ```
 
-See [M2 control-frame foundation](m2-protocol.md) for wire format and pending sandbox/channel work. This adds no user-facing package execution support.
+See [M2 control-frame foundation](m2-protocol.md) for wire format. This adds no user-facing package execution support.
+
+## Trusted Windows sandbox probe
+
+See [M2 sandbox commands and results](m2-sandbox.md) before running the separate wallpaper-sandbox-probe executable. Its healthy, hang, oversized and crash cases exercise trusted native code in a real AppContainer; the network investigation currently fails acceptance with an inconclusive timeout. Each run creates a temporary profile and retains a unique test directory under target/sandbox-runs. Profile cleanup is attempted on normal exit. No package path is accepted, no JS is embedded, and the release archive workflow has not been extended to distribute this experimental executable.

@@ -1,10 +1,10 @@
 # M2 Control-Frame Foundation
 
-Date: November 11, 2026. Status: implemented codec only; no sandbox worker, authenticated channel, watchdog or JavaScript engine is implemented by this step. M1 extended-display tests remain open. M2 may proceed independently under the roadmap.
+Date: November 11, 2026. Status: implemented codec, now used by the separate [trusted Windows sandbox experiment](m2-sandbox.md). The codec itself supplies no OS isolation or authentication. No JavaScript engine is implemented. M1 extended-display tests remain open. M2 may proceed independently under the roadmap.
 
 ## Implementation
 
-wallpaper-protocol is a dependency-free, safe Rust library over std::io::Read/Write. No subprocess is started, sample executed or network opened. No third-party dependency or existing crate version changed. The workspace lockfile adds only this local package. This is a transport-neutral control subset to use in the upcoming real AppContainer IPC spike.
+wallpaper-protocol is a dependency-free, safe Rust library over std::io::Read/Write. The library starts no subprocess and opens no network connection. This is a transport-neutral control subset used in the AppContainer IPC spike; scene transactions remain planned.
 
 | Field | Encoding | Validation |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ wallpaper-protocol is a dependency-free, safe Rust library over std::io::Read/Wr
 | sessionId | u64 little endian | Nonzero; must also match host-selected session |
 | sequence | u64 little endian | Nonzero; host must enforce the expected value per direction |
 | baseRevision | u64 little endian | Must match host-expected scene revision when context is checked |
-| kind | u8 | Only the four control types below |
+| kind | u8 | Only the five control types below |
 | body | Kind-specific bytes | Exact consumption; extra bytes inside a frame are rejected |
 
 Session/sequence/revision header plus tag occupies 27 bytes. There is no native memory layout serialization, pointer field, pathname field or deserialization of arbitrary objects. Integer conversion is explicit; slicing and size arithmetic are checked.
@@ -24,8 +24,9 @@ Session/sequence/revision header plus tag occupies 27 bytes. There is no native 
 | 2 | Ping | nonce u64 |
 | 3 | Pong | nonce u64 |
 | 4 | Reject | code u16; UTF-8 byte length u16; message bytes, at most 256 |
+| 5 | ProbeResult | denied u32; test-only report, not a security authority |
 
-Hello is intended worker-to-host; Ping host-to-worker; Pong worker-to-host. Reject can report a bounded failure. Direction, handshake order, nonce matching and rejection policy remain host/worker responsibilities; the codec validates structure, not these application rules. Reject codes have no assigned product semantics yet. Diagnostic text is untrusted and must be escaped before log/display use.
+Hello is intended worker-to-host; Ping host-to-worker; Pong and ProbeResult worker-to-host. ProbeResult bits 0/1/2 indicate sentinel read/write and host VM-open denial; bit 4 indicates the trusted worker's AppContainer self-check. The probe requires exactly 0x17 and independently checks the process token. Other values are structurally valid for the codec but not accepted by the probe. Network denial is investigated separately and is not encoded in this mask. Reject can report a bounded failure. Direction, handshake order, nonce matching and rejection policy remain host/worker responsibilities; the codec validates structure, not these application rules. Reject codes have no assigned product semantics yet. Diagnostic text is untrusted and must be escaped before log/display use.
 
 check_context compares the expected session, sequence and revision without advancing any state. The host must perform body and ownership validation before committing accepted state or advancing its sequence/revision. Session randomness, peer identity, ACLs and handle ownership are not supplied by a binary header.
 
@@ -49,10 +50,10 @@ Tests cover documented golden wire bytes, concatenated-frame boundaries/EOF, eve
 
 ## Next M2 work
 
-Choose and validate the AppContainer/LPAC launch policy, required executable/library access and actual IPC channel. Add restricted handle transfer, Job limits and a watchdog before untrusted execution is enabled. Then add trusted direct-OS probe tests and integrate a reviewed pinned JS engine. I1 import adapter contracts remain pending; no Wallpaper Engine source has been run by this codec task.
+The trusted AppContainer experiment now supplies actual pipe transfer, token checks, configured Job limits and a host deadline. Complete the outstanding network, handle, exhaustion and channel-pressure tests and decide the production AppContainer/LPAC policy before untrusted execution. Integrate a reviewed pinned JS engine afterward. I1 import adapter contracts remain pending; no Wallpaper Engine source has been run.
 
 Current primary references consulted November 11, 2026: [Read/read_exact](https://doc.rust-lang.org/std/io/trait.Read.html), [Write/write_all](https://doc.rust-lang.org/std/io/trait.Write.html), [UTF-8 validation](https://doc.rust-lang.org/std/str/fn.from_utf8.html).
 
 ## Local validation result
 
-On November 11, 2026, all eight protocol tests and both existing preview lifecycle tests passed. Formatting, workspace Clippy with warnings denied, release build and local documentation-link checks passed. The build environment emitted previously recorded incremental-cache hardlink/copy notices. No hosted run, real restricted worker, channel-ACL test, timing/backpressure test or fuzz campaign was performed for this codec-only change. Source remains uncommitted pending user review.
+The original eight-test codec foundation passed local checks and was committed after user approval in 5a245f8. The sandbox continuation adds a ninth exact-body/truncation/trailing-byte regression for ProbeResult and includes it in concatenated-frame coverage. See [Sandbox evidence](m2-sandbox.md) for actual-process checks and their limits. No hosted run, channel flood test or fuzz campaign is inferred. New sandbox changes await user testing/approval before commit.

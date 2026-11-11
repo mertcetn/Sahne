@@ -1,6 +1,6 @@
 # Threat Model and Spike Validation
 
-Status: M0 draft. No sandbox is implemented or certified.
+Status: M0 contracts with a trusted M2 Windows AppContainer experiment. Partial direct-OS and failure-containment evidence is recorded in [M2 sandbox spike](m2-sandbox.md); network acceptance and the full G2 suite remain open. No sandbox is certified and no untrusted packages/scripts are enabled.
 
 ## Boundaries
 

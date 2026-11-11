@@ -18,7 +18,7 @@ Dates and effort estimates will be added after the first technical spikes establ
 | --- | --- | --- | --- | --- |
 | M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence committed |
 | M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Implementation and font/device follow-up approved; extended display matrix open |
-| M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | In progress: control codec only; OS isolation pending |
+| M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | In progress: trusted AppContainer/IPC experiment; network and full G2 open |
 | M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | Pending |
 | M4 | Sandboxed scripted end-to-end Windows prototype | M1, M2, M3 | Integrated G2 regression and prototype acceptance | Pending |
 | I2 | Selective web import and compatibility report | M4; I1 contracts | Import-specific acceptance; does not block native M5/M6 by default | Planned |
@@ -64,7 +64,7 @@ Pass the research report's Windows surface gate, including 10 Explorer restarts 
 
 ### Work
 
-- [ ] Launch a minimal worker in the selected AppContainer/LPAC policy with Job limits and restricted handles.
+- [x] Launch a trusted minimal worker in an experimental AppContainer policy with configured Job limits and an explicit handle list; production AppContainer/LPAC policy and negative-handle tests remain open.
 - [ ] Prepare I1 adapter capability boundaries with the native contracts: no imported permission escalation, raw filesystem paths or execution during inspection.
 - [ ] Establish the actual permitted IPC channel with schema, size, ownership, and queue limits.
 - [ ] Embed the selected engine with recorded source revision and minimal features; accept source only.
@@ -193,3 +193,7 @@ The prototype implementation checklist is checked: a bundled fixed font replaces
 ### Current continuation
 
 Font and application-device recovery were approved and committed in d50eb30. Show Desktop, physical hotplug and changed DPI remain unverified; no new display support claim is made. M2 proceeds independently with a std-only bounded control codec and malformed-input regressions, documented in [M2 foundation](m2-protocol.md). A codec is not the actual sandbox channel, so the M2 IPC and isolation checklist items remain open.
+
+### M2 actual-process continuation
+
+The approved codec was committed in 5a245f8. The next working-tree change adds a trusted Windows AppContainer process, exact-profile executable ACL, zero-capability token checks, explicit inherited pipes, configured Job limits and a bounded host deadline. Healthy file/process-denial IPC, native stall termination, oversized-prefix rejection and controlled exit tests passed locally. The network investigation times out without explicit denial and deliberately fails acceptance; G2 remains open. No untrusted content or JS engine is enabled. See [M2 sandbox evidence and remaining work](m2-sandbox.md). These new changes await user testing/approval and have not been committed or published.

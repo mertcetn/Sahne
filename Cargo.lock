@@ -1681,6 +1681,21 @@ name = "wallpaper-protocol"
 version = "0.1.0-dev"
 
 [[package]]
+name = "wallpaper-sandbox"
+version = "0.1.0-dev"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "wallpaper-sandbox-probe"
+version = "0.1.0-dev"
+dependencies = [
+ "wallpaper-protocol",
+ "wallpaper-sandbox",
+]
+
+[[package]]
 name = "wasm-bindgen"
 version = "0.2.130"
 source = "registry+https://github.com/rust-lang/crates.io-index"

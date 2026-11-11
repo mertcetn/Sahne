@@ -47,6 +47,7 @@ pub struct Message {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Body {
     Hello { api_version: u16 },
+    ProbeResult { denied: u32 },
     Ping { nonce: u64 },
     Pong { nonce: u64 },
     Reject { code: u16, message: String },
@@ -79,6 +80,10 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
     data.extend_from_slice(&message.sequence.to_le_bytes());
     data.extend_from_slice(&message.base_revision.to_le_bytes());
     match &message.body {
+        Body::ProbeResult { denied } => {
+            data.push(5);
+            data.extend_from_slice(&denied.to_le_bytes());
+        }
         Body::Hello { api_version } => {
             if *api_version != 1 {
                 return Err(Error::Invalid("unsupported API version"));
@@ -168,6 +173,9 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
                 message: text.to_owned(),
             }
         }
+        5 => Body::ProbeResult {
+            denied: u32::from_le_bytes(data.array()?),
+        },
         _ => return Err(Error::Invalid("unknown message kind")),
     };
     if data.pos != bytes.len() {
@@ -243,6 +251,7 @@ mod tests {
             sample(Body::Hello { api_version: 1 }),
             sample(Body::Ping { nonce: u64::MAX }),
             sample(Body::Pong { nonce: u64::MAX }),
+            sample(Body::ProbeResult { denied: u32::MAX }),
             sample(Body::Reject {
                 code: 2,
                 message: "unsupported capability".into(),
@@ -253,6 +262,22 @@ mod tests {
             assert_eq!(read_frame(&mut stream).unwrap(), Some(expected));
         }
         assert!(read_frame(&mut stream).unwrap().is_none());
+    }
+    #[test]
+    fn probe_result_has_exact_bounded_body() {
+        let message = sample(Body::ProbeResult { denied: 23 });
+        let bytes = encoded(&message);
+        assert_eq!(&bytes[..4], &31u32.to_le_bytes());
+        assert_eq!(&bytes[30..], &[5, 23, 0, 0, 0]);
+        assert_eq!(read_frame(&mut Cursor::new(&bytes)).unwrap(), Some(message));
+        let mut short = bytes.clone();
+        short.pop();
+        short[..4].copy_from_slice(&30u32.to_le_bytes());
+        assert!(read_frame(&mut Cursor::new(short)).is_err());
+        let mut extra = bytes;
+        extra.push(0);
+        extra[..4].copy_from_slice(&32u32.to_le_bytes());
+        assert!(read_frame(&mut Cursor::new(extra)).is_err());
     }
     #[test]
     fn every_truncation_is_an_error_not_clean_eof() {
