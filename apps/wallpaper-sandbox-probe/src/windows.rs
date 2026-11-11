@@ -66,7 +66,7 @@ fn worker(args: &[String]) -> Result<()> {
             return Ok(());
         }
         "crash" => std::process::exit(42),
-        "healthy" | "network" => {}
+        "healthy" | "network" | "network-egress" | "memory" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -75,8 +75,14 @@ fn worker(args: &[String]) -> Result<()> {
         .open(&marker)
         .is_err_and(|e| e.raw_os_error() == Some(5));
     let process_denied = wallpaper_sandbox::host_process_access_denied(hostpid)?;
-    if case == "network" {
-        let socket = SocketAddr::from(([127, 0, 0, 1], port));
+    if case == "network" || case == "network-egress" {
+        // TEST-NET-1 is reserved for documentation; use no DNS or application payload.
+        // A timeout or routing failure never counts as proof of sandbox denial.
+        let socket = if case == "network-egress" {
+            SocketAddr::from(([192, 0, 2, 1], 9))
+        } else {
+            SocketAddr::from(([127, 0, 0, 1], port))
+        };
         let connection = TcpStream::connect_timeout(&socket, Duration::from_secs(2));
         let network_denied = connection
             .as_ref()
@@ -90,11 +96,11 @@ fn worker(args: &[String]) -> Result<()> {
                     Body::Reject {
                         code: 1,
                         message: format!(
-                            "Unexpected loopback result: {:?}",
+                            "Network test inconclusive or allowed: {:?}",
                             connection
                                 .as_ref()
                                 .map(|_| ())
-                                .map_err(|e| e.raw_os_error())
+                                .map_err(|e| (e.kind(), e.raw_os_error()))
                         ),
                     },
                 ),
@@ -103,10 +109,17 @@ fn worker(args: &[String]) -> Result<()> {
             return Ok(());
         }
     }
+    let memory_denied = if case == "memory" {
+        wallpaper_sandbox::probe_memory_limit()?;
+        true
+    } else {
+        false
+    };
     let denied = u32::from(read_denied)
         | (u32::from(write_denied) << 1)
         | (u32::from(process_denied) << 2)
-        | 16;
+        | 16
+        | (u32::from(memory_denied) << 5);
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     write_frame(
         &mut output,
@@ -118,7 +131,7 @@ fn worker(args: &[String]) -> Result<()> {
 fn host(args: &[String]) -> Result<()> {
     if args == ["--help"] {
         println!(
-            "Usage: wallpaper-sandbox-probe [--case healthy|network|hang|oversized|crash]\nTrusted Windows AppContainer/Job/IPC spike; no JavaScript or packages. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile. The network case requires explicit access denial; timeout is inconclusive and fails."
+            "Usage: wallpaper-sandbox-probe [--case healthy|network|network-egress|memory|hang|oversized|crash]\nTrusted Windows AppContainer/Job/IPC spike; no JavaScript or packages. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile. Network tests require explicit access denial; timeout is inconclusive and fails. network uses loopback; network-egress tries TEST-NET-1 192.0.2.1:9 with no DNS or application payload. memory checks a small allocation succeeds and a 257 MiB commit fails under the 256 MiB Job limit; pages are never touched."
         );
         return Ok(());
     }
@@ -127,7 +140,17 @@ fn host(args: &[String]) -> Result<()> {
         [flag, value] if flag == "--case" => value.as_str(),
         _ => return Err("Use --help for probe arguments".into()),
     };
-    if !["healthy", "network", "hang", "oversized", "crash"].contains(&case) {
+    if ![
+        "healthy",
+        "network",
+        "network-egress",
+        "memory",
+        "hang",
+        "oversized",
+        "crash",
+    ]
+    .contains(&case)
+    {
         return Err("Unknown case".into());
     }
     let session = wallpaper_sandbox::random_id()?;
@@ -182,12 +205,19 @@ fn host(args: &[String]) -> Result<()> {
     let outcome = (|| -> Result<()> {
         ready.map_err(|_| "Worker did not complete handshake")?;
         match (case, result) {
-            ("healthy" | "network", Ok(Ok(bits))) if bits == EXPECTED => {
+            ("healthy" | "network" | "network-egress" | "memory", Ok(Ok(bits)))
+                if bits == (EXPECTED | if case == "memory" { 32 } else { 0 }) =>
+            {
                 println!(
                     "Direct OS denials confirmed: sentinel read, sentinel write, host process VM access. Probe bits={bits:#x}"
                 );
-                if case == "network" {
-                    println!("Explicit loopback TCP access denial confirmed.");
+                if case == "network" || case == "network-egress" {
+                    println!("Explicit TCP access denial confirmed for {case}.");
+                }
+                if case == "memory" {
+                    println!(
+                        "Job limit verified: 64 KiB commit succeeded; 257 MiB commit rejected; worker remained responsive."
+                    );
                 }
                 if sandbox.wait(1000)? != Some(0) {
                     return Err("Healthy worker did not exit cleanly".into());

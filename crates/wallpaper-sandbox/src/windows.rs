@@ -14,7 +14,7 @@ use windows_sys::Win32::{
     Foundation::*,
     Security::{Authorization::*, Cryptography::*, Isolation::*, *},
     Storage::FileSystem::{FILE_GENERIC_EXECUTE, FILE_GENERIC_READ},
-    System::{JobObjects::*, Pipes::*, Threading::*},
+    System::{JobObjects::*, Memory::*, Pipes::*, Threading::*},
 };
 
 fn wide(value: impl AsRef<std::ffi::OsStr>) -> io::Result<Vec<u16>> {
@@ -384,7 +384,17 @@ pub fn spawn_probe(
     case: &str,
     port: u16,
 ) -> io::Result<Channel> {
-    if !["healthy", "network", "hang", "oversized", "crash"].contains(&case) {
+    if ![
+        "healthy",
+        "network",
+        "network-egress",
+        "memory",
+        "hang",
+        "oversized",
+        "crash",
+    ]
+    .contains(&case)
+    {
         return Err(io::Error::other("Unknown probe case"));
     }
     std::fs::create_dir(root)?;
@@ -526,4 +536,61 @@ pub fn host_process_access_denied(pid: u32) -> io::Result<bool> {
             Ok(false)
         }
     }
+}
+
+/// Trusted single-allocation limit probe; never touches pages or exhausts the host.
+/// Returns the exact OS error from the rejected allocation, not a JS/runtime error.
+pub fn probe_memory_limit() -> io::Result<i32> {
+    if !is_appcontainer()? {
+        return Err(io::Error::other("Memory probe requires AppContainer"));
+    }
+    let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+    // SAFETY: Null job selects the caller's associated Job. Output is initialized,
+    // correctly sized/aligned and remains valid through this synchronous query.
+    check(unsafe {
+        QueryInformationJobObject(
+            ptr::null_mut(),
+            JobObjectExtendedLimitInformation,
+            &mut limits as *mut _ as *mut c_void,
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            ptr::null_mut(),
+        )
+    })?;
+    if limits.BasicLimitInformation.LimitFlags & JOB_OBJECT_LIMIT_PROCESS_MEMORY == 0
+        || limits.ProcessMemoryLimit != 256 * 1024 * 1024
+    {
+        return Err(io::Error::other("Unexpected worker Job memory limit"));
+    }
+    // SAFETY: Allocations affect only this process. No returned pointer is dereferenced;
+    // successful allocations are released with the original base and MEM_RELEASE/size 0.
+    unsafe {
+        let baseline = VirtualAlloc(
+            ptr::null(),
+            64 * 1024,
+            MEM_RESERVE | MEM_COMMIT,
+            PAGE_READWRITE,
+        );
+        if baseline.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        check(VirtualFree(baseline, 0, MEM_RELEASE))?;
+        let oversized = VirtualAlloc(
+            ptr::null(),
+            257 * 1024 * 1024,
+            MEM_RESERVE | MEM_COMMIT,
+            PAGE_READWRITE,
+        );
+        if oversized.is_null() {
+            let error = io::Error::last_os_error();
+            // Other failures must not be misclassified as memory-limit enforcement.
+            return match error.raw_os_error() {
+                Some(code @ (8 | 1455)) => Ok(code),
+                _ => Err(error),
+            };
+        }
+        check(VirtualFree(oversized, 0, MEM_RELEASE))?;
+    }
+    Err(io::Error::other(
+        "Allocation above Job limit unexpectedly succeeded",
+    ))
 }

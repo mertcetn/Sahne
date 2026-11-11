@@ -197,3 +197,7 @@ Font and application-device recovery were approved and committed in d50eb30. Sho
 ### M2 actual-process continuation
 
 The approved codec was committed in 5a245f8. The next working-tree change adds a trusted Windows AppContainer process, exact-profile executable ACL, zero-capability token checks, explicit inherited pipes, configured Job limits and a bounded host deadline. Healthy file/process-denial IPC, native stall termination, oversized-prefix rejection and controlled exit tests passed locally. The network investigation times out without explicit denial and deliberately fails acceptance; G2 remains open. No untrusted content or JS engine is enabled. See [M2 sandbox evidence and remaining work](m2-sandbox.md). These new changes await user testing/approval and have not been committed or published.
+
+### M2 network/resource continuation
+
+The user tested healthy and hang successfully and approved the initial sandbox, now committed in 49c0a3f. New separate network-egress and memory cases passed locally: outbound IPv4 TCP to a reserved test destination was explicitly denied, and a Job-verified 256 MiB memory policy rejected a single 257 MiB commit after a successful 64 KiB control allocation. The original loopback case remains inconclusive; full network, memory-exhaustion, handle, process-creation, flood and JS gates remain open. New continuation changes await user testing/approval. See [Commands and scoped evidence](m2-sandbox.md#continuation-outbound-tcp-and-memory-limit).

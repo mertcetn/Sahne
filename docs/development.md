@@ -48,3 +48,5 @@ See [M2 control-frame foundation](m2-protocol.md) for wire format. This adds no 
 ## Trusted Windows sandbox probe
 
 See [M2 sandbox commands and results](m2-sandbox.md) before running the separate wallpaper-sandbox-probe executable. Its healthy, hang, oversized and crash cases exercise trusted native code in a real AppContainer; the network investigation currently fails acceptance with an inconclusive timeout. Each run creates a temporary profile and retains a unique test directory under target/sandbox-runs. Profile cleanup is attempted on normal exit. No package path is accepted, no JS is embedded, and the release archive workflow has not been extended to distribute this experimental executable.
+
+The continuation adds network-egress (explicit TCP denial to a reserved test address) and memory (small allocation succeeds, one over-limit commit fails) as separate cases. The original network case still checks loopback and does not count a timeout as success. See the sandbox guide for commands and remaining G2 limitations.
