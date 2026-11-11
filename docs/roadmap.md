@@ -6,7 +6,7 @@ Updated: November 11, 2026.
 
 Deliver a restricted HTML/CSS/JavaScript wallpaper engine on Windows first, then stable Linux support on selected mainstream configurations. Android is deferred until desktop milestones are complete. macOS requires a future scope decision.
 
-The repository has working rules, an architecture, source-based feasibility research, and a Linux support plan. The repository has been created and the existing documentation committed. No implementation, build validation, sandbox validation, platform certification, or performance measurement is complete. All implementation milestones below remain pending.
+The repository has working rules, an architecture, source-based feasibility research, and a Linux support plan. The repository has been created and the existing documentation committed. M0 is in progress: a minimal dependency-free CLI workspace, draft contracts, and local Windows build checks are present. Sandbox/platform validation, hosted CI/release execution, and performance measurements remain pending.
 
 This roadmap sequences the existing design; it does not introduce a new architecture. Technical decisions belong in [Project architecture](architecture.md), research and gate definitions in [Feasibility research](feasibility-research.md), and Linux acceptance details in [Linux support plan](linux-support.md).
 
@@ -16,7 +16,7 @@ Dates and effort estimates will be added after the first technical spikes establ
 
 | Milestone | Deliverable | Prerequisites | Exit gate | Status |
 | --- | --- | --- | --- | --- |
-| M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Pending |
+| M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | In progress; local checks pass, remote verification pending |
 | M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Pending |
 | M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | Pending |
 | M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | Pending |
@@ -155,3 +155,7 @@ At delivery, summarize changes, completed checks, untested cases, and concrete u
 ## 12. Next task
 
 Start M0 with the minimal workspace, dependency verification, and threat-model/contract sections needed to run G1 and G2. Then implement the two small Windows spikes before expanding the feature set. This roadmap does not itself authorize implementation, commits, or release publication.
+
+## 13. M0 progress — November 11, 2026
+
+Prepared the minimal workspace/lockfile, pinned toolchain, development CLI, Windows check/release workflow, draft content/scripting/package/IPC/threat contracts, Linux integration backlog, and dependency review. Local build, formatting, Clippy, test-target compilation, release build, and CLI smoke checks passed. No behavioral tests exist yet. The checklist remains open for exact hardware capture, complete future dependency reviews, clean-checkout reproduction, and hosted CI/release validation; no remote push/publication has occurred. See [Development guide](development.md) for user review commands.

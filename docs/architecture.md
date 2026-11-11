@@ -12,7 +12,7 @@ This project is not a browser. It does not aim to run arbitrary websites, React 
 
 HTML/CSS is converted into a validated scene description. JavaScript is not translated into Rust; it runs in a separate restricted process. Performance targets require comparative measurements; Rust alone does not guarantee better performance.
 
-See [Feasibility research](feasibility-research.md) for sources, unresolved assumptions, and technical validation gates. No implementation or platform validation has been completed yet.
+See [Feasibility research](feasibility-research.md) for sources, unresolved assumptions, and technical validation gates. M0 now includes a dependency-free CLI workspace and local Windows build checks. Rendering, sandbox, Linux, and hosted CI/release validation have not been completed.
 
 See [Development roadmap](roadmap.md) for task sequencing, milestone dependencies, completion evidence, and release readiness.
 
@@ -349,3 +349,7 @@ After the Windows and selected Linux milestones, revisit Android service lifecyc
 8. **Deferred platforms:** Android and macOS have no initial delivery commitment.
 
 The first milestone remains a small Windows end-to-end prototype: idle when static, animate supported properties, and run a clock script inside a validated sandbox. The next platform milestone is stable support for the selected Linux configurations.
+
+## 16. M0 implementation snapshot
+
+The initial workspace contains only apps/wallpaper-cli; other crates remain planned. Rust 1.99.1 is pinned, with no external Rust dependencies. The CLI exposes help/version only. CI checks Windows builds; release pushes are configured to publish development prereleases, not stable product builds. See [Development guide](development.md), [Dependency review](dependency-review.md), [Content contract](supported-features.md), [Scripting contract](scripting-api.md), [Package and IPC contract](package-format.md), and [Threat model](threat-model.md). Contracts remain drafts for the technical spikes.
