@@ -70,7 +70,7 @@ Pass the research report's Windows surface gate, including 10 Explorer restarts 
 - [x] Embed the reviewed pinned engine with minimal features for fixed trusted source fixtures; general source/package transport remains disabled.
 - [x] Add and exercise initial runtime memory/stack limits, cooperative interruption, bounded Promise jobs and an independent host watchdog; integrated callback policy remains M4 work.
 - [ ] Exercise direct OS denials through trusted test code inside the sandbox, not merely missing JavaScript APIs.
-- [ ] Exercise infinite JavaScript, native stalls, memory exhaustion, IPC floods, worker crashes, and bounded restart behavior.
+- [x] Exercise initial fixed-source infinite JS, native stalls, OOM, IPC faults/floods, crashes and bounded restart behavior; sustained/integrated pressure and broader G2 coverage remain open.
 
 ### Completion evidence — initial G2
 
@@ -213,3 +213,7 @@ The validated process/handle changes were approved and committed in 9d53b81, wit
 ### M2 fixed JavaScript engine continuation
 
 IPC validation was approved and committed in 9d207b7. The next change adds reviewed exact rquickjs 0.14.0 with its identified QuickJS-NG snapshot and only std enabled. Fixed trusted scripts execute inside AppContainer with engine heap/stack/deadline/job budgets while the independent Job/watchdog remains active. Five initial real-worker cases passed for normal execution, interruption, OOM, stack and Promise jobs. No arbitrary script/package or creator API is enabled; remaining G2/integration work is explicit. See [JS fixture results](m2-js.md) and [dependency/security assessment](m2-js-dependencies.md). The new continuation is not yet committed.
+
+### M2 bounded recovery continuation
+
+The validated JS continuation was approved and committed in 1261c32. The next change adds a three-attempt, backoff-controlled supervisor for explicit fixed fixtures, fresh session/channel ownership, permanent protocol rejection and stale completion protection. A missing Hello no longer gets an extra response deadline. Initial actual-process recovery/exhaustion/stale-session tests passed; full evidence and remaining network/endpoint/persistent-channel/I1 gaps are in [Recovery validation](m2-recovery.md). M2 remains in progress; the new continuation is not yet committed.

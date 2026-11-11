@@ -60,6 +60,8 @@ This demonstrates fail-fast handling of unsolicited trailing-message pressure on
 
 No dependency, feature, registry version, resource limit or native permission was added by this task. The worker-launch whitelist adds only these trusted fixtures. Native tests still create unique temporary AppContainer profiles and retain ignored target/sandbox-runs artifacts; cleanup behavior is unchanged. Agent-executable checks are run autonomously under the user's updated workflow; no duplicate user test run is required.
 
+The later [recovery experiment](m2-recovery.md) adds explicit fixed bounded-restart cases and rejects old session identity on a replacement channel. Sustained product recovery and persistent-channel pressure remain outside this one-shot IPC validation.
+
 Primary documentation consulted November 11, 2026:
 
 - [Rust bounded synchronous channels](https://doc.rust-lang.org/std/sync/mpsc/fn.sync_channel.html)

@@ -32,6 +32,8 @@ Only the handles fixture uses bit 8 as an armed-stage flag: after Hello(1) and P
 
 The five fixed JS cases use bit 9 after the selected trusted fixture has verified its expected result. Their exact final mask is 0x217, with the normal nonce/envelope/EOF/exit checks. This is not a privilege grant or independent attestation from an untrusted worker. No new wire tag is added for source loading or general execution.
 
+The [restart experiment](m2-recovery.md) creates a new channel/session for every attempt, resetting per-direction wire sequence to 1 only within that new session. No prior message queue is reused. A correctly formed Pong with the current nonce but an earlier real session ID must fail context validation and stop recovery permanently. Missing frames are now typed host errors so a failed process exit after EOF can be distinguished from malformed/context/trailing-data failures; this does not change the wire format.
+
 check_context compares the expected session, sequence and revision without advancing any state. The host must perform body and ownership validation before committing accepted state or advancing its sequence/revision. Session randomness, peer identity, ACLs and handle ownership are not supplied by a binary header.
 
 ## I/O and failure policy

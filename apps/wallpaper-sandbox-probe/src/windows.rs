@@ -2,13 +2,16 @@ use std::{
     error::Error,
     fs,
     io::{self, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpStream},
     path::PathBuf,
     sync::mpsc,
     time::{Duration, Instant},
 };
 use wallpaper_protocol::{Body, Message, read_frame, write_frame};
+mod attempt;
+mod retry;
 mod script;
+use attempt::ProbeAttempt;
 type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 const EXPECTED: u32 = 23;
 const HANDLES_ARMED: u32 = EXPECTED | 256;
@@ -26,6 +29,14 @@ impl std::fmt::Display for TrailingData {
     }
 }
 impl Error for TrailingData {}
+#[derive(Debug)]
+struct MissingFrame(&'static str);
+impl std::fmt::Display for MissingFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Missing {}", self.0)
+    }
+}
+impl Error for MissingFrame {}
 
 fn require_eof(output: &mut impl io::Read) -> Result<()> {
     let mut byte = [0];
@@ -66,18 +77,18 @@ fn read_response(
     handles_case: bool,
     ready: &mpsc::SyncSender<()>,
 ) -> Result<ProbeReply> {
-    let hello = read_frame(output)?.ok_or("Missing Hello")?;
+    let hello = read_frame(output)?.ok_or(MissingFrame("Hello"))?;
     hello.check_context(session, 1, 0)?;
     if hello.body != (Body::Hello { api_version: 1 }) {
         return Err("Invalid handshake".into());
     }
     ready.send(())?;
-    let pong = read_frame(output)?.ok_or("Missing Pong")?;
+    let pong = read_frame(output)?.ok_or(MissingFrame("Pong"))?;
     pong.check_context(session, 2, 0)?;
     if pong.body != (Body::Pong { nonce }) {
         return Err(format!("Invalid Pong nonce/type: {:?}", pong.body).into());
     }
-    let report = read_frame(output)?.ok_or("Missing probe result")?;
+    let report = read_frame(output)?.ok_or(MissingFrame("probe result"))?;
     report.check_context(session, 3, 0)?;
     if handles_case {
         if report.body
@@ -110,7 +121,7 @@ fn worker(args: &[String]) -> Result<()> {
     if !wallpaper_sandbox::is_appcontainer()? {
         return Err("Worker refuses non-AppContainer execution".into());
     }
-    if args.len() != 7 {
+    if args.len() != 8 {
         return Err("Invalid trusted probe arguments".into());
     }
     let session = args[1].parse()?;
@@ -119,6 +130,12 @@ fn worker(args: &[String]) -> Result<()> {
     let hostpid = args[4].parse()?;
     let port = args[5].parse::<u16>()?;
     let excluded_handle = args[6].parse::<usize>()?;
+    let previous_session = args[7].parse::<u64>()?;
+    if case == "no-hello" {
+        loop {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
     let mut input = io::stdin().lock();
     let mut output = io::stdout().lock();
     write_frame(
@@ -156,6 +173,19 @@ fn worker(args: &[String]) -> Result<()> {
         }
         "ipc-replay" => {
             write_frame(&mut output, &envelope(session, 1, Body::Pong { nonce }))?;
+            output.flush()?;
+            loop {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        "ipc-old-session" => {
+            if previous_session == 0 || previous_session == session {
+                return Err("Invalid old-session fixture".into());
+            }
+            write_frame(
+                &mut output,
+                &envelope(previous_session, 2, Body::Pong { nonce }),
+            )?;
             output.flush()?;
             loop {
                 std::thread::sleep(Duration::from_millis(100));
@@ -284,6 +314,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "JS cases: js-basic, js-interrupt, js-memory, js-stack, js-jobs. Fixed trusted source only, executed after the worker's AppContainer check. Heap=16 MiB, stack=256 KiB, cooperative deadline=100 ms, Promise job budget=64; the independent host watchdog remains enabled. No script path or external bytecode is accepted."
         );
+        println!(
+            "Restart cases: restart-recover, restart-exhaust, restart-timeout, restart-handshake, restart-stale, restart-protocol. At most three attempts per run, 100 ms backoff, fresh identity/channel each time. Only crashes/timeouts are retry candidates; protocol or launch failures stop without retry. These are fixed supervisor fixtures, not automatic product recovery."
+        );
         return Ok(());
     }
     let case = match args {
@@ -291,6 +324,18 @@ fn host(args: &[String]) -> Result<()> {
         [flag, value] if flag == "--case" => value.as_str(),
         _ => return Err("Use --help for probe arguments".into()),
     };
+    if [
+        "restart-recover",
+        "restart-exhaust",
+        "restart-timeout",
+        "restart-handshake",
+        "restart-stale",
+        "restart-protocol",
+    ]
+    .contains(&case)
+    {
+        return retry::run(case);
+    }
     if ![
         "healthy",
         "network",
@@ -316,46 +361,14 @@ fn host(args: &[String]) -> Result<()> {
     {
         return Err("Unknown case".into());
     }
-    let session = wallpaper_sandbox::random_id()?;
-    let nonce = wallpaper_sandbox::random_id()?;
-    let base = std::env::current_dir()?.join("target/sandbox-runs");
-    fs::create_dir_all(&base)?;
-    let root = base.join(format!("{}-{session:016x}", std::process::id()));
-    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))?;
-    let wallpaper_sandbox::Channel {
-        sandbox,
-        mut input,
-        mut output,
-    } = wallpaper_sandbox::spawn_probe(
-        &std::env::current_exe()?,
-        &root,
-        session,
-        case,
-        listener.local_addr()?.port(),
-    )?;
-    println!(
-        "Verified AppContainer identity and zero capabilities; Job memory=256 MiB, active processes=1. Case={case}"
-    );
-    if case == "handles" {
-        println!(
-            "Host-queried strict invalid-handle policy: {}",
-            sandbox.strict_handle_checks()
-        );
-    }
-    write_frame(&mut input, &envelope(session, 1, Body::Ping { nonce }))?;
-    input.flush()?;
-    drop(input);
-    let (send, receive) = mpsc::sync_channel(1);
-    let (ready_send, ready_receive) = mpsc::sync_channel(1);
-    let handles_case = case == "handles";
-    let reader = std::thread::spawn(move || {
-        let response = read_response(&mut output, session, nonce, handles_case, &ready_send);
-        let _ = send.send(response);
-    });
-    let ready = ready_receive.recv_timeout(Duration::from_secs(3));
-    let result = receive.recv_timeout(Duration::from_secs(3));
+    let mut attempt = ProbeAttempt::start(case, None)?;
+    let root = attempt.root.clone();
+    let sandbox = &attempt.sandbox;
+    let result = attempt.response.take().ok_or("Missing attempt result")?;
     let outcome = (|| -> Result<()> {
-        ready.map_err(|_| "Worker did not complete handshake")?;
+        if !attempt.handshake {
+            return Err("Worker did not complete handshake".into());
+        }
         match (case, result) {
             (
                 "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
@@ -485,9 +498,7 @@ fn host(args: &[String]) -> Result<()> {
         Ok(())
     })();
     // Kill even on errors before joining a potentially blocked pipe reader.
-    let stopped = sandbox.stop();
-    reader.join().map_err(|_| "Reader thread panicked")?;
-    stopped?;
+    attempt.finish()?;
     outcome?;
     println!(
         "Probe passed; test artifacts retained at {}",

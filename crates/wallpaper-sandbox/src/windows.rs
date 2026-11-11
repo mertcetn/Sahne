@@ -395,6 +395,7 @@ pub fn spawn_probe(
     session: u64,
     case: &str,
     port: u16,
+    previous_session: Option<u64>,
 ) -> io::Result<Channel> {
     if ![
         "healthy",
@@ -416,10 +417,17 @@ pub fn spawn_probe(
         "js-memory",
         "js-stack",
         "js-jobs",
+        "ipc-old-session",
+        "no-hello",
     ]
     .contains(&case)
     {
         return Err(io::Error::other("Unknown probe case"));
+    }
+    if case == "ipc-old-session" && previous_session.is_none_or(|old| old == 0 || old == session) {
+        return Err(io::Error::other(
+            "Old-session fixture requires a distinct previous session",
+        ));
     }
     std::fs::create_dir(root)?;
     let bin = root.join("bin");
@@ -460,10 +468,11 @@ pub fn spawn_probe(
         .as_ref()
         .map_or(0, |file| file.as_raw_handle() as usize);
     let command = format!(
-        "\"{}\" --worker {session} {case} \"{}\" {} {port} {excluded_value}",
+        "\"{}\" --worker {session} {case} \"{}\" {} {port} {excluded_value} {}",
         copied.display(),
         marker.display(),
-        std::process::id()
+        std::process::id(),
+        previous_session.unwrap_or(0)
     );
     let mut command = wide(command)?;
     let (child_in, parent_in) = pipe()?;
