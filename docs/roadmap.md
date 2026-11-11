@@ -65,7 +65,7 @@ Pass the research report's Windows surface gate, including 10 Explorer restarts 
 ### Work
 
 - [x] Launch a trusted minimal worker in an experimental AppContainer policy with configured Job limits and an explicit handle list; production AppContainer/LPAC policy and negative-handle tests remain open.
-- [ ] Prepare I1 adapter capability boundaries with the native contracts: no imported permission escalation, raw filesystem paths or execution during inspection.
+- [x] Specify I1's M2 capability/inspection boundary: no imported permission escalation, raw paths as worker APIs or execution during inspection. M3 mappings/callback semantics and the overall I1 gate remain open.
 - [ ] Establish the actual permitted IPC channel with schema, size, ownership, and queue limits.
 - [x] Embed the reviewed pinned engine with minimal features for fixed trusted source fixtures; general source/package transport remains disabled.
 - [x] Add and exercise initial runtime memory/stack limits, cooperative interruption, bounded Promise jobs and an independent host watchdog; integrated callback policy remains M4 work.
@@ -217,3 +217,7 @@ IPC validation was approved and committed in 9d207b7. The next change adds revie
 ### M2 bounded recovery continuation
 
 The validated JS continuation was approved and committed in 1261c32. The next change adds a three-attempt, backoff-controlled supervisor for explicit fixed fixtures, fresh session/channel ownership, permanent protocol rejection and stale completion protection. A missing Hello no longer gets an extra response deadline. Initial actual-process recovery/exhaustion/stale-session tests passed; full evidence and remaining network/endpoint/persistent-channel/I1 gaps are in [Recovery validation](m2-recovery.md). M2 remains in progress; the new continuation is not yet committed.
+
+### M2 endpoint and adapter-boundary continuation
+
+Recovery validation was approved and committed in 0d88774. A new trusted named-pipe fixture now proves host positive connection, four worker access denials and disappearance of the endpoint after owner destruction on the recorded machine. The M2 portion of I1 is documented without implementing an importer or declaring callback parity. Broader network/endpoint/escape and production-channel coverage remain open; M2 is not complete. See [Endpoint evidence](m2-endpoint.md) and [I1 boundary](import-adapter-boundary.md). New changes are not yet committed.

@@ -16,11 +16,13 @@ Use length-prefixed typed messages. Envelope fields: protocolVersion, sessionId,
 
 These are proposed test-policy values, not established safe/product defaults: 256 MiB worker process memory; 32 MiB JS heap; 50 ms callback cooperative budget; watchdog termination within 1 second after violation detection; 64 KiB IPC frame; 128 operations/batch; 60 batches/second; 256 timers; 1000 microtask jobs/turn; 4096 nodes; 16 KiB UTF-8 text/node; 30 FPS default and 60 FPS cap.
 
+The current fixed M2 JS fixtures use a narrower/different test scope: 16 MiB engine heap, 256 KiB stack, a cumulative 100 ms fixture deadline (not an implemented per-callback allowance), and 64 explicit Promise jobs. Product callbacks/timers and arbitrary source remain disabled; the proposed values above are not a claim that those interfaces exist. See [Actual M2 budgets](m2-js.md). Imported content cannot select between profiles or raise either policy.
+
 Import proposal: 1024 entries, 64 MiB expanded package, 16 MiB source file, 4096 pixels per image dimension, and 128 MiB aggregate decoded assets. Enforce all applicable limits together. M2/G3 must test boundary values and determine adjustments; changes require documented rationale, not disabled checks. Define binary encoding, overflow-safe arithmetic, exact schema, and timeout monitoring before parsing untrusted IPC.
 
 ## Planned imported-source frontend
 
-Wallpaper Engine inputs are not native packages and are not currently accepted. After M4, a separate importer may translate the approved local web subset into this format. I1 must specify source provenance, adapter version and capability/report metadata before adding fields; do not accept arbitrary manifest extensions in the meantime. Native format versions, resource IDs, host validation and limits apply unchanged. Rejection/unknown or explicitly selected lossy conversion are valid outcomes. See [Import plan](wallpaper-engine-import-plan.md).
+Wallpaper Engine inputs are not native packages and are not currently accepted. After M4, a separate importer may translate the approved local web subset into this format. I1's [capability/inspection boundary](import-adapter-boundary.md) proposes a separate sidecar report; native provenance/adapter fields, mappings and exact encodings remain M3 work. Do not accept arbitrary manifest extensions in the meantime. Native format versions, resource IDs, host validation and limits apply unchanged. Rejection/unknown or explicitly selected lossy conversion are valid outcomes. See [Import plan](wallpaper-engine-import-plan.md).
 
 ## Implemented M2 control subset
 

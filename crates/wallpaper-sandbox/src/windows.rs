@@ -13,7 +13,10 @@ use std::{
 use windows_sys::Win32::{
     Foundation::*,
     Security::{Authorization::*, Cryptography::*, Isolation::*, *},
-    Storage::FileSystem::{FILE_GENERIC_EXECUTE, FILE_GENERIC_READ},
+    Storage::FileSystem::{
+        CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_GENERIC_EXECUTE,
+        FILE_GENERIC_READ, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
+    },
     System::{
         Diagnostics::Debug::{GetErrorMode, SEM_NOGPFAULTERRORBOX, SetErrorMode},
         JobObjects::*,
@@ -337,6 +340,7 @@ pub struct Sandbox {
     child: Child,
     job: OwnedHandle,
     _excluded: Option<File>,
+    _endpoint: Option<EndpointFixture>,
     strict_handles: bool,
     _profile: Profile,
 }
@@ -404,6 +408,7 @@ pub fn spawn_probe(
         "memory",
         "process",
         "handles",
+        "endpoint",
         "hang",
         "oversized",
         "crash",
@@ -438,6 +443,14 @@ pub fn spawn_probe(
         Profile::new(session).map_err(|e| io::Error::other(format!("Create profile: {e}")))?;
     grant_read_execute(&bin, profile.sid)
         .map_err(|e| io::Error::other(format!("Staging ACL: {e}")))?;
+    let endpoint = if case == "endpoint" {
+        Some(
+            EndpointFixture::new(session)
+                .map_err(|e| io::Error::other(format!("Endpoint positive control: {e}")))?,
+        )
+    } else {
+        None
+    };
     let copied = bin.join("probe.exe");
     std::fs::copy(executable, &copied)?;
     let app = wide(&copied)?;
@@ -585,6 +598,7 @@ pub fn spawn_probe(
         child,
         job,
         _excluded: excluded,
+        _endpoint: endpoint,
         strict_handles,
         _profile: profile,
     };
@@ -601,6 +615,205 @@ pub fn spawn_probe(
         output: File::from(parent_out),
     })
 }
+fn endpoint_name(host: u32, session: u64) -> String {
+    format!(r"\\.\pipe\Sahne.Probe.{host}.{session:016x}")
+}
+struct EndpointFixture {
+    _control_client: OwnedHandle,
+    _control_server: OwnedHandle,
+    _available_server: OwnedHandle,
+}
+impl EndpointFixture {
+    fn new(session: u64) -> io::Result<Self> {
+        // Use the actual host user's SID, not a broad default pipe DACL or package grant.
+        // SAFETY: Borrowed current-process pseudo handle; token() owns only its returned token.
+        let user_token = token(unsafe { GetCurrentProcess() })?;
+        let mut bytes = 0;
+        // SAFETY: Required-size query uses a null buffer as specified by GetTokenInformation.
+        unsafe {
+            GetTokenInformation(
+                user_token.as_raw_handle(),
+                TokenUser,
+                ptr::null_mut(),
+                0,
+                &mut bytes,
+            );
+        }
+        if bytes < size_of::<TOKEN_USER>() as u32 || bytes > 4096 {
+            return Err(io::Error::other("Unexpected host user token size"));
+        }
+        let mut user = vec![0u64; (bytes as usize).div_ceil(8)];
+        // SAFETY: Aligned, initialized buffer at least the queried size; SID remains live below.
+        check(unsafe {
+            GetTokenInformation(
+                user_token.as_raw_handle(),
+                TokenUser,
+                user.as_mut_ptr().cast(),
+                bytes,
+                &mut bytes,
+            )
+        })?;
+        // SAFETY: Successful query supplies TOKEN_USER and backing SID storage in this buffer.
+        let sid = unsafe { (*user.as_ptr().cast::<TOKEN_USER>()).User.Sid };
+        let entry = EXPLICIT_ACCESS_W {
+            grfAccessPermissions: GENERIC_ALL,
+            grfAccessMode: SET_ACCESS,
+            grfInheritance: NO_INHERITANCE,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: ptr::null_mut(),
+                MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: TRUSTEE_IS_USER,
+                ptstrName: sid.cast(),
+            },
+        };
+        let mut acl = ptr::null_mut();
+        // SAFETY: One live trustee/SID, no old ACL. The API creates an owned ACL including ACE SID bytes.
+        winerror(unsafe { SetEntriesInAclW(1, &entry, ptr::null(), &mut acl) })?;
+        if acl.is_null() {
+            return Err(io::Error::other("Refusing a null endpoint DACL"));
+        }
+        let _acl = LocalAllocation(acl.cast());
+        let mut descriptor = SECURITY_DESCRIPTOR::default();
+        let descriptor_ptr = &mut descriptor as *mut _ as PSECURITY_DESCRIPTOR;
+        // SAFETY: Absolute descriptor is initialized first; non-null ACL stays alive through both
+        // synchronous creations. No null/absent DACL and no inherited access are permitted.
+        unsafe {
+            check(InitializeSecurityDescriptor(descriptor_ptr, 1))?;
+            check(SetSecurityDescriptorDacl(descriptor_ptr, 1, acl, 0))?;
+            check(SetSecurityDescriptorControl(
+                descriptor_ptr,
+                SE_DACL_PROTECTED,
+                SE_DACL_PROTECTED,
+            ))?;
+        }
+        let security = SECURITY_ATTRIBUTES {
+            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: descriptor_ptr,
+            bInheritHandle: 0,
+        };
+        let name = wide(endpoint_name(std::process::id(), session))?;
+        // SAFETY: Paths/descriptor/ACL remain live; kernel copies security information at creation.
+        // First-instance mode prevents silently reusing a pipe created by another process.
+        let server = unsafe {
+            own(CreateNamedPipeW(
+                name.as_ptr(),
+                PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+                2,
+                1024,
+                1024,
+                0,
+                &security,
+            ))?
+        };
+        // SAFETY: Open this freshly owned local endpoint only; no data is sent or read.
+        // A client may connect after CreateNamedPipe even before ConnectNamedPipe is called.
+        let client = unsafe {
+            own(CreateFileW(
+                name.as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                ptr::null(),
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                ptr::null_mut(),
+            ))?
+        };
+        // Keep the successful host connection open and create a second available instance at
+        // the same name, so worker denial cannot be attributed to a busy/absent endpoint.
+        // SAFETY: Same name, access mode and instance cap; descriptor/ACL remain valid.
+        let available = unsafe {
+            own(CreateNamedPipeW(
+                name.as_ptr(),
+                PIPE_ACCESS_DUPLEX,
+                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+                2,
+                1024,
+                1024,
+                0,
+                &security,
+            ))?
+        };
+        println!(
+            "Endpoint control: host opened the same name; user-only protected DACL, remote clients rejected, second instance available; no endpoint handle inherits."
+        );
+        Ok(Self {
+            _control_client: client,
+            _control_server: server,
+            _available_server: available,
+        })
+    }
+}
+
+/// Trusted direct-OS probe for a known live host endpoint, not an application IPC API.
+pub fn probe_host_endpoint(host: u32, session: u64) -> io::Result<()> {
+    if !is_appcontainer()? {
+        return Err(io::Error::other("Endpoint probe requires AppContainer"));
+    }
+    let name = wide(endpoint_name(host, session))?;
+    for access in [GENERIC_READ, GENERIC_WRITE, GENERIC_READ | GENERIC_WRITE, 0] {
+        // SAFETY: Open only the fixed synthetic endpoint. No handle ownership is assumed on
+        // failure; unexpected success is owned/closed immediately without reading/writing.
+        let handle = unsafe {
+            CreateFileW(
+                name.as_ptr(),
+                access,
+                0,
+                ptr::null(),
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                ptr::null_mut(),
+            )
+        };
+        if handle != INVALID_HANDLE_VALUE && !handle.is_null() {
+            // SAFETY: The successful API call transferred one new owned handle.
+            drop(unsafe { own(handle)? });
+            return Err(io::Error::other(format!(
+                "Unexpected endpoint connection: access={access:#x}"
+            )));
+        }
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() != Some(ERROR_ACCESS_DENIED as i32) {
+            return Err(io::Error::other(format!(
+                "Endpoint access={access:#x}, unexpected error={:?}",
+                error.raw_os_error()
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Check only this process's uniquely named fixture after its owning Sandbox is dropped.
+pub fn verify_host_endpoint_closed(session: u64) -> io::Result<()> {
+    let name = wide(endpoint_name(std::process::id(), session))?;
+    // SAFETY: Fixed synthetic local name; no data I/O. Unexpected success transfers one
+    // handle, which is immediately closed. A live/busy/inaccessible endpoint is not absence.
+    let handle = unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            0,
+            0,
+            ptr::null(),
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            ptr::null_mut(),
+        )
+    };
+    if handle != INVALID_HANDLE_VALUE && !handle.is_null() {
+        // SAFETY: Successful open transferred this handle; never closes another owner's handle.
+        drop(unsafe { own(handle)? });
+        return Err(io::Error::other(
+            "Endpoint still opens after owner destruction",
+        ));
+    }
+    let error = io::Error::last_os_error();
+    if error.raw_os_error() != Some(ERROR_FILE_NOT_FOUND as i32) {
+        return Err(error);
+    }
+    Ok(())
+}
+
 pub fn host_process_access_denied(pid: u32) -> io::Result<bool> {
     // SAFETY: Probe only requests access and immediately closes a successful handle; no memory is read/written.
     unsafe {

@@ -34,6 +34,8 @@ The five fixed JS cases use bit 9 after the selected trusted fixture has verifie
 
 The [restart experiment](m2-recovery.md) creates a new channel/session for every attempt, resetting per-direction wire sequence to 1 only within that new session. No prior message queue is reused. A correctly formed Pong with the current nonce but an earlier real session ID must fail context validation and stop recovery permanently. Missing frames are now typed host errors so a failed process exit after EOF can be distinguished from malformed/context/trailing-data failures; this does not change the wire format.
 
+The endpoint fixture sets test bit 10 only after four access-denied results against the unrelated host pipe; its exact final mask is 0x417. The host also checks its own positive connection and post-owner namespace cleanup. No new wire tag or endpoint request message is introduced; test telemetry does not grant endpoint access.
+
 check_context compares the expected session, sequence and revision without advancing any state. The host must perform body and ownership validation before committing accepted state or advancing its sequence/revision. Session randomness, peer identity, ACLs and handle ownership are not supplied by a binary header.
 
 ## I/O and failure policy
