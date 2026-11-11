@@ -1,6 +1,6 @@
 # Prototype Scripting Contract
 
-Status: M0 draft; API implementation is pending M2/M4.
+Status: M0 draft for the product API; DOM, timers and creator-facing script loading remain pending M3/M4. M2 now has a restricted engine executing only [fixed trusted JS fixtures](m2-js.md), not this product API.
 
 Expose document.getElementById, textContent, allowlisted style writes, bounded setTimeout/setInterval and cancellation, pause/resume events, and wallpaper.time.format. Missing-element lookup returns null. Scripts may read their own writes within a callback; only acknowledged transactions are host-authoritative. Synchronous layout/computed-style APIs are excluded.
 

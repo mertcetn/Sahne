@@ -18,7 +18,7 @@ Dates and effort estimates will be added after the first technical spikes establ
 | --- | --- | --- | --- | --- |
 | M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence committed |
 | M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Implementation and font/device follow-up approved; extended display matrix open |
-| M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | In progress: trusted AppContainer/IPC experiment; network and full G2 open |
+| M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | In progress: native/IPC and fixed JS budget fixtures; full G2 open |
 | M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | Pending |
 | M4 | Sandboxed scripted end-to-end Windows prototype | M1, M2, M3 | Integrated G2 regression and prototype acceptance | Pending |
 | I2 | Selective web import and compatibility report | M4; I1 contracts | Import-specific acceptance; does not block native M5/M6 by default | Planned |
@@ -67,8 +67,8 @@ Pass the research report's Windows surface gate, including 10 Explorer restarts 
 - [x] Launch a trusted minimal worker in an experimental AppContainer policy with configured Job limits and an explicit handle list; production AppContainer/LPAC policy and negative-handle tests remain open.
 - [ ] Prepare I1 adapter capability boundaries with the native contracts: no imported permission escalation, raw filesystem paths or execution during inspection.
 - [ ] Establish the actual permitted IPC channel with schema, size, ownership, and queue limits.
-- [ ] Embed the selected engine with recorded source revision and minimal features; accept source only.
-- [ ] Add runtime memory/stack limits, cooperative interruption, and an independent host watchdog.
+- [x] Embed the reviewed pinned engine with minimal features for fixed trusted source fixtures; general source/package transport remains disabled.
+- [x] Add and exercise initial runtime memory/stack limits, cooperative interruption, bounded Promise jobs and an independent host watchdog; integrated callback policy remains M4 work.
 - [ ] Exercise direct OS denials through trusted test code inside the sandbox, not merely missing JavaScript APIs.
 - [ ] Exercise infinite JavaScript, native stalls, memory exhaustion, IPC floods, worker crashes, and bounded restart behavior.
 
@@ -209,3 +209,7 @@ The user confirmed network-egress and memory and authorized commit 3b9f93f. The 
 ### M2 IPC fault/pressure continuation
 
 The validated process/handle changes were approved and committed in 9d53b81, with the user's instruction to run executable tests autonomously. The next change requires EOF after the final result and rejects unsolicited trailing data immediately. Actual restricted-process fixtures cover flood, partial-body stall/EOF, sequence replay and a peer that does not close after a valid report. The scope is fixed-conversation failure containment; persistent valid-message rate budgets, host-write backpressure, restart behavior, full OS isolation coverage and JS remain open. See [IPC fault validation](m2-ipc-validation.md).
+
+### M2 fixed JavaScript engine continuation
+
+IPC validation was approved and committed in 9d207b7. The next change adds reviewed exact rquickjs 0.14.0 with its identified QuickJS-NG snapshot and only std enabled. Fixed trusted scripts execute inside AppContainer with engine heap/stack/deadline/job budgets while the independent Job/watchdog remains active. Five initial real-worker cases passed for normal execution, interruption, OOM, stack and Promise jobs. No arbitrary script/package or creator API is enabled; remaining G2/integration work is explicit. See [JS fixture results](m2-js.md) and [dependency/security assessment](m2-js-dependencies.md). The new continuation is not yet committed.

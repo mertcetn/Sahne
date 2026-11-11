@@ -1,6 +1,6 @@
 # M2 IPC Fault and Pressure Validation
 
-Date: November 11, 2026. Status: trusted Windows probe continuation after 9d53b81; partial G2 evidence. No packages or JavaScript are executed. This is a one-shot test channel, not the persistent M4 transaction channel.
+Date: November 11, 2026. Status: trusted Windows probe continuation after 9d53b81, committed in 9d207b7; partial G2 evidence. These IPC fixtures execute no packages or JS; the later [JS fixture task](m2-js.md) uses the same channel. This is a one-shot test channel, not the persistent M4 transaction channel.
 
 ## Behavior
 
@@ -56,7 +56,7 @@ All thirteen expected-success native cases passed on the final release binary, i
 
 ## Remaining G2 work
 
-This demonstrates fail-fast handling of unsolicited trailing-message pressure on one short-lived channel, not a production rate limiter for permitted persistent traffic. Per-window CPU/rate budgets, sustained valid-message pressure, blocked large host writes, multiple connections, ACK/log floods, repeated restarts and long-duration memory measurements remain open. Scene transactions, atomic acceptance and retained renderer state belong to the M4 integration. JS interruption, Promise/timer floods, runtime allocation/stack limits and engine security review remain unimplemented. Broader network, unrelated endpoint and process/handle escape coverage also remains open.
+This demonstrates fail-fast handling of unsolicited trailing-message pressure on one short-lived channel, not a production rate limiter for permitted persistent traffic. Per-window CPU/rate budgets, sustained valid-message pressure, blocked large host writes, multiple connections, ACK/log floods, repeated restarts and long-duration memory measurements remain open. Scene transactions, atomic acceptance and retained renderer state belong to the M4 integration. A later [fixed JS fixture task](m2-js.md) adds initial engine interruption, allocation/stack and Promise-job checks; integrated callback/timer flooding and arbitrary source remain future work. Broader network, unrelated endpoint and process/handle escape coverage also remains open.
 
 No dependency, feature, registry version, resource limit or native permission was added by this task. The worker-launch whitelist adds only these trusted fixtures. Native tests still create unique temporary AppContainer profiles and retain ignored target/sandbox-runs artifacts; cleanup behavior is unchanged. Agent-executable checks are run autonomously under the user's updated workflow; no duplicate user test run is required.
 

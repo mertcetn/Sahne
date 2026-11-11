@@ -9,5 +9,8 @@ publish.workspace = true
 wallpaper-protocol = { path = "../../crates/wallpaper-protocol" }
 wallpaper-sandbox = { path = "../../crates/wallpaper-sandbox" }
 
+[target.'cfg(windows)'.dependencies]
+rquickjs = { version = "=0.14.0", default-features = false, features = ["std"] }
+
 [lints]
 workspace = true

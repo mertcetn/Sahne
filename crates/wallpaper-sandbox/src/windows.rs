@@ -411,6 +411,11 @@ pub fn spawn_probe(
         "ipc-truncated",
         "ipc-replay",
         "ipc-open",
+        "js-basic",
+        "js-interrupt",
+        "js-memory",
+        "js-stack",
+        "js-jobs",
     ]
     .contains(&case)
     {

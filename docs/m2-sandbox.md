@@ -1,6 +1,6 @@
 # M2 Windows Sandbox Spike
 
-Date: November 11, 2026. Status: trusted native probe only, partial G2 evidence. No JavaScript engine, package execution, production sandbox certification or Linux isolation is provided.
+Date: November 11, 2026. Status: trusted Windows probe, partial G2 evidence. The native foundation below is now complemented by [fixed JavaScript fixtures](m2-js.md). No arbitrary script/package execution, production sandbox certification or Linux isolation is provided.
 
 ## Run and review
 

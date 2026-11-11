@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 use wallpaper_protocol::{Body, Message, read_frame, write_frame};
+mod script;
 type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 const EXPECTED: u32 = 23;
 const HANDLES_ARMED: u32 = EXPECTED | 256;
@@ -161,7 +162,8 @@ fn worker(args: &[String]) -> Result<()> {
             }
         }
         "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-        | "ipc-flood" | "ipc-open" => {}
+        | "ipc-flood" | "ipc-open" | "js-basic" | "js-interrupt" | "js-memory" | "js-stack"
+        | "js-jobs" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -213,12 +215,19 @@ fn worker(args: &[String]) -> Result<()> {
     if case == "process" {
         wallpaper_sandbox::probe_child_process_limit()?;
     }
+    let script_result = if case.starts_with("js-") {
+        script::run(case)?;
+        script::RESULT_BIT
+    } else {
+        0
+    };
     let denied = u32::from(read_denied)
         | (u32::from(write_denied) << 1)
         | (u32::from(process_denied) << 2)
         | 16
         | (u32::from(memory_denied) << 5)
-        | (u32::from(case == "process") << 6);
+        | (u32::from(case == "process") << 6)
+        | script_result;
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     if case == "handles" {
         // The host must observe normal checks and an explicit armed stage before
@@ -270,7 +279,10 @@ fn worker(args: &[String]) -> Result<()> {
 fn host(args: &[String]) -> Result<()> {
     if args == ["--help"] {
         println!(
-            "Usage: wallpaper-sandbox-probe [--case CASE]\nCases: healthy, network, network-egress, memory, process, handles, hang, oversized, crash, ipc-flood, ipc-stall, ipc-truncated, ipc-replay, ipc-open.\nTrusted Windows AppContainer/Job/IPC spike; no JavaScript or packages. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile.\nNetwork tests require explicit access denial; timeout is inconclusive and fails. network uses loopback; network-egress tries TEST-NET-1 192.0.2.1:9 without DNS or application payload.\nmemory checks a small allocation succeeds and an over-limit commit fails. process requires Job quota denial of a suspended child. handles checks an excluded host handle, including verified strict-policy termination after arming; WER is suppressed only for that intentional fault.\nIPC cases exercise unsolicited trailing-message flood, stalled partial body, truncated body at EOF, replayed sequence, and an open stream after a valid report. Every successful one-shot response requires EOF; a peer that keeps the stream open is stopped by the host deadline."
+            "Usage: wallpaper-sandbox-probe [--case CASE]\nCases: healthy, network, network-egress, memory, process, handles, hang, oversized, crash, ipc-flood, ipc-stall, ipc-truncated, ipc-replay, ipc-open.\nTrusted Windows AppContainer/Job/IPC spike; fixed native/JS fixtures only, no packages or script paths. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile.\nNetwork tests require explicit access denial; timeout is inconclusive and fails. network uses loopback; network-egress tries TEST-NET-1 192.0.2.1:9 without DNS or application payload.\nmemory checks a small allocation succeeds and an over-limit commit fails. process requires Job quota denial of a suspended child. handles checks an excluded host handle, including verified strict-policy termination after arming; WER is suppressed only for that intentional fault.\nIPC cases exercise unsolicited trailing-message flood, stalled partial body, truncated body at EOF, replayed sequence, and an open stream after a valid report. Every successful one-shot response requires EOF; a peer that keeps the stream open is stopped by the host deadline."
+        );
+        println!(
+            "JS cases: js-basic, js-interrupt, js-memory, js-stack, js-jobs. Fixed trusted source only, executed after the worker's AppContainer check. Heap=16 MiB, stack=256 KiB, cooperative deadline=100 ms, Promise job budget=64; the independent host watchdog remains enabled. No script path or external bytecode is accepted."
         );
         return Ok(());
     }
@@ -294,6 +306,11 @@ fn host(args: &[String]) -> Result<()> {
         "ipc-truncated",
         "ipc-replay",
         "ipc-open",
+        "js-basic",
+        "js-interrupt",
+        "js-memory",
+        "js-stack",
+        "js-jobs",
     ]
     .contains(&case)
     {
@@ -341,7 +358,8 @@ fn host(args: &[String]) -> Result<()> {
         ready.map_err(|_| "Worker did not complete handshake")?;
         match (case, result) {
             (
-                "healthy" | "network" | "network-egress" | "memory" | "process" | "handles",
+                "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
+                | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -349,6 +367,9 @@ fn host(args: &[String]) -> Result<()> {
                         "memory" => 32,
                         "process" => 64,
                         "handles" => 128,
+                        "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {
+                            script::RESULT_BIT
+                        }
                         _ => 0,
                     }) =>
             {
@@ -371,6 +392,11 @@ fn host(args: &[String]) -> Result<()> {
                 if case == "handles" {
                     println!(
                         "Explicit handle list verified: inheritable host file absent from worker (ERROR_INVALID_HANDLE, 6)."
+                    );
+                }
+                if case.starts_with("js-") {
+                    println!(
+                        "Trusted {case} fixture passed: heap=16 MiB, stack=256 KiB, cooperative deadline=100 ms, Promise jobs<=64; host watchdog remains enabled."
                     );
                 }
                 if sandbox.wait(1000)? != Some(0) {

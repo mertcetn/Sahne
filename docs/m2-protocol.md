@@ -1,6 +1,6 @@
 # M2 Control-Frame Foundation
 
-Date: November 11, 2026. Status: implemented codec, now used by the separate [trusted Windows sandbox experiment](m2-sandbox.md). The codec itself supplies no OS isolation or authentication. No JavaScript engine is implemented. M1 extended-display tests remain open. M2 may proceed independently under the roadmap.
+Date: November 11, 2026. Status: implemented codec, used by the [trusted Windows sandbox experiment](m2-sandbox.md) and its [fixed JS fixtures](m2-js.md). The codec itself supplies no OS isolation, authentication or JavaScript execution. M1 extended-display tests remain open. M2 may proceed independently under the roadmap.
 
 ## Implementation
 
@@ -30,6 +30,8 @@ Hello is intended worker-to-host; Ping host-to-worker; Pong and ProbeResult work
 
 Only the handles fixture uses bit 8 as an armed-stage flag: after Hello(1) and Pong(2), it sends ProbeResult(3) with exactly 0x117 and flushes before querying the excluded handle. A returning API call must produce a final ProbeResult(4) with 0x97 and worker exit 0. Clean EOF after the verified armed stage is merely a termination candidate: the host must also have independently queried enabled strict-handle policy before resume and observe exactly 0xc0000008. Missing/incorrect arming, partial frames, Reject, timeout, wrong context or any other exit fails. This is trusted test telemetry, not production worker authority. No wire tag or codec version changed.
 
+The five fixed JS cases use bit 9 after the selected trusted fixture has verified its expected result. Their exact final mask is 0x217, with the normal nonce/envelope/EOF/exit checks. This is not a privilege grant or independent attestation from an untrusted worker. No new wire tag is added for source loading or general execution.
+
 check_context compares the expected session, sequence and revision without advancing any state. The host must perform body and ownership validation before committing accepted state or advancing its sequence/revision. Session randomness, peer identity, ACLs and handle ownership are not supplied by a binary header.
 
 ## I/O and failure policy
@@ -54,7 +56,7 @@ Tests cover documented golden wire bytes, concatenated-frame boundaries/EOF, eve
 
 ## Next M2 work
 
-The trusted AppContainer experiment now supplies actual pipe transfer, token checks, configured Job limits and a host deadline. Complete the outstanding network, handle, exhaustion and channel-pressure tests and decide the production AppContainer/LPAC policy before untrusted execution. Integrate a reviewed pinned JS engine afterward. I1 import adapter contracts remain pending; no Wallpaper Engine source has been run.
+The trusted AppContainer experiment supplies actual pipe transfer, token checks, configured Job limits and a host deadline. A reviewed pinned JS engine now runs fixed trusted fixtures. Complete broader network/handle/exhaustion/channel-pressure tests, scheduling/source transport and the production AppContainer/LPAC policy before untrusted execution. I1 import adapter contracts remain pending; no Wallpaper Engine source has been run.
 
 Current primary references consulted November 11, 2026: [Read/read_exact](https://doc.rust-lang.org/std/io/trait.Read.html), [Write/write_all](https://doc.rust-lang.org/std/io/trait.Write.html), [UTF-8 validation](https://doc.rust-lang.org/std/str/fn.from_utf8.html).
 
