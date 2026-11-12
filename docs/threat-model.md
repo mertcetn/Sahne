@@ -4,6 +4,8 @@ Status: M0 contracts with a trusted M2 Windows AppContainer experiment. Partial 
 
 The experiment now includes [fixed original JS fixtures](m2-js.md) for arithmetic/API absence, cooperative interruption, OOM, recursion and Promise-job limits. Source interpretation occurs only in the restricted worker; the host remains responsible for independent deadlines and validated IPC. Known upstream advisories and maintenance uncertainty are assessed in [Engine dependency review](m2-js-dependencies.md). These tests do not certify engine safety or enable arbitrary content.
 
+The [control-channel experiment](m2-ipc-security.md) verifies explicit pipe DACLs and data-only inherited handles. The [filesystem matrix](m2-filesystem.md) separates synthetic private/staging access denials from selected permitted executable/system reads. Neither is exhaustive Windows isolation certification.
+
 ## Boundaries
 
 Packages, compiled scenes, JavaScript, images, fonts, and worker messages are untrusted. The host, OS kernel, and GPU driver are trusted. Assume a worker can be compromised through a native engine/parser defect. Keep GPU access in the host and parsing/decoding in restricted helpers. Host validation applies even to compiler-generated data.

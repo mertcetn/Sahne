@@ -27,6 +27,8 @@ use windows_sys::Win32::{
         Threading::*,
     },
 };
+mod filesystem;
+pub use filesystem::{probe_filesystem, verify_filesystem_fixture};
 
 fn wide(value: impl AsRef<std::ffi::OsStr>) -> io::Result<Vec<u16>> {
     let mut text: Vec<u16> = value.as_ref().encode_wide().collect();
@@ -662,6 +664,7 @@ pub fn spawn_probe(
         "handles",
         "endpoint",
         "ipc-rights",
+        "filesystem",
         "hang",
         "oversized",
         "crash",
@@ -696,6 +699,9 @@ pub fn spawn_probe(
         Profile::new(session).map_err(|e| io::Error::other(format!("Create profile: {e}")))?;
     grant_read_execute(&bin, profile.sid)
         .map_err(|e| io::Error::other(format!("Staging ACL: {e}")))?;
+    if case == "filesystem" {
+        filesystem::prepare(root)?;
+    }
     let endpoint = if case == "endpoint" {
         Some(
             EndpointFixture::new(session)

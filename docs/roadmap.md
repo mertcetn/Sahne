@@ -71,6 +71,7 @@ Pass the research report's Windows surface gate, including 10 Explorer restarts 
 - [x] Embed the reviewed pinned engine with minimal features for fixed trusted source fixtures; general source/package transport remains disabled.
 - [x] Add and exercise initial runtime memory/stack limits, cooperative interruption, bounded Promise jobs and an independent host watchdog; integrated callback policy remains M4 work.
 - [ ] Exercise direct OS denials through trusted test code inside the sandbox, not merely missing JavaScript APIs.
+- [x] Exercise a synthetic filesystem matrix with host positive controls and sixteen worker denials; record selected permitted staged/system reads separately. Broader filesystem/system-read inventory and G2 remain open; see [filesystem evidence](m2-filesystem.md).
 - [x] Exercise initial fixed-source infinite JS, native stalls, OOM, IPC faults/floods, crashes and bounded restart behavior; sustained/integrated pressure and broader G2 coverage remain open.
 
 ### Completion evidence — initial G2
@@ -226,3 +227,7 @@ Recovery validation was approved and committed in 0d88774. A new trusted named-p
 ### M2 control-channel hardening — November 12, 2026
 
 The endpoint/I1 work was committed in 32ace38. The actual one-shot control pipes now have explicit host-user-only protected DACLs, host readback validation and data-only handles. A fixed worker case rejects ACL reads/changes, rights upgrades through handle duplication and reverse-direction I/O while normal IPC succeeds. All twenty-six expected-success process scenarios and nineteen Rust tests passed locally. See [Channel security, bounds and evidence](m2-ipc-security.md). Persistent source/scene transport, broader G2 coverage and permitted system-read inventory remain open; M2 is not complete. This continuation remains uncommitted.
+
+### M2 filesystem continuation — November 12, 2026
+
+Control-channel hardening was approved and committed in a149196. A new fixed filesystem case checks eleven file-right denials, private listing denial and four file/directory creation denials against synthetic objects with host positive controls. Selected staged/system reads are recorded separately, and post-stop contents/namespace are checked independently. All twenty-seven expected-success process scenarios and nineteen Rust tests passed locally. See [Filesystem evidence and remaining scope](m2-filesystem.md). Complete system-read inventory, broader OS isolation and sustained channel-pressure work remain open; M2 is not complete. These new changes remain uncommitted.

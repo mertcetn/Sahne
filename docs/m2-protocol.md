@@ -38,6 +38,8 @@ The endpoint fixture sets test bit 10 only after four access-denied results agai
 
 The ipc-rights fixture sets bit 11 only after both inherited streams reject DACL reads/changes, ACL/pipe-instance rights upgrades through duplication and wrong-direction data I/O with access denied. Its exact final mask is 0x817, with the usual nonce/context/EOF/exit checks. Every launch also verifies actual host-user-only protected pipe DACLs and uses data-only handles. See [Channel policy and evidence](m2-ipc-security.md). No wire tag/version or worker privilege is added.
 
+The filesystem fixture sets bit 12 only after sixteen direct file/directory access denials and the selected permitted-read controls pass. Its exact mask is 0x1017, with normal protocol/EOF/exit and independent post-stop fixture checks. See [Filesystem matrix](m2-filesystem.md). It adds no production filesystem request or wire tag/version.
+
 check_context compares the expected session, sequence and revision without advancing any state. The host must perform body and ownership validation before committing accepted state or advancing its sequence/revision. Session randomness, peer identity, ACLs and handle ownership are not supplied by a binary header.
 
 ## I/O and failure policy

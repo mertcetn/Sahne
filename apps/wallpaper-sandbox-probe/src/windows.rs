@@ -192,8 +192,8 @@ fn worker(args: &[String]) -> Result<()> {
             }
         }
         "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-        | "endpoint" | "ipc-rights" | "ipc-flood" | "ipc-open" | "js-basic" | "js-interrupt"
-        | "js-memory" | "js-stack" | "js-jobs" => {}
+        | "endpoint" | "ipc-rights" | "filesystem" | "ipc-flood" | "ipc-open" | "js-basic"
+        | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -279,6 +279,24 @@ fn worker(args: &[String]) -> Result<()> {
         output.flush()?;
         return Ok(());
     }
+    if case == "filesystem"
+        && let Err(error) =
+            wallpaper_sandbox::probe_filesystem(marker.parent().ok_or("Missing fixture root")?)
+    {
+        write_frame(
+            &mut output,
+            &envelope(
+                session,
+                2,
+                Body::Reject {
+                    code: 5,
+                    message: error.to_string().chars().take(60).collect(),
+                },
+            ),
+        )?;
+        output.flush()?;
+        return Ok(());
+    }
     let script_result = if case.starts_with("js-") {
         script::run(case)?;
         script::RESULT_BIT
@@ -293,7 +311,8 @@ fn worker(args: &[String]) -> Result<()> {
         | (u32::from(case == "process") << 6)
         | script_result
         | (u32::from(case == "endpoint") << 10)
-        | (u32::from(case == "ipc-rights") << 11);
+        | (u32::from(case == "ipc-rights") << 11)
+        | (u32::from(case == "filesystem") << 12);
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     if case == "handles" {
         // The host must observe normal checks and an explicit armed stage before
@@ -359,6 +378,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "Channel case: ipc-rights. Actual inherited streams must reject DACL reads, DACL changes and wrong-direction data I/O with access denied, while the normal protocol succeeds. All cases verify protected host-user-only pipe DACLs and use data-only inherited handles."
         );
+        println!(
+            "Filesystem case: filesystem. Synthetic private/staged targets have host positive controls. Worker file-rights, private listing and file/directory creation requests must be denied. Staged data/executable and System32/kernel32.dll reads plus staging listing must succeed. No user files are inspected; post-stop contents/namespace are checked."
+        );
         return Ok(());
     }
     let case = match args {
@@ -387,6 +409,7 @@ fn host(args: &[String]) -> Result<()> {
         "handles",
         "endpoint",
         "ipc-rights",
+        "filesystem",
         "hang",
         "oversized",
         "crash",
@@ -416,8 +439,8 @@ fn host(args: &[String]) -> Result<()> {
         match (case, result) {
             (
                 "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-                | "endpoint" | "ipc-rights" | "js-basic" | "js-interrupt" | "js-memory"
-                | "js-stack" | "js-jobs",
+                | "endpoint" | "ipc-rights" | "filesystem" | "js-basic" | "js-interrupt"
+                | "js-memory" | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -427,6 +450,7 @@ fn host(args: &[String]) -> Result<()> {
                         "handles" => 128,
                         "endpoint" => 1024,
                         "ipc-rights" => 2048,
+                        "filesystem" => 4096,
                         "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {
                             script::RESULT_BIT
                         }
@@ -462,6 +486,11 @@ fn host(args: &[String]) -> Result<()> {
                 if case == "ipc-rights" {
                     println!(
                         "Inherited channel rights verified: DACL reads/changes and reverse-direction I/O denied with error 5; normal framed I/O and EOF succeeded."
+                    );
+                }
+                if case == "filesystem" {
+                    println!(
+                        "Filesystem matrix verified: sixteen direct OS denials (error 5); staged data/executable and System32/kernel32.dll reads plus staging listing permitted."
                     );
                 }
                 if case.starts_with("js-") {
@@ -557,6 +586,10 @@ fn host(args: &[String]) -> Result<()> {
     // Kill even on errors before joining a potentially blocked pipe reader.
     attempt.finish()?;
     outcome?;
+    if case == "filesystem" {
+        wallpaper_sandbox::verify_filesystem_fixture(&root)?;
+        println!("Filesystem post-stop control: synthetic file contents and namespace unchanged.");
+    }
     if case == "endpoint" {
         let session = attempt.session;
         drop(attempt);
