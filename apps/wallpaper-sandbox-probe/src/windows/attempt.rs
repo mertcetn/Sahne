@@ -106,6 +106,12 @@ impl ProbeAttempt {
                 "Response classification and Job stop/reader join exceeded one second".into(),
             );
         }
+        let profile_cleanup = Instant::now();
+        self.sandbox.cleanup_profile()?;
+        println!(
+            "Profile cleanup verified: storage existed before launch and is absent after OS deletion; elapsed={:?}",
+            profile_cleanup.elapsed()
+        );
         Ok(elapsed)
     }
 }

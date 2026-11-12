@@ -28,7 +28,9 @@ use windows_sys::Win32::{
     },
 };
 mod filesystem;
+mod profile;
 pub use filesystem::{probe_filesystem, verify_filesystem_fixture};
+use profile::Profile;
 
 fn wide(value: impl AsRef<std::ffi::OsStr>) -> io::Result<Vec<u16>> {
     let mut text: Vec<u16> = value.as_ref().encode_wide().collect();
@@ -87,40 +89,6 @@ pub fn random_id() -> io::Result<u64> {
         return random_id();
     }
     Ok(id)
-}
-struct Profile {
-    name: Vec<u16>,
-    sid: PSID,
-}
-impl Profile {
-    fn new(id: u64) -> io::Result<Self> {
-        let name = wide(format!("Sahne.Spike.{}.{id:016x}", std::process::id()))?;
-        let mut sid = ptr::null_mut();
-        // SAFETY: Terminated strings/output pointer live through the synchronous call; no capabilities.
-        hresult(unsafe {
-            CreateAppContainerProfile(
-                name.as_ptr(),
-                name.as_ptr(),
-                name.as_ptr(),
-                ptr::null(),
-                0,
-                &mut sid,
-            )
-        })?;
-        Ok(Self { name, sid })
-    }
-}
-impl Drop for Profile {
-    fn drop(&mut self) {
-        // SAFETY: The unique profile was created by this instance; sid was allocated by the OS.
-        unsafe {
-            let result = DeleteAppContainerProfile(self.name.as_ptr());
-            if result < 0 {
-                eprintln!("AppContainer profile cleanup failed: {result:#x}");
-            }
-            FreeSid(self.sid);
-        }
-    }
 }
 struct LocalAllocation(*mut c_void);
 impl Drop for LocalAllocation {
@@ -596,9 +564,14 @@ pub struct Sandbox {
     _excluded: Option<File>,
     _endpoint: Option<EndpointFixture>,
     strict_handles: bool,
-    _profile: Profile,
+    profile: Profile,
 }
 impl Sandbox {
+    /// Call after stopping the worker and joining the channel reader. Errors prohibit retry.
+    pub fn cleanup_profile(&mut self) -> io::Result<()> {
+        self.stop()?;
+        self.profile.cleanup()
+    }
     pub fn strict_handle_checks(&self) -> bool {
         self.strict_handles
     }
@@ -859,7 +832,7 @@ pub fn spawn_probe(
         _excluded: excluded,
         _endpoint: endpoint,
         strict_handles,
-        _profile: profile,
+        profile,
     };
     // Drop host copies of child-side endpoints before resuming, so EOF works on termination.
     drop(child_in);
