@@ -27,7 +27,9 @@ use windows_sys::Win32::{
         Threading::*,
     },
 };
+mod cpu;
 mod filesystem;
+pub use cpu::probe_cpu_budget;
 mod profile;
 pub use filesystem::{probe_filesystem, verify_filesystem_fixture};
 use profile::Profile;
@@ -565,8 +567,13 @@ pub struct Sandbox {
     _endpoint: Option<EndpointFixture>,
     strict_handles: bool,
     profile: Profile,
+    cpu_rate: u32,
+    started: std::time::Instant,
 }
 impl Sandbox {
+    pub fn verify_cpu_rate(&self) -> io::Result<()> {
+        cpu::verify_usage(self)
+    }
     /// Call after stopping the worker and joining the channel reader. Errors prohibit retry.
     pub fn cleanup_profile(&mut self) -> io::Result<()> {
         self.stop()?;
@@ -639,6 +646,7 @@ pub fn spawn_probe(
         "ipc-rights",
         "ipc-write-stall",
         "ipc-write-drain",
+        "cpu-busy",
         "filesystem",
         "hang",
         "oversized",
@@ -783,6 +791,12 @@ pub fn spawn_probe(
             size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
         )
     })?;
+    let cpu_rate = if case == "cpu-busy" {
+        cpu::PROBE_RATE
+    } else {
+        cpu::DEFAULT_RATE
+    };
+    cpu::configure(job.as_raw_handle(), cpu_rate)?;
     let mut process = PROCESS_INFORMATION::default();
     // SAFETY: All strings, environment, handles, security capabilities and attribute buffers live through process creation. Only listed handles inherit; worker starts suspended.
     check(unsafe {
@@ -793,7 +807,7 @@ pub fn spawn_probe(
             ptr::null(),
             1,
             CREATE_SUSPENDED
-                | CREATE_NO_WINDOW
+                | DETACHED_PROCESS
                 | EXTENDED_STARTUPINFO_PRESENT
                 | CREATE_UNICODE_ENVIRONMENT,
             environment.as_ptr().cast(),
@@ -835,6 +849,8 @@ pub fn spawn_probe(
         _endpoint: endpoint,
         strict_handles,
         profile,
+        cpu_rate,
+        started: std::time::Instant::now(),
     };
     // Drop host copies of child-side endpoints before resuming, so EOF works on termination.
     drop(child_in);
@@ -1135,7 +1151,7 @@ pub fn probe_child_process_limit() -> io::Result<()> {
             ptr::null(),
             ptr::null(),
             0,
-            CREATE_SUSPENDED | CREATE_NO_WINDOW,
+            CREATE_SUSPENDED | DETACHED_PROCESS,
             ptr::null(),
             ptr::null(),
             &startup,

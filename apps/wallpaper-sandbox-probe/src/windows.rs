@@ -90,6 +90,13 @@ fn read_response(
     }
     let report = read_frame(output)?.ok_or(MissingFrame("probe result"))?;
     report.check_context(session, 3, 0)?;
+    if report.body
+        == (Body::ProbeResult {
+            denied: EXPECTED | 16384,
+        })
+    {
+        ready.send(())?;
+    }
     if handles_case {
         if report.body
             != (Body::ProbeResult {
@@ -208,9 +215,10 @@ fn worker(args: &[String]) -> Result<()> {
                 std::thread::sleep(Duration::from_millis(100));
             }
         }
-        "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-        | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem" | "ipc-flood"
-        | "ipc-open" | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {}
+        "healthy" | "network" | "network-egress" | "memory" | "cpu-busy" | "process"
+        | "handles" | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem"
+        | "ipc-flood" | "ipc-open" | "js-basic" | "js-interrupt" | "js-memory" | "js-stack"
+        | "js-jobs" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -314,6 +322,9 @@ fn worker(args: &[String]) -> Result<()> {
         output.flush()?;
         return Ok(());
     }
+    if case == "cpu-busy" {
+        wallpaper_sandbox::probe_cpu_budget()?;
+    }
     let script_result = if case.starts_with("js-") {
         script::run(case)?;
         script::RESULT_BIT
@@ -330,7 +341,8 @@ fn worker(args: &[String]) -> Result<()> {
         | (u32::from(case == "endpoint") << 10)
         | (u32::from(case == "ipc-rights") << 11)
         | (u32::from(case == "filesystem") << 12)
-        | (u32::from(case == "ipc-write-drain") << 13);
+        | (u32::from(case == "ipc-write-drain") << 13)
+        | (u32::from(case == "cpu-busy") << 14);
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     if case == "handles" {
         // The host must observe normal checks and an explicit armed stage before
@@ -364,6 +376,12 @@ fn worker(args: &[String]) -> Result<()> {
         &envelope(session, 3, Body::ProbeResult { denied }),
     )?;
     output.flush()?;
+    if case == "cpu-busy" {
+        let mut value = 1u64;
+        loop {
+            value = std::hint::black_box(value.wrapping_mul(6364136223846793005).wrapping_add(1));
+        }
+    }
     if case == "ipc-flood" {
         // This one-shot channel permits no messages after the final report.
         // Keep trying small frames until the host rejects/closes/terminates us.
@@ -402,6 +420,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "Host-write cases: ipc-write-drain and ipc-write-stall. A dedicated writer sends one Ping plus a fixed 1 MiB pressure fixture. Drain validates every byte and EOF; stall must keep the writer pending until the host deadline kills the worker and both I/O threads join. This is a transport-only fixture, not package/source input."
         );
+        println!(
+            "CPU case: cpu-busy. Probe Jobs have a verified 10% CPU hard cap; this fixture uses a stricter 1%. The armed native loop must consume measurable bounded CPU while remaining alive until the unchanged watchdog stops it. This is a scheduling-rate experiment, not a production policy certification."
+        );
         return Ok(());
     }
     let case = match args {
@@ -426,6 +447,7 @@ fn host(args: &[String]) -> Result<()> {
         "network",
         "network-egress",
         "memory",
+        "cpu-busy",
         "process",
         "handles",
         "endpoint",
@@ -460,6 +482,15 @@ fn host(args: &[String]) -> Result<()> {
             return Err("Worker did not complete handshake".into());
         }
         match (case, result) {
+            ("cpu-busy", Err(mpsc::RecvTimeoutError::Timeout)) if attempt.cpu_armed => {
+                sandbox.verify_cpu_rate()?;
+                let detection = Instant::now();
+                sandbox.stop()?;
+                println!(
+                    "Watchdog terminated throttled native loop in {:?} after detection; armed report=0x4017.",
+                    detection.elapsed()
+                );
+            }
             (
                 "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
                 | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem" | "js-basic"
@@ -727,6 +758,35 @@ mod tests {
             },
         ));
         assert!(parse(bytes(&messages)).is_err());
+    }
+    #[test]
+    fn cpu_arming_requires_complete_current_context_and_nonce() {
+        for fault in 0..6 {
+            let mut messages = prefix();
+            let mut stage = envelope(
+                42,
+                3,
+                Body::ProbeResult {
+                    denied: EXPECTED | 16384,
+                },
+            );
+            match fault {
+                1 => stage.session = 43,
+                2 => stage.sequence = 4,
+                3 => stage.base_revision = 1,
+                4 => messages[1].body = Body::Pong { nonce: 78 },
+                _ => {}
+            }
+            messages.push(stage);
+            let mut wire = bytes(&messages);
+            if fault == 5 {
+                wire.pop();
+            }
+            let (send, receive) = mpsc::sync_channel(2);
+            let result = read_response(&mut io::Cursor::new(wire), 42, 77, false, &send);
+            assert_eq!(receive.try_iter().count(), if fault == 0 { 2 } else { 1 });
+            assert_eq!(result.is_ok(), fault == 0);
+        }
     }
     #[test]
     fn completed_response_rejects_flood_after_only_one_extra_byte() {

@@ -24,6 +24,7 @@ pub(super) struct ProbeAttempt {
     pub root: PathBuf,
     pub sandbox: wallpaper_sandbox::Sandbox,
     pub handshake: bool,
+    pub cpu_armed: bool,
     pub response: Option<Response>,
     pub channel_wait: Duration,
     observed_at: Instant,
@@ -77,6 +78,7 @@ impl ProbeAttempt {
             root,
             sandbox,
             handshake: false,
+            cpu_armed: false,
             response: None,
             channel_wait: Duration::ZERO,
             observed_at: Instant::now(),
@@ -136,6 +138,7 @@ impl ProbeAttempt {
         let observed_at = Instant::now();
         let channel_wait = observed_at.duration_since(waiting_at);
         attempt.handshake = handshake;
+        attempt.cpu_armed = case == "cpu-busy" && ready_receive.try_recv().is_ok();
         attempt.response = Some(response);
         attempt.channel_wait = channel_wait;
         attempt.observed_at = observed_at;

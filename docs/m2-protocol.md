@@ -42,6 +42,8 @@ The filesystem fixture sets bit 12 only after sixteen direct file/directory acce
 
 The ipc-write-drain fixture sets bit 13 after verifying its fixed 1 MiB transport-only raw tail after Ping and input EOF. Its final mask is 0x2017. Only explicit trusted pressure cases use this tail outside the frame codec; no source payload, wire tag/version or product input is added. The ipc-write-stall fixture emits Hello but never reads/responds; acceptance depends on a pending host writer, deadline/Job stop and pipe-closure error, not a successful worker report. See [Host write-pressure policy](m2-host-write.md).
 
+The cpu-busy fixture sends bit 14 as an armed stage after its policy/baseline checks: ProbeResult(3) must be exactly 0x4017 after valid Hello/Pong context and nonce. This triggers a second internal ready notification, not successful one-shot completion. The worker then loops; the CPU case requires timeout after arming, independently validated CPU accounting/policy and the expected live PID before watchdog stop. Malformed/unarmed timeouts and early EOF fail. No tag/version or production authority is added. See [CPU arming and acceptance](m2-cpu-rate.md).
+
 check_context compares the expected session, sequence and revision without advancing any state. The host must perform body and ownership validation before committing accepted state or advancing its sequence/revision. Session randomness, peer identity, ACLs and handle ownership are not supplied by a binary header.
 
 ## I/O and failure policy
