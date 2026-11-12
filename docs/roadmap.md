@@ -67,6 +67,7 @@ Pass the research report's Windows surface gate, including 10 Explorer restarts 
 - [x] Launch a trusted minimal worker in an experimental AppContainer policy with configured Job limits and an explicit handle list; production AppContainer/LPAC policy and negative-handle tests remain open.
 - [x] Specify I1's M2 capability/inspection boundary: no imported permission escalation, raw paths as worker APIs or execution during inspection. M3 mappings/callback semantics and the overall I1 gate remain open.
 - [ ] Establish the actual permitted IPC channel with schema, size, ownership, and queue limits.
+- [x] Harden and validate the initial one-shot channel's explicit DACLs and data-only handles; record existing schema/deadline/one-slot bounds. Persistent source/scene channels and broader channel-pressure policy remain open; see [channel evidence](m2-ipc-security.md).
 - [x] Embed the reviewed pinned engine with minimal features for fixed trusted source fixtures; general source/package transport remains disabled.
 - [x] Add and exercise initial runtime memory/stack limits, cooperative interruption, bounded Promise jobs and an independent host watchdog; integrated callback policy remains M4 work.
 - [ ] Exercise direct OS denials through trusted test code inside the sandbox, not merely missing JavaScript APIs.
@@ -221,3 +222,7 @@ The validated JS continuation was approved and committed in 1261c32. The next ch
 ### M2 endpoint and adapter-boundary continuation
 
 Recovery validation was approved and committed in 0d88774. A new trusted named-pipe fixture now proves host positive connection, four worker access denials and disappearance of the endpoint after owner destruction on the recorded machine. The M2 portion of I1 is documented without implementing an importer or declaring callback parity. Broader network/endpoint/escape and production-channel coverage remain open; M2 is not complete. See [Endpoint evidence](m2-endpoint.md) and [I1 boundary](import-adapter-boundary.md). New changes are not yet committed.
+
+### M2 control-channel hardening — November 12, 2026
+
+The endpoint/I1 work was committed in 32ace38. The actual one-shot control pipes now have explicit host-user-only protected DACLs, host readback validation and data-only handles. A fixed worker case rejects ACL reads/changes, rights upgrades through handle duplication and reverse-direction I/O while normal IPC succeeds. All twenty-six expected-success process scenarios and nineteen Rust tests passed locally. See [Channel security, bounds and evidence](m2-ipc-security.md). Persistent source/scene transport, broader G2 coverage and permitted system-read inventory remain open; M2 is not complete. This continuation remains uncommitted.

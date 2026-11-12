@@ -192,8 +192,8 @@ fn worker(args: &[String]) -> Result<()> {
             }
         }
         "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-        | "endpoint" | "ipc-flood" | "ipc-open" | "js-basic" | "js-interrupt" | "js-memory"
-        | "js-stack" | "js-jobs" => {}
+        | "endpoint" | "ipc-rights" | "ipc-flood" | "ipc-open" | "js-basic" | "js-interrupt"
+        | "js-memory" | "js-stack" | "js-jobs" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -262,6 +262,23 @@ fn worker(args: &[String]) -> Result<()> {
         output.flush()?;
         return Ok(());
     }
+    if case == "ipc-rights"
+        && let Err(error) = wallpaper_sandbox::probe_channel_rights(&input, &output)
+    {
+        write_frame(
+            &mut output,
+            &envelope(
+                session,
+                2,
+                Body::Reject {
+                    code: 4,
+                    message: error.to_string().chars().take(60).collect(),
+                },
+            ),
+        )?;
+        output.flush()?;
+        return Ok(());
+    }
     let script_result = if case.starts_with("js-") {
         script::run(case)?;
         script::RESULT_BIT
@@ -275,7 +292,8 @@ fn worker(args: &[String]) -> Result<()> {
         | (u32::from(memory_denied) << 5)
         | (u32::from(case == "process") << 6)
         | script_result
-        | (u32::from(case == "endpoint") << 10);
+        | (u32::from(case == "endpoint") << 10)
+        | (u32::from(case == "ipc-rights") << 11);
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     if case == "handles" {
         // The host must observe normal checks and an explicit armed stage before
@@ -338,6 +356,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "Endpoint case: endpoint. Host positive control opens the same uniquely named local pipe; an available instance remains. AppContainer read/write/duplex/zero-access opens must all return access denied. After owner destruction, the name must be absent. No endpoint handle or permission is granted to the worker."
         );
+        println!(
+            "Channel case: ipc-rights. Actual inherited streams must reject DACL reads, DACL changes and wrong-direction data I/O with access denied, while the normal protocol succeeds. All cases verify protected host-user-only pipe DACLs and use data-only inherited handles."
+        );
         return Ok(());
     }
     let case = match args {
@@ -365,6 +386,7 @@ fn host(args: &[String]) -> Result<()> {
         "process",
         "handles",
         "endpoint",
+        "ipc-rights",
         "hang",
         "oversized",
         "crash",
@@ -394,7 +416,8 @@ fn host(args: &[String]) -> Result<()> {
         match (case, result) {
             (
                 "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-                | "endpoint" | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
+                | "endpoint" | "ipc-rights" | "js-basic" | "js-interrupt" | "js-memory"
+                | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -403,6 +426,7 @@ fn host(args: &[String]) -> Result<()> {
                         "process" => 64,
                         "handles" => 128,
                         "endpoint" => 1024,
+                        "ipc-rights" => 2048,
                         "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {
                             script::RESULT_BIT
                         }
@@ -433,6 +457,11 @@ fn host(args: &[String]) -> Result<()> {
                 if case == "endpoint" {
                     println!(
                         "Unrelated host named-pipe endpoint denied with error 5 for read, write, duplex and zero-access connection requests."
+                    );
+                }
+                if case == "ipc-rights" {
+                    println!(
+                        "Inherited channel rights verified: DACL reads/changes and reverse-direction I/O denied with error 5; normal framed I/O and EOF succeeded."
                     );
                 }
                 if case.starts_with("js-") {

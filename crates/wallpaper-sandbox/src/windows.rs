@@ -1,11 +1,11 @@
 use std::{
     ffi::c_void,
     fs::File,
-    io,
+    io::{self, Read, Write},
     mem::size_of,
     os::windows::{
         ffi::OsStrExt,
-        io::{AsRawHandle, FromRawHandle, OwnedHandle},
+        io::{AsHandle, AsRawHandle, FromRawHandle, OwnedHandle},
     },
     path::Path,
     ptr,
@@ -14,8 +14,9 @@ use windows_sys::Win32::{
     Foundation::*,
     Security::{Authorization::*, Cryptography::*, Isolation::*, *},
     Storage::FileSystem::{
-        CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_GENERIC_EXECUTE,
-        FILE_GENERIC_READ, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
+        CreateFileW, FILE_ALL_ACCESS, FILE_ATTRIBUTE_NORMAL, FILE_CREATE_PIPE_INSTANCE,
+        FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_READ_DATA,
+        FILE_WRITE_DATA, OPEN_EXISTING, PIPE_ACCESS_DUPLEX, READ_CONTROL, SYNCHRONIZE, WRITE_DAC,
     },
     System::{
         Diagnostics::Debug::{GetErrorMode, SEM_NOGPFAULTERRORBOX, SetErrorMode},
@@ -228,18 +229,269 @@ impl Drop for Attributes {
         }
     }
 }
+fn host_user_acl() -> io::Result<LocalAllocation> {
+    // Use the actual host user's SID, not a broad default pipe DACL or package grant.
+    // SAFETY: Borrowed current-process pseudo handle; token() owns only its returned token.
+    let user_token = token(unsafe { GetCurrentProcess() })?;
+    let mut bytes = 0;
+    // SAFETY: Required-size query uses a null buffer as specified by GetTokenInformation.
+    unsafe {
+        GetTokenInformation(
+            user_token.as_raw_handle(),
+            TokenUser,
+            ptr::null_mut(),
+            0,
+            &mut bytes,
+        );
+    }
+    if bytes < size_of::<TOKEN_USER>() as u32 || bytes > 4096 {
+        return Err(io::Error::other("Unexpected host user token size"));
+    }
+    let mut user = vec![0u64; (bytes as usize).div_ceil(8)];
+    // SAFETY: Aligned, initialized buffer at least the queried size; SID remains live below.
+    check(unsafe {
+        GetTokenInformation(
+            user_token.as_raw_handle(),
+            TokenUser,
+            user.as_mut_ptr().cast(),
+            bytes,
+            &mut bytes,
+        )
+    })?;
+    // SAFETY: Successful query supplies TOKEN_USER and backing SID storage in this buffer.
+    let sid = unsafe { (*user.as_ptr().cast::<TOKEN_USER>()).User.Sid };
+    let entry = EXPLICIT_ACCESS_W {
+        grfAccessPermissions: FILE_ALL_ACCESS,
+        grfAccessMode: SET_ACCESS,
+        grfInheritance: NO_INHERITANCE,
+        Trustee: TRUSTEE_W {
+            pMultipleTrustee: ptr::null_mut(),
+            MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+            TrusteeForm: TRUSTEE_IS_SID,
+            TrusteeType: TRUSTEE_IS_USER,
+            ptstrName: sid.cast(),
+        },
+    };
+    let mut acl = ptr::null_mut();
+    // SAFETY: One live trustee/SID, no old ACL. The API creates an owned ACL including ACE SID bytes.
+    winerror(unsafe { SetEntriesInAclW(1, &entry, ptr::null(), &mut acl) })?;
+    if acl.is_null() {
+        return Err(io::Error::other("Refusing a null pipe DACL"));
+    }
+    Ok(LocalAllocation(acl.cast()))
+}
 fn pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
+    let acl = host_user_acl()?;
+    let mut descriptor = SECURITY_DESCRIPTOR::default();
+    let descriptor_ptr = &mut descriptor as *mut _ as PSECURITY_DESCRIPTOR;
+    // SAFETY: Initialize the absolute descriptor before use. The non-null ACL stays live
+    // through creation; protection prevents inherited grants from broadening this DACL.
+    unsafe {
+        check(InitializeSecurityDescriptor(descriptor_ptr, 1))?;
+        check(SetSecurityDescriptorDacl(
+            descriptor_ptr,
+            1,
+            acl.0.cast(),
+            0,
+        ))?;
+        check(SetSecurityDescriptorControl(
+            descriptor_ptr,
+            SE_DACL_PROTECTED,
+            SE_DACL_PROTECTED,
+        ))?;
+    }
     let attrs = SECURITY_ATTRIBUTES {
         nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: ptr::null_mut(),
-        bInheritHandle: 1,
+        lpSecurityDescriptor: descriptor_ptr,
+        bInheritHandle: 0,
     };
     let (mut read, mut write) = (ptr::null_mut(), ptr::null_mut());
     // SAFETY: Output handle slots and security structure are valid.
     unsafe {
         check(CreatePipe(&mut read, &mut write, &attrs, 4096))?;
-        Ok((own(read)?, own(write)?))
+        let read = own(read)?;
+        let write = own(write)?;
+        verify_pipe_acl(&read, acl.0.cast())?;
+        verify_pipe_acl(&write, acl.0.cast())?;
+        // Only data and synchronous I/O rights survive. The broad creation handles are
+        // closed here, before any worker is created; no DUPLICATE_SAME_ACCESS shortcut.
+        Ok((
+            data_handle(&read, FILE_READ_DATA)?,
+            data_handle(&write, FILE_WRITE_DATA)?,
+        ))
     }
+}
+fn verify_pipe_acl(handle: &OwnedHandle, expected: *const ACL) -> io::Result<()> {
+    let (mut acl, mut descriptor) = (ptr::null_mut(), ptr::null_mut());
+    // SAFETY: Live owned handle with original READ_CONTROL rights; initialized outputs.
+    winerror(unsafe {
+        GetSecurityInfo(
+            handle.as_raw_handle(),
+            SE_KERNEL_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut acl,
+            ptr::null_mut(),
+            &mut descriptor,
+        )
+    })?;
+    let _descriptor = LocalAllocation(descriptor);
+    if acl.is_null() || descriptor.is_null() {
+        return Err(io::Error::other("Pipe has no explicit DACL"));
+    }
+    let (mut control, mut revision) = (0, 0);
+    // SAFETY: The descriptor and ACL are returned by the OS; expected is the live ACL
+    // allocated by SetEntriesInAclW. GetAce yields initialized ACE storage in each ACL.
+    unsafe {
+        check(GetSecurityDescriptorControl(
+            descriptor,
+            &mut control,
+            &mut revision,
+        ))?;
+        if control & (SE_DACL_PRESENT | SE_DACL_PROTECTED) != (SE_DACL_PRESENT | SE_DACL_PROTECTED)
+            || (*acl).AceCount != 1
+            || (*expected).AceCount != 1
+        {
+            return Err(io::Error::other("Pipe DACL protection/ACE count mismatch"));
+        }
+        let (mut actual_ace, mut expected_ace) = (ptr::null_mut(), ptr::null_mut());
+        check(GetAce(acl, 0, &mut actual_ace))?;
+        check(GetAce(expected, 0, &mut expected_ace))?;
+        let actual_size = (*actual_ace.cast::<ACE_HEADER>()).AceSize as usize;
+        let expected_size = (*expected_ace.cast::<ACE_HEADER>()).AceSize as usize;
+        if actual_size != expected_size
+            || std::slice::from_raw_parts(actual_ace.cast::<u8>(), actual_size)
+                != std::slice::from_raw_parts(expected_ace.cast::<u8>(), expected_size)
+        {
+            return Err(io::Error::other("Pipe DACL trustee/rights mismatch"));
+        }
+    }
+    Ok(())
+}
+fn data_handle(source: &impl AsHandle, access: u32) -> io::Result<OwnedHandle> {
+    let mut duplicate = ptr::null_mut();
+    // SAFETY: Borrowed live source and current-process pseudo handles, writable output;
+    // DuplicateHandle returns one owned handle. No source-close option is used.
+    unsafe {
+        let process = GetCurrentProcess();
+        check(DuplicateHandle(
+            process,
+            source.as_handle().as_raw_handle(),
+            process,
+            &mut duplicate,
+            access | SYNCHRONIZE,
+            1,
+            0,
+        ))?;
+        own(duplicate)
+    }
+}
+
+/// Fixed worker fixture: the inherited streams permit data only in their intended direction.
+pub fn probe_channel_rights(input: &impl AsHandle, output: &impl AsHandle) -> io::Result<()> {
+    if !is_appcontainer()? {
+        return Err(io::Error::other(
+            "Channel rights probe requires AppContainer",
+        ));
+    }
+    // A valid non-null empty DACL is restrictive even if a regression unexpectedly
+    // allows the mutation. Never test WRITE_DAC by applying a null/permissive DACL.
+    #[repr(C, align(4))]
+    struct AlignedAcl(ACL);
+    let mut empty = AlignedAcl(ACL::default());
+    // SAFETY: ACL is DWORD-aligned, writable, and exactly the size required for zero ACEs.
+    check(unsafe { InitializeAcl(&mut empty.0, size_of::<ACL>() as u32, ACL_REVISION) })?;
+    for handle in [input.as_handle(), output.as_handle()] {
+        for access in [READ_CONTROL, WRITE_DAC, FILE_CREATE_PIPE_INSTANCE] {
+            let mut duplicate = ptr::null_mut();
+            // SAFETY: Valid borrowed handle and pseudo-process handles; initialized output.
+            // Unexpected grants are immediately owned/closed without exercising the new right.
+            let result = unsafe {
+                let process = GetCurrentProcess();
+                DuplicateHandle(
+                    process,
+                    handle.as_raw_handle(),
+                    process,
+                    &mut duplicate,
+                    access,
+                    0,
+                    0,
+                )
+            };
+            if result != 0 {
+                // SAFETY: Successful DuplicateHandle transferred this new handle to us.
+                drop(unsafe { own(duplicate) }?);
+                return Err(io::Error::other(format!(
+                    "Pipe duplicate gained rights {access:#x}"
+                )));
+            }
+            if io::Error::last_os_error().raw_os_error() != Some(5) {
+                return Err(io::Error::other(
+                    "Pipe rights upgrade did not return access denied",
+                ));
+            }
+        }
+        let mut descriptor = ptr::null_mut();
+        // SAFETY: Valid borrowed pipe handle and initialized outputs. On unexpected success
+        // the returned descriptor is owned and freed without exposing it to application IPC.
+        let result = unsafe {
+            GetSecurityInfo(
+                handle.as_raw_handle(),
+                SE_KERNEL_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut descriptor,
+            )
+        };
+        let _descriptor = LocalAllocation(descriptor);
+        if result != ERROR_ACCESS_DENIED {
+            return Err(io::Error::other(format!(
+                "Pipe DACL query returned {result}"
+            )));
+        }
+        // SAFETY: Borrowed valid handle and live initialized empty ACL; no asynchronous use.
+        let result = unsafe {
+            SetSecurityInfo(
+                handle.as_raw_handle(),
+                SE_KERNEL_OBJECT,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &empty.0,
+                ptr::null(),
+            )
+        };
+        if result != ERROR_ACCESS_DENIED {
+            return Err(io::Error::other(format!(
+                "Pipe DACL mutation returned {result}"
+            )));
+        }
+    }
+    // Clone the borrowed handles without adding rights. File performs actual OS I/O,
+    // bypassing stdio buffering; no allowed-direction bytes are consumed or injected.
+    let mut wrong_write = File::from(input.as_handle().try_clone_to_owned()?);
+    let mut wrong_read = File::from(output.as_handle().try_clone_to_owned()?);
+    if !wrong_write
+        .write(&[0])
+        .is_err_and(|e| e.raw_os_error() == Some(5))
+    {
+        return Err(io::Error::other(
+            "Input pipe accepted wrong-direction write",
+        ));
+    }
+    if !wrong_read
+        .read(&mut [0])
+        .is_err_and(|e| e.raw_os_error() == Some(5))
+    {
+        return Err(io::Error::other(
+            "Output pipe accepted wrong-direction read",
+        ));
+    }
+    Ok(())
 }
 fn token(handle: HANDLE) -> io::Result<OwnedHandle> {
     let mut output = ptr::null_mut();
@@ -409,6 +661,7 @@ pub fn spawn_probe(
         "process",
         "handles",
         "endpoint",
+        "ipc-rights",
         "hang",
         "oversized",
         "crash",
@@ -625,55 +878,9 @@ struct EndpointFixture {
 }
 impl EndpointFixture {
     fn new(session: u64) -> io::Result<Self> {
-        // Use the actual host user's SID, not a broad default pipe DACL or package grant.
-        // SAFETY: Borrowed current-process pseudo handle; token() owns only its returned token.
-        let user_token = token(unsafe { GetCurrentProcess() })?;
-        let mut bytes = 0;
-        // SAFETY: Required-size query uses a null buffer as specified by GetTokenInformation.
-        unsafe {
-            GetTokenInformation(
-                user_token.as_raw_handle(),
-                TokenUser,
-                ptr::null_mut(),
-                0,
-                &mut bytes,
-            );
-        }
-        if bytes < size_of::<TOKEN_USER>() as u32 || bytes > 4096 {
-            return Err(io::Error::other("Unexpected host user token size"));
-        }
-        let mut user = vec![0u64; (bytes as usize).div_ceil(8)];
-        // SAFETY: Aligned, initialized buffer at least the queried size; SID remains live below.
-        check(unsafe {
-            GetTokenInformation(
-                user_token.as_raw_handle(),
-                TokenUser,
-                user.as_mut_ptr().cast(),
-                bytes,
-                &mut bytes,
-            )
-        })?;
-        // SAFETY: Successful query supplies TOKEN_USER and backing SID storage in this buffer.
-        let sid = unsafe { (*user.as_ptr().cast::<TOKEN_USER>()).User.Sid };
-        let entry = EXPLICIT_ACCESS_W {
-            grfAccessPermissions: GENERIC_ALL,
-            grfAccessMode: SET_ACCESS,
-            grfInheritance: NO_INHERITANCE,
-            Trustee: TRUSTEE_W {
-                pMultipleTrustee: ptr::null_mut(),
-                MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
-                TrusteeForm: TRUSTEE_IS_SID,
-                TrusteeType: TRUSTEE_IS_USER,
-                ptstrName: sid.cast(),
-            },
-        };
-        let mut acl = ptr::null_mut();
-        // SAFETY: One live trustee/SID, no old ACL. The API creates an owned ACL including ACE SID bytes.
-        winerror(unsafe { SetEntriesInAclW(1, &entry, ptr::null(), &mut acl) })?;
-        if acl.is_null() {
-            return Err(io::Error::other("Refusing a null endpoint DACL"));
-        }
-        let _acl = LocalAllocation(acl.cast());
+        let _acl = host_user_acl()?;
+        let acl = _acl.0.cast();
+
         let mut descriptor = SECURITY_DESCRIPTOR::default();
         let descriptor_ptr = &mut descriptor as *mut _ as PSECURITY_DESCRIPTOR;
         // SAFETY: Absolute descriptor is initialized first; non-null ACL stays alive through both

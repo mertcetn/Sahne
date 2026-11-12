@@ -165,3 +165,7 @@ Primary references consulted November 11, 2026:
 - [Strict invalid-handle mitigation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocessmitigationpolicy)
 - [Strict-handle policy structure](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-process_mitigation_strict_handle_check_policy)
 - [Process-local error mode and WER](https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-seterrormode)
+
+## Continuation: control-channel permissions
+
+On November 12, 2026, the actual anonymous-pipe transport was hardened with explicit protected host-user-only DACLs, per-launch readback checks and data-only inherited handles. The ipc-rights case exercises ACL read/change denial, handle-rights upgrade denial and reverse-direction I/O denial on the actual channel. Current policy, ownership/queue bounds, commands and results are recorded in [Control channel security](m2-ipc-security.md). Historical evidence above remains scoped to its recorded revision; broader G2 gaps are not closed by this change.
