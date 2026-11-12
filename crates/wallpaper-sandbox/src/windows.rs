@@ -637,6 +637,8 @@ pub fn spawn_probe(
         "handles",
         "endpoint",
         "ipc-rights",
+        "ipc-write-stall",
+        "ipc-write-drain",
         "filesystem",
         "hang",
         "oversized",

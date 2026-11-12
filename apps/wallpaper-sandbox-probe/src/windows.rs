@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs,
-    io::{self, Write},
+    io::{self, Read, Write},
     net::{SocketAddr, TcpStream},
     path::PathBuf,
     sync::mpsc,
@@ -143,11 +143,28 @@ fn worker(args: &[String]) -> Result<()> {
         &envelope(session, 1, Body::Hello { api_version: 1 }),
     )?;
     output.flush()?;
+    if case == "ipc-write-stall" {
+        // Send Hello but never consume input. The host writer must fill the pipe
+        // while its independent control thread remains able to time out/kill us.
+        loop {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
     let request = read_frame(&mut input)?.ok_or("Missing Ping")?;
     request.check_context(session, 1, 0)?;
     let Body::Ping { nonce } = request.body else {
         return Err("Expected Ping".into());
     };
+    if case == "ipc-write-drain" {
+        let mut block = [0; attempt::PRESSURE_CHUNK_BYTES];
+        for _ in 0..attempt::PRESSURE_CHUNKS {
+            input.read_exact(&mut block)?;
+            if block.iter().any(|&byte| byte != 0x5a) {
+                return Err("Pressure fixture contents mismatch".into());
+            }
+        }
+        require_eof(&mut input)?;
+    }
     match case.as_str() {
         "hang" => loop {
             std::thread::sleep(Duration::from_millis(100));
@@ -192,8 +209,8 @@ fn worker(args: &[String]) -> Result<()> {
             }
         }
         "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-        | "endpoint" | "ipc-rights" | "filesystem" | "ipc-flood" | "ipc-open" | "js-basic"
-        | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {}
+        | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem" | "ipc-flood"
+        | "ipc-open" | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -312,7 +329,8 @@ fn worker(args: &[String]) -> Result<()> {
         | script_result
         | (u32::from(case == "endpoint") << 10)
         | (u32::from(case == "ipc-rights") << 11)
-        | (u32::from(case == "filesystem") << 12);
+        | (u32::from(case == "filesystem") << 12)
+        | (u32::from(case == "ipc-write-drain") << 13);
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     if case == "handles" {
         // The host must observe normal checks and an explicit armed stage before
@@ -381,6 +399,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "Filesystem case: filesystem. Synthetic private/staged targets have host positive controls. Worker file-rights, private listing and file/directory creation requests must be denied. Staged data/executable and System32/kernel32.dll reads plus staging listing must succeed. No user files are inspected; post-stop contents/namespace are checked."
         );
+        println!(
+            "Host-write cases: ipc-write-drain and ipc-write-stall. A dedicated writer sends one Ping plus a fixed 1 MiB pressure fixture. Drain validates every byte and EOF; stall must keep the writer pending until the host deadline kills the worker and both I/O threads join. This is a transport-only fixture, not package/source input."
+        );
         return Ok(());
     }
     let case = match args {
@@ -409,6 +430,8 @@ fn host(args: &[String]) -> Result<()> {
         "handles",
         "endpoint",
         "ipc-rights",
+        "ipc-write-stall",
+        "ipc-write-drain",
         "filesystem",
         "hang",
         "oversized",
@@ -439,8 +462,8 @@ fn host(args: &[String]) -> Result<()> {
         match (case, result) {
             (
                 "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-                | "endpoint" | "ipc-rights" | "filesystem" | "js-basic" | "js-interrupt"
-                | "js-memory" | "js-stack" | "js-jobs",
+                | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem" | "js-basic"
+                | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -451,6 +474,7 @@ fn host(args: &[String]) -> Result<()> {
                         "endpoint" => 1024,
                         "ipc-rights" => 2048,
                         "filesystem" => 4096,
+                        "ipc-write-drain" => 8192,
                         "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {
                             script::RESULT_BIT
                         }
@@ -502,7 +526,13 @@ fn host(args: &[String]) -> Result<()> {
                     return Err("Healthy worker did not exit cleanly".into());
                 }
             }
-            ("hang" | "ipc-stall" | "ipc-open", Err(mpsc::RecvTimeoutError::Timeout)) => {
+            (
+                "hang" | "ipc-stall" | "ipc-open" | "ipc-write-stall",
+                Err(mpsc::RecvTimeoutError::Timeout),
+            ) => {
+                if case == "ipc-write-stall" && !attempt.write_pressure_pending() {
+                    return Err("Host writer did not remain pending under pressure".into());
+                }
                 let detection = Instant::now();
                 sandbox.stop()?;
                 println!(

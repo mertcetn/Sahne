@@ -42,6 +42,8 @@ All nineteen Rust tests, formatting, Clippy with warnings denied and the workspa
 
 No Cargo package, version, feature or lockfile changes are required. All calls use already-enabled windows-sys 0.61.2 bindings and Rust standard-library handle/I/O APIs. Existing dependency/security assessments and unresolved advisories remain applicable; this change does not resolve them. Native FFI remains confined to wallpaper-sandbox; application unsafe rules, capabilities and resource limits are unchanged.
 
+The later [host write-pressure continuation](m2-host-write.md) moves all host input writes to an owned writer thread, includes both I/O joins in cleanup acceptance and adds fixed drain/stall fixtures. Ordinary cases still send only Ping. Persistent product transport/rate policy remains open.
+
 Primary references consulted November 12, 2026:
 
 - [CreatePipe security, lifetime and buffer semantics](https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-createpipe)

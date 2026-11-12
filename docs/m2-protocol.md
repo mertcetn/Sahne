@@ -40,6 +40,8 @@ The ipc-rights fixture sets bit 11 only after both inherited streams reject DACL
 
 The filesystem fixture sets bit 12 only after sixteen direct file/directory access denials and the selected permitted-read controls pass. Its exact mask is 0x1017, with normal protocol/EOF/exit and independent post-stop fixture checks. See [Filesystem matrix](m2-filesystem.md). It adds no production filesystem request or wire tag/version.
 
+The ipc-write-drain fixture sets bit 13 after verifying its fixed 1 MiB transport-only raw tail after Ping and input EOF. Its final mask is 0x2017. Only explicit trusted pressure cases use this tail outside the frame codec; no source payload, wire tag/version or product input is added. The ipc-write-stall fixture emits Hello but never reads/responds; acceptance depends on a pending host writer, deadline/Job stop and pipe-closure error, not a successful worker report. See [Host write-pressure policy](m2-host-write.md).
+
 check_context compares the expected session, sequence and revision without advancing any state. The host must perform body and ownership validation before committing accepted state or advancing its sequence/revision. Session randomness, peer identity, ACLs and handle ownership are not supplied by a binary header.
 
 ## I/O and failure policy
