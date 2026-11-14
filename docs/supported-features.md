@@ -1,8 +1,8 @@
 # Prototype Content Contract
 
-Status: source-content contract remains a draft; HTML/CSS loading and rendering these features are not implemented. The [M3 scene-data foundation](m3-scene.md) validates resolved fixed data only and does not establish source-feature support.
+Status: the [first M3 fragment/CSS compiler](m3-compiler.md) implements a deliberately narrow subset for original embedded sources, with no arbitrary input or rendering integration yet. Its exact accepted/rejected grammar, values and defaults override draft ambiguities below for that implementation. The [scene foundation](m3-scene.md) validates resolved output; full G3, images, hierarchical effects and animation remain pending.
 
-The prototype accepts UTF-8 source with div, span, and img scene elements. html/head/body and resource declarations need a parser-spike decision before implementation; unsupported constructs must not silently disappear through HTML error recovery. IDs must be unique. No inline event handlers, external URLs, script imports, or executable attributes are accepted.
+The initial parser accepts UTF-8 fragments with div/span boxes, leading local stylesheet links, and img syntax whose media mapping is still pending. html/head/body wrappers, DOCTYPE, style/script elements and unknown constructs are rejected rather than passed through HTML error recovery. IDs must be unique. No inline event handlers, external URLs, script imports or executable attributes are accepted. The exact implemented rules are in the compiler document linked above.
 
 Initial layout is absolute with fixed px dimensions. span is a text box, not browser mixed inline flow. Use a bundled font; no system-font equivalence is promised. Preserve literal text initially; define newline, line-height, and overflow behavior in G3 visual fixtures before accepting text packages.
 

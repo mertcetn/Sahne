@@ -20,6 +20,7 @@ jobs:
       - run: cargo build --workspace --release --locked
       - run: ./target/release/wallpaper-cli.exe --version
       - run: ./target/release/wallpaper-cli.exe --scene-check
+      - run: ./target/release/wallpaper-cli.exe --compile-check
       - run: ./target/release/wallpaper-preview.exe --help
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/release'
@@ -37,7 +38,7 @@ jobs:
         run: |
           New-Item -ItemType Directory dist | Out-Null
           $name = "sahne-windows-x64-$env:GITHUB_SHA.zip"
-          Compress-Archive -Path target/release/wallpaper-cli.exe,target/release/wallpaper-preview.exe,docs -DestinationPath "dist/$name"
+          Compress-Archive -Path target/release/wallpaper-cli.exe,target/release/wallpaper-preview.exe,docs,examples -DestinationPath "dist/$name"
           $hash = (Get-FileHash "dist/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $name" | Set-Content dist/SHA256SUMS.txt
       - name: Publish development prerelease

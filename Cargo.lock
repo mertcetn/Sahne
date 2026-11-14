@@ -1717,6 +1717,15 @@ dependencies = [
 name = "wallpaper-cli"
 version = "0.1.0-dev"
 dependencies = [
+ "wallpaper-compiler",
+ "wallpaper-scene",
+]
+
+[[package]]
+name = "wallpaper-compiler"
+version = "0.1.0-dev"
+dependencies = [
+ "wallpaper-format",
  "wallpaper-scene",
 ]
 
@@ -1763,9 +1772,11 @@ name = "wallpaper-sandbox-probe"
 version = "0.1.0-dev"
 dependencies = [
  "rquickjs",
+ "wallpaper-compiler",
  "wallpaper-format",
  "wallpaper-protocol",
  "wallpaper-sandbox",
+ "wallpaper-scene",
 ]
 
 [[package]]

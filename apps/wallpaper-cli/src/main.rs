@@ -5,13 +5,13 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [] => {
             println!(
-                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check]\nWallpaper execution and package validation are not implemented yet."
+                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check | --compile-check]\nExternal package loading and wallpaper execution are not implemented."
             );
             ExitCode::SUCCESS
         }
         [arg] if arg == "--help" || arg == "-h" => {
             println!(
-                "Usage: wallpaper-cli [--help | --version | --scene-check]\n--scene-check validates and roundtrips a fixed built-in scene; no external files or rendering.\nWallpaper execution and package validation are not implemented yet."
+                "Usage: wallpaper-cli [--help | --version | --scene-check | --compile-check]\n--scene-check validates and roundtrips a fixed built-in scene.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\nNo external files, rendering or script execution in these checks."
             );
             ExitCode::SUCCESS
         }
@@ -26,11 +26,44 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
+        [arg] if arg == "--compile-check" => match check_compiler() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Compiler self-check failed: {error}");
+                ExitCode::from(1)
+            }
+        },
         _ => {
             eprintln!("Unsupported arguments. Run wallpaper-cli --help.");
             ExitCode::from(2)
         }
     }
+}
+
+fn check_compiler() -> Result<(), Box<dyn std::error::Error>> {
+    let package = wallpaper_compiler::fixtures::static_package()?;
+    let compiled = wallpaper_compiler::compile(
+        &package,
+        wallpaper_compiler::Viewport {
+            width: 1920,
+            height: 1080,
+            background: wallpaper_scene::Color([12, 17, 22, 255]),
+        },
+    )?;
+    let bytes = compiled.scene().encode();
+    let decoded = wallpaper_scene::decode(&bytes)?;
+    if &decoded != compiled.scene() || decoded.encode() != bytes {
+        return Err(
+            std::io::Error::other("Compiled scene changed during independent decode").into(),
+        );
+    }
+    println!(
+        "Compiler self-check passed: nodes={}, named elements={}, encoded bytes={}. Original embedded HTML/CSS only; no rendering or script execution.",
+        decoded.scene().nodes.len(),
+        compiled.symbols().len(),
+        bytes.len()
+    );
+    Ok(())
 }
 
 fn check_scene() -> Result<(), Box<dyn std::error::Error>> {

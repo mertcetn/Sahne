@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+wallpaper-compiler = { path = "../../crates/wallpaper-compiler", features = ["fixtures"] }
 wallpaper-scene = { path = "../../crates/wallpaper-scene" }
 
 [lints]

@@ -1,0 +1,25 @@
+.panel {
+  left: 80px;
+  top: 80px;
+  width: 640px;
+  height: 320px;
+  background-color: #1f2a33;
+  color: #fff;
+  font-size: 32px;
+}
+#title { color: #9bdcca; }
+.label {
+  left: 24px;
+  top: 24px;
+  width: 560px;
+  height: 64px;
+  font-size: 28px;
+  color: #eee;
+}
+.accent {
+  left: 24px;
+  top: 136px;
+  width: 240px;
+  height: 64px;
+  background-color: #c58d55;
+}

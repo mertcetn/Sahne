@@ -19,7 +19,7 @@ Dates and effort estimates will be added after the first technical spikes establ
 | M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence committed |
 | M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Implementation and font/device follow-up approved; extended display matrix open |
 | M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | Complete for local fixed trusted fixtures; full integrated G2 remains open |
-| M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | In progress: versioned resolved-scene codec/validation; source compiler and animation pending |
+| M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | In progress: manifest, strict fragment/CSS compiler and validated flat output; visual/media/effects/animation work open |
 | M4 | Sandboxed scripted end-to-end Windows prototype | M1, M2, M3 | Integrated G2 regression and prototype acceptance | Pending |
 | I2 | Selective web import and compatibility report | M4; I1 contracts | Import-specific acceptance; does not block native M5/M6 by default | Planned |
 | M5 | Windows product foundations and performance report | M4 | G5 and Windows release checklist | Pending |
@@ -86,6 +86,7 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 
 - [x] Establish the initial resolved-scene data/validation boundary with an experimental versioned codec, finite numeric/ID/text/resource budgets and original fixed fixtures; [scope and checks](m3-scene.md). This is only the flat foundation, not the completed source compiler or G3.
 - [x] Add strict native manifest validation and retained in-memory source entries, with fixed positive/negative AppContainer fixtures; [source ownership and limits](m3-manifest.md). Filesystem/archive collection, compiler resource mapping and compiled hashes remain open.
+- [x] Implement the first strict fragment/CSS compiler, fixed-pixel cascade/layout, source diagnostics and original static source fixture; [implemented subset](m3-compiler.md). Images, visual integration and complete G3 remain open; the broader items below are not complete from this subset alone.
 - [ ] Prepare I1 metadata/resource/diagnostic mappings and original synthetic import fixtures; imported semantics do not override the supported native subset.
 - [ ] Implement manifest/source loading, resource references, and versioned initial scene output.
 - [ ] Parse the agreed HTML/CSS subset and report unsupported constructs with useful source locations.

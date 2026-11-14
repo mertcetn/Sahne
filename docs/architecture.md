@@ -471,3 +471,7 @@ A safe dependency-free wallpaper-scene crate owns an experimental flat scene mod
 ## 35. M3 manifest and retained source entries
 
 The safe wallpaper-format crate validates strict typed native manifests and owns immutable in-memory source entries. Portable relative paths, exact-case references, collision/file-parent rejection and aggregate count/byte limits precede compiler use; it performs no filesystem/archive access or execution. Original fixed positive/negative cases now exercise this parser in the existing AppContainer. serde_json/serde adoption and its exact graph/security/license assessment are recorded separately. See [Manifest/source contract](m3-manifest.md) and [dependency review](m3-json-dependencies.md).
+
+## 36. M3 strict fragment compiler
+
+A safe wallpaper-compiler crate parses a bounded explicit HTML fragment/CSS subset without browser recovery, resolves per-property ID/class/inline cascade and selected inheritance, accumulates absolute fixed-pixel layout and validates flat scene output. Author symbols map to one or more scene-local primitives; optional JS remains a deferred source association. Original checked-in sources are embedded for CLI and AppContainer checks, without arbitrary file input. Images, hierarchical effects, hashed compiled packages and animation remain open. See [Exact grammar, limits and diagnostics](m3-compiler.md).

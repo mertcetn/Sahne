@@ -657,6 +657,8 @@ pub fn spawn_probe(
         "healthy",
         "package-basic",
         "package-invalid",
+        "compiler-basic",
+        "compiler-invalid",
         "network",
         "network-egress",
         "memory",

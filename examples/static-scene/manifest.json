@@ -1,0 +1,9 @@
+{
+  "formatVersion": 1,
+  "apiVersion": 1,
+  "id": "sahne.static-scene",
+  "name": "Original static scene",
+  "entry": "index.html",
+  "permissions": [],
+  "preferredFps": 30
+}

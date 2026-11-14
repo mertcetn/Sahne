@@ -10,6 +10,8 @@ wallpaper-protocol = { path = "../../crates/wallpaper-protocol" }
 wallpaper-sandbox = { path = "../../crates/wallpaper-sandbox" }
 
 [target.'cfg(windows)'.dependencies]
+wallpaper-compiler = { path = "../../crates/wallpaper-compiler", features = ["fixtures"] }
+wallpaper-scene = { path = "../../crates/wallpaper-scene" }
 wallpaper-format = { path = "../../crates/wallpaper-format" }
 rquickjs = { version = "=0.14.0", default-features = false, features = ["std"] }
 

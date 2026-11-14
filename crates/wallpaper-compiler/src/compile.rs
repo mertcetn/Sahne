@@ -1,0 +1,237 @@
+use super::*;
+use css::{Declaration, Property, Rule, Selector};
+use std::collections::BTreeMap;
+use wallpaper_format::Package;
+use wallpaper_scene::{Color, Content, Node, Rect, SCENE_VERSION, Scene, ValidatedScene};
+
+#[derive(Clone, Copy)]
+pub struct Viewport {
+    pub width: u32,
+    pub height: u32,
+    pub background: Color,
+}
+
+/// Static output plus retained-source references. These IDs are NOT live host authority.
+#[derive(Debug)]
+pub struct Compiled {
+    scene: ValidatedScene,
+    symbols: BTreeMap<String, Vec<u32>>,
+    script: Option<RelativePath>,
+}
+impl Compiled {
+    pub fn scene(&self) -> &ValidatedScene {
+        &self.scene
+    }
+    pub fn symbols(&self) -> &BTreeMap<String, Vec<u32>> {
+        &self.symbols
+    }
+    /// Deferred source association only; no script is interpreted by this compiler.
+    pub fn script(&self) -> Option<&RelativePath> {
+        self.script.as_ref()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Style {
+    x: f32,
+    y: f32,
+    width: Option<f32>,
+    height: Option<f32>,
+    foreground: Color,
+    background: Color,
+    font_size: f32,
+    rank: [u8; 8],
+}
+impl Style {
+    fn new(parent: Option<Self>) -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            width: None,
+            height: None,
+            foreground: parent.map_or(Color([255; 4]), |style| style.foreground),
+            background: Color([0; 4]),
+            font_size: parent.map_or(16.0, |style| style.font_size),
+            rank: [0; 8],
+        }
+    }
+    fn apply(&mut self, declaration: &Declaration, specificity: u8) {
+        let index = match declaration.property {
+            Property::Left(_) => 0,
+            Property::Top(_) => 1,
+            Property::Width(_) => 2,
+            Property::Height(_) => 3,
+            Property::Color(_) => 4,
+            Property::BackgroundColor(_) => 5,
+            Property::FontSize(_) => 6,
+            Property::PositionAbsolute => 7,
+        };
+        if specificity < self.rank[index] {
+            return;
+        }
+        self.rank[index] = specificity;
+        match declaration.property {
+            Property::Left(value) => self.x = value,
+            Property::Top(value) => self.y = value,
+            Property::Width(value) => self.width = Some(value),
+            Property::Height(value) => self.height = Some(value),
+            Property::Color(value) => self.foreground = value,
+            Property::BackgroundColor(value) => self.background = value,
+            Property::FontSize(value) => self.font_size = value,
+            Property::PositionAbsolute => {}
+        }
+    }
+}
+
+pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
+    let entry = package.manifest().entry();
+    let text = package.require_text(entry, ".html", "entry").map_err(|_| {
+        Source {
+            path: entry,
+            text: "",
+        }
+        .error(ErrorCode::MissingResource, Span { start: 0, end: 0 })
+    })?;
+    let source = Source { path: entry, text };
+    let mut scene = Scene {
+        version: SCENE_VERSION,
+        width: viewport.width,
+        height: viewport.height,
+        background: viewport.background,
+        resources: vec![],
+        nodes: vec![],
+    };
+    scene.clone().validate().map_err(|error| {
+        source.error(
+            ErrorCode::SceneValidation(error.code),
+            Span { start: 0, end: 0 },
+        )
+    })?;
+    let document = html::parse(source)?;
+    let mut rules: Vec<Rule> = vec![];
+    let mut total_css_bytes = 0usize;
+    let mut declarations = 0usize;
+    for reference in &document.stylesheets {
+        let file = package
+            .file(&reference.path)
+            .ok_or_else(|| source.error(ErrorCode::MissingResource, reference.span))?;
+        let text = file
+            .utf8()
+            .map_err(|_| source.error(ErrorCode::InvalidReference, reference.span))?;
+        total_css_bytes += text.len();
+        if total_css_bytes > MAX_SOURCE_BYTES {
+            return Err(source.error(ErrorCode::BudgetExceeded, reference.span));
+        }
+        let sheet = css::parse(Source {
+            path: &reference.path,
+            text,
+        })?;
+        declarations += sheet.declaration_count;
+        if rules.len() + sheet.rules.len() > MAX_RULES || declarations > MAX_DECLARATIONS {
+            return Err(source.error(ErrorCode::BudgetExceeded, reference.span));
+        }
+        rules.extend(sheet.rules);
+    }
+    let mut styles: Vec<Style> = Vec::with_capacity(document.elements.len());
+    let mut origins = vec![];
+    let mut symbols = BTreeMap::new();
+    for (index, element) in document.elements.iter().enumerate() {
+        let parent = element.parent.map(|parent| styles[parent]);
+        let mut style = Style::new(parent);
+        for rule in &rules {
+            let matched = match &rule.selector {
+                Selector::Id(id) => element.id.as_ref() == Some(id),
+                Selector::Class(class) => element.classes.contains(class),
+            };
+            if matched {
+                for declaration in &rule.declarations {
+                    style.apply(declaration, rule.selector.specificity());
+                }
+            }
+        }
+        if let Some((_, span)) = &element.inline_style {
+            let inline = css::declarations(source, *span)?;
+            declarations += inline.len();
+            if declarations > MAX_DECLARATIONS {
+                return Err(source.error(ErrorCode::BudgetExceeded, *span));
+            }
+            for declaration in &inline {
+                style.apply(declaration, 3);
+            }
+        }
+        style.x += parent.map_or(0.0, |style| style.x);
+        style.y += parent.map_or(0.0, |style| style.y);
+        let (Some(width), Some(height)) = (style.width, style.height) else {
+            return Err(source.error(ErrorCode::MissingDimensions, element.span));
+        };
+        let bounds = Rect {
+            x: style.x,
+            y: style.y,
+            width,
+            height,
+        };
+        let first = scene.nodes.len();
+        let mut emit = |content| -> Result<()> {
+            if scene.nodes.len() >= wallpaper_scene::MAX_NODES {
+                return Err(source.error(ErrorCode::BudgetExceeded, element.span));
+            }
+            scene.nodes.push(Node {
+                id: scene.nodes.len() as u32 + 1,
+                bounds,
+                content,
+            });
+            origins.push(index);
+            Ok(())
+        };
+        match element.kind {
+            html::Kind::Div => emit(Content::Rectangle {
+                color: style.background,
+            })?,
+            html::Kind::Span => {
+                if style.background.0[3] != 0 {
+                    emit(Content::Rectangle {
+                        color: style.background,
+                    })?;
+                }
+                emit(Content::Text {
+                    text: element.text.clone(),
+                    font_size: style.font_size,
+                    color: style.foreground,
+                })?;
+            }
+            html::Kind::Image => {
+                if element
+                    .image
+                    .as_ref()
+                    .and_then(|path| package.file(path))
+                    .is_none()
+                {
+                    return Err(source.error(ErrorCode::MissingResource, element.span));
+                }
+                return Err(source.error(ErrorCode::ResourceMappingPending, element.span));
+            }
+        }
+        if let Some(id) = &element.id {
+            symbols.insert(
+                id.clone(),
+                scene.nodes[first..].iter().map(|node| node.id).collect(),
+            );
+        }
+        styles.push(style);
+    }
+    let scene = scene.validate().map_err(|error| {
+        let span = match error.context {
+            wallpaper_scene::Context::Node(index) => origins
+                .get(index)
+                .map(|&index| document.elements[index].span),
+            _ => None,
+        }
+        .unwrap_or(Span { start: 0, end: 0 });
+        source.error(ErrorCode::SceneValidation(error.code), span)
+    })?;
+    Ok(Compiled {
+        scene,
+        symbols,
+        script: package.manifest().script().cloned(),
+    })
+}
