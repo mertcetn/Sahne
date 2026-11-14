@@ -459,3 +459,7 @@ The fixed loopback fixture now proves its listener with a host connection before
 ## 32. M2 incremental commit pressure
 
 A fixed trusted worker retains bounded 16 MiB regions until native allocation denial under the unchanged 256 MiB Job cap, checks explicit release and a recovery allocation, then completes normal IPC/exit. The host independently verifies Job peak commit and single-worker accounting. No new wire type or dependency is introduced. See [Incremental memory acceptance and limits](m2-incremental-memory.md).
+
+## 33. M2 bounded multi-message control channel
+
+Fixed transport fixtures extend the existing Ping/Pong codec to at most 128 sequential exchanges in one session. A reader-owned one-slot command queue feeds the dedicated writer, with one outstanding request, refreshed host nonces and a cumulative response deadline. Queue saturation fails immediately; dropping the sole sender releases an idle writer during stop/join. Normal completion requires both EOFs; mid-session replay/stall tests exercise failure after valid progress. No scene/source channel or production callback scheduler is added. See [Roundtrip protocol and validation](m2-roundtrip.md).

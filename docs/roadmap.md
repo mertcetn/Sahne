@@ -259,3 +259,7 @@ A verified host listener control and user-authorized elevated read-only WFP quer
 ### M2 incremental memory — November 14, 2026
 
 The new fixed `memory-incremental` fixture exercises bounded cumulative native commit, allocation denial, checked release, recovery allocation and normal exit. The host independently requires 192..256 MiB peak committed memory and exact single-worker Job accounting. See [Incremental memory evidence](m2-incremental-memory.md). The default runner now includes thirty-two cases and thirty-eight profile cleanups; broader G2 and production integration remain open.
+
+### M2 bounded roundtrip channel — November 14, 2026
+
+Incremental memory was committed in 5b71ff1. Three new fixed transport cases exercise 128 sequential validated Ping/Pong exchanges, replay after eight valid replies and native stall after the same progress. A one-slot nonblocking writer-command queue and one outstanding request keep memory bounded, with a cumulative response deadline and explicit sender shutdown before final EOF. The full default corpus passed thirty-five cases and forty-one cleanups; twenty-one Rust tests passed. See [Roundtrip evidence and scope](m2-roundtrip.md).

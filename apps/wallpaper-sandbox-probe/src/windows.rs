@@ -10,6 +10,7 @@ use std::{
 use wallpaper_protocol::{Body, Message, read_frame, write_frame};
 mod attempt;
 mod retry;
+mod roundtrip;
 mod script;
 use attempt::ProbeAttempt;
 type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
@@ -215,10 +216,29 @@ fn worker(args: &[String]) -> Result<()> {
                 std::thread::sleep(Duration::from_millis(100));
             }
         }
-        "healthy" | "network" | "network-egress" | "memory" | "memory-incremental" | "cpu-busy"
-        | "process" | "handles" | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem"
-        | "registry" | "ipc-flood" | "ipc-open" | "js-basic" | "js-interrupt" | "js-memory"
-        | "js-stack" | "js-jobs" => {}
+        "healthy"
+        | "network"
+        | "network-egress"
+        | "memory"
+        | "memory-incremental"
+        | "cpu-busy"
+        | "process"
+        | "handles"
+        | "endpoint"
+        | "ipc-rights"
+        | "ipc-roundtrip"
+        | "ipc-roundtrip-replay"
+        | "ipc-roundtrip-stall"
+        | "ipc-write-drain"
+        | "filesystem"
+        | "registry"
+        | "ipc-flood"
+        | "ipc-open"
+        | "js-basic"
+        | "js-interrupt"
+        | "js-memory"
+        | "js-stack"
+        | "js-jobs" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -365,6 +385,9 @@ fn worker(args: &[String]) -> Result<()> {
         | (u32::from(case == "cpu-busy") << 14)
         | (u32::from(case == "registry") << 15)
         | (u32::from(case == "memory-incremental") << 16);
+    if case.starts_with("ipc-roundtrip") {
+        return roundtrip::worker(&mut input, &mut output, session, nonce, case, denied);
+    }
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     if case == "handles" {
         // The host must observe normal checks and an explicit armed stage before
@@ -451,6 +474,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "Incremental memory case: memory-incremental. Commit fixed 16 MiB regions up to the unchanged 256 MiB Job cap, require a memory denial after at least 192 MiB, release all regions, then allocate/release 32 MiB and exit normally. Host independently verifies Job peak committed memory and single-worker exit. No physical pages are touched."
         );
+        println!(
+            "Roundtrip cases: ipc-roundtrip, ipc-roundtrip-replay, ipc-roundtrip-stall. Up to 128 sequential Ping/Pong exchanges with refreshed host nonces and one outstanding request. Replay/stall follows eight validated replies. Progress does not reset the cumulative host response deadline. Fixed transport fixtures only."
+        );
         return Ok(());
     }
     let case = match args {
@@ -481,6 +507,9 @@ fn host(args: &[String]) -> Result<()> {
         "handles",
         "endpoint",
         "ipc-rights",
+        "ipc-roundtrip",
+        "ipc-roundtrip-replay",
+        "ipc-roundtrip-stall",
         "ipc-write-stall",
         "ipc-write-drain",
         "filesystem",
@@ -523,15 +552,16 @@ fn host(args: &[String]) -> Result<()> {
             }
             (
                 "healthy" | "network" | "network-egress" | "memory" | "memory-incremental"
-                | "process" | "handles" | "endpoint" | "ipc-rights" | "ipc-write-drain"
-                | "filesystem" | "registry" | "js-basic" | "js-interrupt" | "js-memory"
-                | "js-stack" | "js-jobs",
+                | "process" | "handles" | "endpoint" | "ipc-rights" | "ipc-roundtrip"
+                | "ipc-write-drain" | "filesystem" | "registry" | "js-basic" | "js-interrupt"
+                | "js-memory" | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
                     | match case {
                         "memory" => 32,
                         "memory-incremental" => 65536,
+                        "ipc-roundtrip" => roundtrip::RESULT_BIT,
                         "process" => 64,
                         "handles" => 128,
                         "endpoint" => 1024,
@@ -558,6 +588,16 @@ fn host(args: &[String]) -> Result<()> {
                 }
                 if case == "memory-incremental" {
                     sandbox.verify_incremental_memory()?;
+                }
+                if case == "ipc-roundtrip" {
+                    if attempt.roundtrips_completed() != roundtrip::ROUNDS
+                        || sandbox.wait(1000)? != Some(0)
+                    {
+                        return Err("Roundtrip completion/normal exit missing".into());
+                    }
+                    println!(
+                        "Bounded roundtrip channel verified: 128 replies, one outstanding request, writer command capacity=1, host/worker EOF and normal exit."
+                    );
                 }
                 if case == "process" {
                     println!(
@@ -642,7 +682,7 @@ fn host(args: &[String]) -> Result<()> {
                     detection.elapsed()
                 );
             }
-            ("ipc-replay", Ok(Err(error)))
+            ("ipc-replay" | "ipc-roundtrip-replay", Ok(Err(error)))
                 if matches!(
                     error.downcast_ref::<wallpaper_protocol::Error>(),
                     Some(wallpaper_protocol::Error::Invalid(
@@ -650,10 +690,30 @@ fn host(args: &[String]) -> Result<()> {
                     ))
                 ) =>
             {
+                if case == "ipc-roundtrip-replay"
+                    && attempt.roundtrips_completed() != roundtrip::FAULT_AFTER
+                {
+                    return Err(
+                        "Roundtrip replay was not preceded by eight validated replies".into(),
+                    );
+                }
                 let detection = Instant::now();
                 sandbox.stop()?;
                 println!(
                     "Replayed sequence rejected; Job stopped in {:?} after detection.",
+                    detection.elapsed()
+                );
+            }
+            ("ipc-roundtrip-stall", Err(mpsc::RecvTimeoutError::Timeout))
+                if attempt.roundtrips_completed() == roundtrip::FAULT_AFTER =>
+            {
+                if sandbox.wait(0)?.is_some() {
+                    return Err("Roundtrip stall worker already exited".into());
+                }
+                let detection = Instant::now();
+                sandbox.stop()?;
+                println!(
+                    "Roundtrip stall after eight replies; cumulative deadline stopped worker in {:?} after detection.",
                     detection.elapsed()
                 );
             }

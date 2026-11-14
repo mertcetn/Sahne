@@ -1,5 +1,5 @@
 //! One owned launch/channel lifetime, shared by individual fixtures and restart tests.
-use super::{Body, ProbeReply, Result, envelope, read_response, write_frame};
+use super::{Body, ProbeReply, Result, envelope, read_response, roundtrip, write_frame};
 use std::{
     fs,
     io::{self, Write},
@@ -33,6 +33,7 @@ pub(super) struct ProbeAttempt {
     pressure_stall: bool,
     writing_pressure: Arc<AtomicBool>,
     written: Arc<AtomicUsize>,
+    roundtrips: Arc<AtomicUsize>,
     _listener: TcpListener,
 }
 impl ProbeAttempt {
@@ -88,6 +89,9 @@ impl ProbeAttempt {
         }
         let (send, receive) = mpsc::sync_channel(1);
         let (ready_send, ready_receive) = mpsc::sync_channel(1);
+        let (requests, request_receive) = mpsc::sync_channel::<(u64, u64)>(1);
+        let roundtrip_case = case.starts_with("ipc-roundtrip");
+        let requests = roundtrip_case.then_some(requests);
         let handles_case = case == "handles";
         // Install ownership before starting either I/O thread. A later spawn failure
         // drops this owner, which stops the worker before joining an existing thread.
@@ -106,6 +110,7 @@ impl ProbeAttempt {
             pressure_stall: case == "ipc-write-stall",
             writing_pressure: Arc::new(AtomicBool::new(false)),
             written: Arc::new(AtomicUsize::new(0)),
+            roundtrips: Arc::new(AtomicUsize::new(0)),
             _listener: listener,
         };
         let pressure = matches!(case, "ipc-write-stall" | "ipc-write-drain");
@@ -121,6 +126,23 @@ impl ProbeAttempt {
                             other => io::Error::other(other),
                         },
                     )?;
+                    if roundtrip_case {
+                        input.flush()?;
+                        // Sole sender lives in the reader: EOF/protocol failure/Job
+                        // stop drops it, releasing this thread even while idle.
+                        for (sequence, nonce) in request_receive {
+                            write_frame(
+                                &mut input,
+                                &envelope(session, sequence, Body::Ping { nonce }),
+                            )
+                            .map_err(|error| match error {
+                                wallpaper_protocol::Error::Io(error) => error,
+                                other => io::Error::other(other),
+                            })?;
+                            input.flush()?;
+                        }
+                        return Ok(());
+                    }
                     if pressure {
                         let block = [0x5a; PRESSURE_CHUNK_BYTES];
                         writing.store(true, Ordering::SeqCst);
@@ -133,12 +155,23 @@ impl ProbeAttempt {
                     Ok(()) // File drops here, making EOF observable to a draining worker.
                 })?,
         );
+        let completed = Arc::clone(&attempt.roundtrips);
         attempt.reader = Some(
             std::thread::Builder::new()
                 .name("probe-reader".into())
                 .spawn(move || {
-                    let response =
-                        read_response(&mut output, session, nonce, handles_case, &ready_send);
+                    let response = if let Some(requests) = requests {
+                        roundtrip::read_response(
+                            &mut output,
+                            session,
+                            nonce,
+                            &ready_send,
+                            requests,
+                            &completed,
+                        )
+                    } else {
+                        read_response(&mut output, session, nonce, handles_case, &ready_send)
+                    };
                     let _ = send.send(response);
                 })?,
         );
@@ -162,6 +195,9 @@ impl ProbeAttempt {
         attempt.channel_wait = channel_wait;
         attempt.observed_at = observed_at;
         Ok(attempt)
+    }
+    pub fn roundtrips_completed(&self) -> usize {
+        self.roundtrips.load(Ordering::SeqCst)
     }
     pub fn write_pressure_pending(&self) -> bool {
         self.pressure_stall
