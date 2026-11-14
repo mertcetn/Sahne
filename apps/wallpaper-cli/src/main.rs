@@ -5,13 +5,13 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [] => {
             println!(
-                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version]\nWallpaper execution and package validation are not implemented yet."
+                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check]\nWallpaper execution and package validation are not implemented yet."
             );
             ExitCode::SUCCESS
         }
         [arg] if arg == "--help" || arg == "-h" => {
             println!(
-                "Usage: wallpaper-cli [--help | --version]\nDevelopment scaffold only; no wallpaper execution or package validation."
+                "Usage: wallpaper-cli [--help | --version | --scene-check]\n--scene-check validates and roundtrips a fixed built-in scene; no external files or rendering.\nWallpaper execution and package validation are not implemented yet."
             );
             ExitCode::SUCCESS
         }
@@ -19,9 +19,84 @@ fn main() -> ExitCode {
             println!("wallpaper-cli {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
+        [arg] if arg == "--scene-check" => match check_scene() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Scene self-check failed: {error}");
+                ExitCode::from(1)
+            }
+        },
         _ => {
             eprintln!("Unsupported arguments. Run wallpaper-cli --help.");
             ExitCode::from(2)
         }
     }
+}
+
+fn check_scene() -> Result<(), Box<dyn std::error::Error>> {
+    use wallpaper_scene::{Color, Content, ImageResource, Node, Rect, SCENE_VERSION, Scene};
+    // Original fixed data only: resource dimensions are metadata, not an image decoder.
+    let scene = Scene {
+        version: SCENE_VERSION,
+        width: 1920,
+        height: 1080,
+        background: Color([16, 22, 28, 255]),
+        resources: vec![ImageResource {
+            id: 1,
+            width: 2,
+            height: 2,
+        }],
+        nodes: vec![
+            Node {
+                id: 1,
+                bounds: Rect {
+                    x: 80.0,
+                    y: 80.0,
+                    width: 640.0,
+                    height: 240.0,
+                },
+                content: Content::Rectangle {
+                    color: Color([40, 80, 120, 255]),
+                },
+            },
+            Node {
+                id: 2,
+                bounds: Rect {
+                    x: 100.0,
+                    y: 110.0,
+                    width: 560.0,
+                    height: 80.0,
+                },
+                content: Content::Text {
+                    text: "Sahne scene foundation".into(),
+                    font_size: 32.0,
+                    color: Color([255; 4]),
+                },
+            },
+            Node {
+                id: 3,
+                bounds: Rect {
+                    x: 760.0,
+                    y: 80.0,
+                    width: 160.0,
+                    height: 160.0,
+                },
+                content: Content::Image { resource: 1 },
+            },
+        ],
+    }
+    .validate()?;
+    let bytes = scene.encode();
+    let decoded = wallpaper_scene::decode(&bytes)?;
+    if decoded != scene || decoded.encode() != bytes {
+        return Err(std::io::Error::other("Scene roundtrip changed validated data").into());
+    }
+    println!(
+        "Scene self-check passed: version={}, nodes={}, resources={}, encoded bytes={}. Fixed data only; no rendering or external input.",
+        decoded.scene().version,
+        decoded.scene().nodes.len(),
+        decoded.scene().resources.len(),
+        bytes.len()
+    );
+    Ok(())
 }

@@ -463,3 +463,7 @@ A fixed trusted worker retains bounded 16 MiB regions until native allocation de
 ## 33. M2 bounded multi-message control channel
 
 Fixed transport fixtures extend the existing Ping/Pong codec to at most 128 sequential exchanges in one session. A reader-owned one-slot command queue feeds the dedicated writer, with one outstanding request, refreshed host nonces and a cumulative response deadline. Queue saturation fails immediately; dropping the sole sender releases an idle writer during stop/join. Normal completion requires both EOFs; mid-session replay/stall tests exercise failure after valid progress. No scene/source channel or production callback scheduler is added. See [Roundtrip protocol and validation](m2-roundtrip.md).
+
+## 34. M3 resolved scene foundation
+
+A safe dependency-free wallpaper-scene crate owns an experimental flat scene model, bounded binary codec and independent numeric/identity/resource/text validation. Only immutable validated values can be encoded; decoding always revalidates. Scene-local IDs reference declared image metadata without paths or live host handles. A fixed CLI self-check exercises roundtrip validation without opening source/assets or rendering. HTML/CSS, hierarchical compositing, resource decoding, animation and production transport remain pending. See [Scene schema, budgets and validation](m3-scene.md).

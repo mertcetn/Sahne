@@ -1,6 +1,6 @@
 # Prototype Content Contract
 
-Status: M0 draft; none of these content features are implemented yet.
+Status: source-content contract remains a draft; HTML/CSS loading and rendering these features are not implemented. The [M3 scene-data foundation](m3-scene.md) validates resolved fixed data only and does not establish source-feature support.
 
 The prototype accepts UTF-8 source with div, span, and img scene elements. html/head/body and resource declarations need a parser-spike decision before implementation; unsupported constructs must not silently disappear through HTML error recovery. IDs must be unique. No inline event handlers, external URLs, script imports, or executable attributes are accepted.
 

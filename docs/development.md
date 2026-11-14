@@ -35,6 +35,10 @@ The separate wallpaper-preview executable provides a trusted Windows/D3D12 scene
 
 The root samples/ directory is Git-ignored and optional. Do not add it to release archives, Actions inputs or default test requirements. Derived sample artifacts stay under ignored samples/ or target/. Tracked docs/ records may describe observed capabilities without copying third-party source/media. Future importer CI uses original synthetic fixtures so a clean checkout remains self-contained. See [Import plan](wallpaper-engine-import-plan.md).
 
+## M3 fixed scene-data check
+
+Run `cargo run --release -p wallpaper-cli --locked -- --scene-check` to validate/encode/decode one original built-in scene without opening any file or window. `cargo test -p wallpaper-scene --locked` checks its bounded decoder and semantic validation. This does not compile HTML/CSS or load packages; see [Scene schema, budgets and command behavior](m3-scene.md).
+
 ## Protocol boundary checks
 
 The M2 std-only codec can be checked without opening windows or running samples:

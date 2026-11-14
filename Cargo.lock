@@ -1696,6 +1696,9 @@ dependencies = [
 [[package]]
 name = "wallpaper-cli"
 version = "0.1.0-dev"
+dependencies = [
+ "wallpaper-scene",
+]
 
 [[package]]
 name = "wallpaper-platform"
@@ -1735,6 +1738,10 @@ dependencies = [
  "wallpaper-protocol",
  "wallpaper-sandbox",
 ]
+
+[[package]]
+name = "wallpaper-scene"
+version = "0.1.0-dev"
 
 [[package]]
 name = "wasm-bindgen"

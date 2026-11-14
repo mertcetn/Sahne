@@ -1,6 +1,6 @@
 # Package and IPC Contract
 
-Status: native package/scene schemas remain drafts. The M2 control-frame subset is implemented; see [Control-frame foundation](m2-protocol.md).
+Status: native package and full production scene schemas remain drafts. An [experimental M3 flat-scene codec and validator](m3-scene.md) is implemented for fixed data; it accepts no package/source/asset path. The M2 control-frame subset is implemented; see [Control-frame foundation](m2-protocol.md).
 
 ## Package v1
 
