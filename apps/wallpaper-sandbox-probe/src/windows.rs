@@ -215,10 +215,10 @@ fn worker(args: &[String]) -> Result<()> {
                 std::thread::sleep(Duration::from_millis(100));
             }
         }
-        "healthy" | "network" | "network-egress" | "memory" | "cpu-busy" | "process"
-        | "handles" | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem" | "registry"
-        | "ipc-flood" | "ipc-open" | "js-basic" | "js-interrupt" | "js-memory" | "js-stack"
-        | "js-jobs" => {}
+        "healthy" | "network" | "network-egress" | "memory" | "memory-incremental" | "cpu-busy"
+        | "process" | "handles" | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem"
+        | "registry" | "ipc-flood" | "ipc-open" | "js-basic" | "js-interrupt" | "js-memory"
+        | "js-stack" | "js-jobs" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -267,6 +267,9 @@ fn worker(args: &[String]) -> Result<()> {
     } else {
         false
     };
+    if case == "memory-incremental" {
+        wallpaper_sandbox::probe_incremental_memory()?;
+    }
     if case == "process" {
         wallpaper_sandbox::probe_child_process_limit()?;
     }
@@ -360,7 +363,8 @@ fn worker(args: &[String]) -> Result<()> {
         | (u32::from(case == "filesystem") << 12)
         | (u32::from(case == "ipc-write-drain") << 13)
         | (u32::from(case == "cpu-busy") << 14)
-        | (u32::from(case == "registry") << 15);
+        | (u32::from(case == "registry") << 15)
+        | (u32::from(case == "memory-incremental") << 16);
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     if case == "handles" {
         // The host must observe normal checks and an explicit armed stage before
@@ -444,6 +448,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "Registry case: registry. A fresh volatile user-only synthetic key has host positive controls. Eight worker access requests plus direct create/delete must return access denied. After worker stop, its fixed sentinel/namespace must be unchanged and the owned key must be absent after cleanup. No existing user registry values are read or changed."
         );
+        println!(
+            "Incremental memory case: memory-incremental. Commit fixed 16 MiB regions up to the unchanged 256 MiB Job cap, require a memory denial after at least 192 MiB, release all regions, then allocate/release 32 MiB and exit normally. Host independently verifies Job peak committed memory and single-worker exit. No physical pages are touched."
+        );
         return Ok(());
     }
     let case = match args {
@@ -468,6 +475,7 @@ fn host(args: &[String]) -> Result<()> {
         "network",
         "network-egress",
         "memory",
+        "memory-incremental",
         "cpu-busy",
         "process",
         "handles",
@@ -514,14 +522,16 @@ fn host(args: &[String]) -> Result<()> {
                 );
             }
             (
-                "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-                | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem" | "registry"
-                | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
+                "healthy" | "network" | "network-egress" | "memory" | "memory-incremental"
+                | "process" | "handles" | "endpoint" | "ipc-rights" | "ipc-write-drain"
+                | "filesystem" | "registry" | "js-basic" | "js-interrupt" | "js-memory"
+                | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
                     | match case {
                         "memory" => 32,
+                        "memory-incremental" => 65536,
                         "process" => 64,
                         "handles" => 128,
                         "endpoint" => 1024,
@@ -545,6 +555,9 @@ fn host(args: &[String]) -> Result<()> {
                     println!(
                         "Job limit verified: 64 KiB commit succeeded; 257 MiB commit rejected; worker remained responsive."
                     );
+                }
+                if case == "memory-incremental" {
+                    sandbox.verify_incremental_memory()?;
                 }
                 if case == "process" {
                     println!(

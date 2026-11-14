@@ -124,6 +124,8 @@ Primary references consulted November 11, 2026:
 
 ## Continuation: process quota and excluded handles
 
+Later cumulative-commit validation complements the original single-allocation memory case: see [Incremental memory pressure, release and host accounting](m2-incremental-memory.md). Its fixed loop does not change the original case or the configured Job limit.
+
 Run these new cases from the repository root on Windows:
 
 ```powershell

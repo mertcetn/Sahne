@@ -29,7 +29,9 @@ use windows_sys::Win32::{
 };
 mod cpu;
 mod filesystem;
+mod memory;
 pub use cpu::probe_cpu_budget;
+pub use memory::probe_incremental_memory;
 mod profile;
 mod registry;
 pub use filesystem::{probe_filesystem, verify_filesystem_fixture};
@@ -577,6 +579,9 @@ pub struct Sandbox {
     started: std::time::Instant,
 }
 impl Sandbox {
+    pub fn verify_incremental_memory(&self) -> io::Result<()> {
+        memory::verify_peak(self)
+    }
     pub fn cleanup_registry(&mut self) -> io::Result<bool> {
         if let Some(fixture) = self.registry.as_mut() {
             fixture.cleanup()?;
@@ -653,6 +658,7 @@ pub fn spawn_probe(
         "network",
         "network-egress",
         "memory",
+        "memory-incremental",
         "process",
         "handles",
         "endpoint",

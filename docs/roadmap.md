@@ -255,3 +255,7 @@ The runner/workflow was approved and committed in 61385cc. A fresh volatile host
 ### M2 loopback diagnosis — November 14, 2026
 
 A verified host listener control and user-authorized elevated read-only WFP queries established that the current machine's timeout corresponds to a receiving-side AppContainer Loopback block. A separate diagnostic validates the matching filter, host PID/image, endpoint and time; the native timeout still fails by itself. No isolation policy was weakened. See [Loopback evidence, commands and limitations](m2-loopback.md). This resolves the immediate unexplained-timeout investigation on this machine; broader network/G2 coverage remains open.
+
+### M2 incremental memory — November 14, 2026
+
+The new fixed `memory-incremental` fixture exercises bounded cumulative native commit, allocation denial, checked release, recovery allocation and normal exit. The host independently requires 192..256 MiB peak committed memory and exact single-worker Job accounting. See [Incremental memory evidence](m2-incremental-memory.md). The default runner now includes thirty-two cases and thirty-eight profile cleanups; broader G2 and production integration remain open.

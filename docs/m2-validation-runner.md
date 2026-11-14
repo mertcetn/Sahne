@@ -13,7 +13,7 @@ pwsh -NoProfile -File tools/test-sandbox.ps1
 
 The first command tests the host-process guard with four original helper processes: exit zero, exit seven, forced timeout and excessive output. It also tests bounded log reads and nine evidence-acceptance cases, including required registry cleanup. These helpers do not create AppContainer profiles. No Pester module or new package installation is required.
 
-The second command builds wallpaper-sandbox-probe in release mode with --locked and runs the thirty-one expected-success native/JS/recovery scenarios sequentially. The default plan expects thirty-seven worker launches/profile cleanups and one registry cleanup. It stops at the first failed case and exits 1. Build, metadata, launch and evidence failures also produce failed reports where report storage remains available. The ordinary successful exit is zero.
+The second command builds wallpaper-sandbox-probe in release mode with --locked and runs the thirty-two expected-success native/JS/recovery scenarios sequentially, including [incremental committed-memory pressure](m2-incremental-memory.md). The default plan expects thirty-eight worker launches/profile cleanups and one registry cleanup. It stops at the first failed case and exits 1. Build, metadata, launch and evidence failures also produce failed reports where report storage remains available. The ordinary successful exit is zero.
 
 For a selected diagnostic case:
 

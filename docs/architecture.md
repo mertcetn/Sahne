@@ -455,3 +455,7 @@ No registry handle, capability or general registry API is granted to scripts. On
 ## 31. M2 loopback diagnostic evidence
 
 The fixed loopback fixture now proves its listener with a host connection before worker launch. A separate elevated diagnostic reads existing WFP events scoped to that listener and verifies receiving-host identity/time/endpoint and an AppContainer Loopback App Isolation block. It changes no firewall or buffering policy. A timeout alone continues to fail the native case; supplemental local drop evidence and its limitations are reported separately, without completing G2. See [Loopback diagnosis and repeatable evidence](m2-loopback.md).
+
+## 32. M2 incremental commit pressure
+
+A fixed trusted worker retains bounded 16 MiB regions until native allocation denial under the unchanged 256 MiB Job cap, checks explicit release and a recovery allocation, then completes normal IPC/exit. The host independently verifies Job peak commit and single-worker accounting. No new wire type or dependency is introduced. See [Incremental memory acceptance and limits](m2-incremental-memory.md).
