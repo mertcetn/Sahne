@@ -655,6 +655,8 @@ pub fn spawn_probe(
 ) -> io::Result<Channel> {
     if ![
         "healthy",
+        "package-basic",
+        "package-invalid",
         "network",
         "network-egress",
         "memory",

@@ -85,6 +85,7 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 ### Work
 
 - [x] Establish the initial resolved-scene data/validation boundary with an experimental versioned codec, finite numeric/ID/text/resource budgets and original fixed fixtures; [scope and checks](m3-scene.md). This is only the flat foundation, not the completed source compiler or G3.
+- [x] Add strict native manifest validation and retained in-memory source entries, with fixed positive/negative AppContainer fixtures; [source ownership and limits](m3-manifest.md). Filesystem/archive collection, compiler resource mapping and compiled hashes remain open.
 - [ ] Prepare I1 metadata/resource/diagnostic mappings and original synthetic import fixtures; imported semantics do not override the supported native subset.
 - [ ] Implement manifest/source loading, resource references, and versioned initial scene output.
 - [ ] Parse the agreed HTML/CSS subset and report unsupported constructs with useful source locations.

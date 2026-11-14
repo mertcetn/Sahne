@@ -9,6 +9,7 @@ use std::{
 };
 use wallpaper_protocol::{Body, Message, read_frame, write_frame};
 mod attempt;
+mod package;
 mod retry;
 mod roundtrip;
 mod script;
@@ -217,6 +218,8 @@ fn worker(args: &[String]) -> Result<()> {
             }
         }
         "healthy"
+        | "package-basic"
+        | "package-invalid"
         | "network"
         | "network-egress"
         | "memory"
@@ -365,6 +368,12 @@ fn worker(args: &[String]) -> Result<()> {
         output.flush()?;
         return Ok(());
     }
+    let package_result = if case.starts_with("package-") {
+        package::run(case)?;
+        package::RESULT_BIT
+    } else {
+        0
+    };
     let script_result = if case.starts_with("js-") {
         script::run(case)?;
         script::RESULT_BIT
@@ -378,6 +387,7 @@ fn worker(args: &[String]) -> Result<()> {
         | (u32::from(memory_denied) << 5)
         | (u32::from(case == "process") << 6)
         | script_result
+        | package_result
         | (u32::from(case == "endpoint") << 10)
         | (u32::from(case == "ipc-rights") << 11)
         | (u32::from(case == "filesystem") << 12)
@@ -477,6 +487,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "Roundtrip cases: ipc-roundtrip, ipc-roundtrip-replay, ipc-roundtrip-stall. Up to 128 sequential Ping/Pong exchanges with refreshed host nonces and one outstanding request. Replay/stall follows eight validated replies. Progress does not reset the cumulative host response deadline. Fixed transport fixtures only."
         );
+        println!(
+            "Package cases: package-basic and package-invalid. Original fixed in-memory manifest/source entries are validated inside AppContainer. Invalid permissions, version, traversal, FPS and case collision must be rejected. No external path, archive extraction or JavaScript execution."
+        );
         return Ok(());
     }
     let case = match args {
@@ -498,6 +511,8 @@ fn host(args: &[String]) -> Result<()> {
     }
     if ![
         "healthy",
+        "package-basic",
+        "package-invalid",
         "network",
         "network-egress",
         "memory",
@@ -551,16 +566,17 @@ fn host(args: &[String]) -> Result<()> {
                 );
             }
             (
-                "healthy" | "network" | "network-egress" | "memory" | "memory-incremental"
-                | "process" | "handles" | "endpoint" | "ipc-rights" | "ipc-roundtrip"
-                | "ipc-write-drain" | "filesystem" | "registry" | "js-basic" | "js-interrupt"
-                | "js-memory" | "js-stack" | "js-jobs",
+                "healthy" | "package-basic" | "package-invalid" | "network" | "network-egress"
+                | "memory" | "memory-incremental" | "process" | "handles" | "endpoint"
+                | "ipc-rights" | "ipc-roundtrip" | "ipc-write-drain" | "filesystem" | "registry"
+                | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
                     | match case {
                         "memory" => 32,
                         "memory-incremental" => 65536,
+                        "package-basic" | "package-invalid" => package::RESULT_BIT,
                         "ipc-roundtrip" => roundtrip::RESULT_BIT,
                         "process" => 64,
                         "handles" => 128,
@@ -588,6 +604,11 @@ fn host(args: &[String]) -> Result<()> {
                 }
                 if case == "memory-incremental" {
                     sandbox.verify_incremental_memory()?;
+                }
+                if case.starts_with("package-") {
+                    println!(
+                        "Fixed in-memory package manifest/source validation passed inside AppContainer; no file loading, script execution or imported capability."
+                    );
                 }
                 if case == "ipc-roundtrip" {
                     if attempt.roundtrips_completed() != roundtrip::ROUNDS
