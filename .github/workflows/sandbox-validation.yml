@@ -1,0 +1,23 @@
+name: Sandbox validation (experimental)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-sandbox:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # Existing v4.2.2 pin
+        with:
+          persist-credentials: false
+      - run: rustup show
+      - name: Validate runner failure handling
+        run: ./tools/test-sandbox-runner.ps1
+      - name: Rust regressions
+        run: cargo test --workspace --locked
+      - name: Run fixed native sandbox corpus
+        run: ./tools/test-sandbox.ps1

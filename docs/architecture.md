@@ -439,3 +439,9 @@ Two fixed transport fixtures compare a worker that drains/verifies a bounded 1 M
 Probe Jobs now apply and read back ENABLE | HARD_CAP CPU scheduling before process creation: 10% normally and a stricter 1% for fixed native CPU stress. The CPU case verifies its immediate policy and armed control stage, then spins until the existing host deadline. The host requires measurable bounded Job user+kernel CPU, a live worker and an exact single-worker Job PID list before stop/join/profile cleanup. Total-time quota termination is not claimed; rate and wall-clock watchdog remain separate mechanisms.
 
 PID inspection found an implicit conhost.exe under the earlier CREATE_NO_WINDOW launch. DETACHED_PROCESS now keeps these workers console-free while retaining the same inherited pipe endpoints and one-process/memory limits. Later console allocation and other broker access remain unverified. No new dependency, feature, wire kind or unsafe application exemption is introduced. See [CPU policy, measurements and console finding](m2-cpu-rate.md).
+
+## 29. M2 reproducible validation and manual CI
+
+A Windows/PowerShell runner now builds the trusted probe and executes its fixed thirty-case corpus with explicit expected launch/cleanup counts. A separate outer host deadline/output guard, bounded log reader and strict evidence checks produce JSON/Markdown provenance reports under ignored target/. Native sandbox assertions remain authoritative; report success does not certify G2 or enable untrusted content.
+
+A manual-only windows-2025 workflow reuses the existing pinned checkout action and runs runner/Rust/native checks with read-only permissions. Reports are retained as the job summary and bounded workflow-log output; no new artifact action or release behavior is added. Hosted execution remains unverified. See [Runner commands, failure behavior and evidence](m2-validation-runner.md).
