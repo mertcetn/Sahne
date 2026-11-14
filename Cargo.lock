@@ -1751,7 +1751,9 @@ version = "0.1.0-dev"
 dependencies = [
  "glyphon",
  "pollster",
+ "wallpaper-compiler",
  "wallpaper-platform",
+ "wallpaper-scene",
  "wgpu",
  "winit",
 ]

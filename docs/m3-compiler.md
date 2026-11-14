@@ -1,6 +1,6 @@
 # M3 strict HTML/CSS compiler foundation
 
-Date: November 14, 2026. Status: original fixed-source compilation into the experimental flat scene; visual integration and full G3 remain pending.
+Date: November 14, 2026. Status: original fixed-source compilation into the experimental flat scene, with a later [local static window preview](m3-preview.md). Full G3, media/effects/animation and arbitrary input remain pending.
 
 ## Run
 
@@ -58,7 +58,7 @@ The compiler returns validated scene data, symbols and an optional deferred scri
 
 Parsing is iterative for the element tree. All-or-error results prevent a partial scene from being accepted after a source failure. Diagnostics contain a validated relative path, byte start/end, one-based line and UTF-8 byte column plus a bounded enum code, without echoing source text. Inline errors point into original HTML; CSS errors retain the stylesheet path. Missing-resource diagnostics point at the HTML reference. This is parser-side source reporting, not a completed Wallpaper Engine sidecar schema.
 
-Sixteen compiler tests cover strict recovery rejection, identifiers/attributes/entities, selectors/numeric/color values, source offsets, independent scene validation, cascade/inheritance, parent coordinates, primitive bindings, missing/deferred resources, cumulative geometry, source/depth/node/text/rule/declaration/aggregate work budgets and 512 deterministic source mutations. The original fixture and its expected coordinates/colors are machine-checked; it has not yet been visually integrated or approved as a G3 rendering reference.
+Sixteen compiler tests cover strict recovery rejection, identifiers/attributes/entities, selectors/numeric/color values, source offsets, independent scene validation, cascade/inheritance, parent coordinates, primitive bindings, missing/deferred resources, cumulative geometry, source/depth/node/text/rule/declaration/aggregate work budgets and 512 deterministic source mutations. The original fixture and its expected coordinates/colors are machine-checked; a later [window-mode visual reference](m3-preview.md) records limited local rendering evidence, without closing G3.
 
 Local validation passed all 63 workspace Rust tests, release build, Clippy with warnings denied, formatting and CLI compile/scene/invalid-argument smoke checks. Full sandbox report `d543a1635d1d431bae2e535d6d4c3484` passed 39 cases, 45 profile cleanups and one registry cleanup, with `G2Complete=false`. Selected earlier compiler evidence is in `51efa2ad6cec41a692dbd10091844b1f`. Existing Cargo cache hardlink/copy notices remain. Hosted CI and non-Windows builds were not run. Development release packaging now includes the original examples/ source tree alongside the existing binaries/docs when the workflow is next authorized to publish; no release push/publication occurs here.
 

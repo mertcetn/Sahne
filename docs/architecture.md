@@ -475,3 +475,7 @@ The safe wallpaper-format crate validates strict typed native manifests and owns
 ## 36. M3 strict fragment compiler
 
 A safe wallpaper-compiler crate parses a bounded explicit HTML fragment/CSS subset without browser recovery, resolves per-property ID/class/inline cascade and selected inheritance, accumulates absolute fixed-pixel layout and validates flat scene output. Author symbols map to one or more scene-local primitives; optional JS remains a deferred source association. Original checked-in sources are embedded for CLI and AppContainer checks, without arbitrary file input. Images, hierarchical effects, hashed compiled packages and animation remain open. See [Exact grammar, limits and diagnostics](m3-compiler.md).
+
+## 37. M3 compiled static window preview
+
+An optional trusted preview mode compiles the original embedded sources and independently validates the scene before drawing. Aligned per-node uniforms and interleaved rectangle/Glyphon commands preserve flat scene order; a fitted fixed canvas and bounded text boxes define this initial visual reference. The original M1 mode and lifecycle controller remain. No external source/resource loading, image decoding, hierarchical effects or animation is enabled. See [Observed reference, rendering rules and untested combinations](m3-preview.md).

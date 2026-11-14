@@ -1,3 +1,4 @@
+mod compiled;
 mod lifecycle;
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
@@ -27,16 +28,23 @@ struct DeviceLost {
 fn main() -> Result<()> {
     let (mut seconds, mut desktop_mode, mut recreate) = (None, false, 0u32);
     let mut test_device_loss = false;
+    let mut compiled_example = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scene. Escape closes window mode. Test recreation does not restart Explorer."
+                    "Usage: wallpaper-preview [--desktop] [--example static] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example static compiles original embedded HTML/CSS; no external file path. Escape closes window mode. Test recreation does not restart Explorer."
                 );
                 return Ok(());
             }
             "--desktop" => desktop_mode = true,
+            "--example" => {
+                if args.next().as_deref() != Some("static") {
+                    return Err("Only the original static example is available".into());
+                }
+                compiled_example = true;
+            }
             "--test-device-loss" => test_device_loss = true,
             "--seconds" => {
                 let n = args.next().ok_or("Missing seconds")?.parse::<u64>()?;
@@ -63,6 +71,7 @@ fn main() -> Result<()> {
         state: None,
         desktop: None,
         desktop_mode,
+        compiled_example,
         next_probe: Instant::now() + Duration::from_secs(2),
         next_retry: None,
         budget: Default::default(),
@@ -97,6 +106,7 @@ struct App {
     state: Option<State>,
     desktop: Option<wallpaper_platform::Desktop>,
     desktop_mode: bool,
+    compiled_example: bool,
     next_probe: Instant,
     next_retry: Option<Instant>,
     budget: lifecycle::RecoveryBudget,
@@ -142,7 +152,11 @@ impl App {
                 None
             };
             let attrs = Window::default_attributes()
-                .with_title("Sahne — M1 trusted scene")
+                .with_title(if self.compiled_example {
+                    "Sahne — M3 compiled static example"
+                } else {
+                    "Sahne — M1 trusted scene"
+                })
                 .with_inner_size(LogicalSize::new(960.0, 600.0));
             let attrs = if let Some(ref d) = desktop {
                 d.attributes(attrs)?
@@ -157,6 +171,7 @@ impl App {
                 self.proxy.clone(),
                 self.generation,
                 !self.loss_test.complete(),
+                self.compiled_example,
             ))
         })();
         match result {
@@ -347,6 +362,7 @@ struct State {
     viewport: Viewport,
     atlas: TextAtlas,
     text_renderer: TextRenderer,
+    compiled: Option<compiled::Renderer>,
     window: Arc<Window>,
 }
 impl State {
@@ -356,6 +372,7 @@ impl State {
         proxy: EventLoopProxy<DeviceLost>,
         generation: u64,
         report_destroyed: bool,
+        compiled_example: bool,
     ) -> Result<Self> {
         let mut desc = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
             events.owned_display_handle(),
@@ -387,9 +404,17 @@ impl State {
             }
         });
         let size = window.inner_size();
-        let config = surface
+        let mut config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
             .ok_or("Unsupported surface")?;
+        if compiled_example {
+            config.format = surface
+                .get_capabilities(&adapter)
+                .formats
+                .into_iter()
+                .find(wgpu::TextureFormat::is_srgb)
+                .ok_or("Compiled example requires an sRGB surface")?;
+        }
         surface.configure(&device, &config);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Trusted fixture"),
@@ -495,6 +520,16 @@ impl State {
         let mut atlas = TextAtlas::new(&device, &queue, &cache, config.format);
         let text_renderer =
             TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
+        let compiled = if compiled_example {
+            Some(compiled::Renderer::new(
+                &device,
+                config.format,
+                &mut fonts,
+                &mut atlas,
+            )?)
+        } else {
+            None
+        };
         Ok(Self {
             surface_retries: 0,
             surface,
@@ -510,6 +545,7 @@ impl State {
             viewport,
             atlas,
             text_renderer,
+            compiled,
             window,
         })
     }
@@ -567,28 +603,41 @@ impl State {
                 height: self.config.height,
             },
         );
-        self.text_renderer.prepare(
-            &self.device,
-            &self.queue,
-            &mut self.fonts,
-            &mut self.atlas,
-            &self.viewport,
-            [TextArea {
-                buffer: &self.text,
-                left: 40.0 * self.window.scale_factor() as f32,
-                top: 32.0 * self.window.scale_factor() as f32,
-                scale: self.window.scale_factor() as f32,
-                bounds: TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: self.config.width as i32,
-                    bottom: self.config.height as i32,
-                },
-                default_color: Color::rgb(235, 238, 230),
-                custom_glyphs: &[],
-            }],
-            &mut self.swash,
-        )?;
+        if let Some(compiled) = self.compiled.as_mut() {
+            compiled.prepare(&mut compiled::Prepare {
+                device: &self.device,
+                queue: &self.queue,
+                fonts: &mut self.fonts,
+                atlas: &mut self.atlas,
+                viewport: &self.viewport,
+                swash: &mut self.swash,
+                width: self.config.width,
+                height: self.config.height,
+            })?;
+        } else {
+            self.text_renderer.prepare(
+                &self.device,
+                &self.queue,
+                &mut self.fonts,
+                &mut self.atlas,
+                &self.viewport,
+                [TextArea {
+                    buffer: &self.text,
+                    left: 40.0 * self.window.scale_factor() as f32,
+                    top: 32.0 * self.window.scale_factor() as f32,
+                    scale: self.window.scale_factor() as f32,
+                    bounds: TextBounds {
+                        left: 0,
+                        top: 0,
+                        right: self.config.width as i32,
+                        bottom: self.config.height as i32,
+                    },
+                    default_color: Color::rgb(235, 238, 230),
+                    custom_glyphs: &[],
+                }],
+                &mut self.swash,
+            )?;
+        }
         let view = frame.texture.create_view(&Default::default());
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
@@ -599,17 +648,25 @@ impl State {
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Clear(
+                            self.compiled
+                                .as_ref()
+                                .map_or(wgpu::Color::BLACK, compiled::Renderer::clear_color),
+                        ),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
                 ..Default::default()
             });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &self.image, &[]);
-            pass.draw(0..3, 0..1);
-            self.text_renderer
-                .render(&self.atlas, &self.viewport, &mut pass)?;
+            if let Some(compiled) = self.compiled.as_ref() {
+                compiled.render(&self.atlas, &self.viewport, &mut pass)?;
+            } else {
+                pass.set_pipeline(&self.pipeline);
+                pass.set_bind_group(0, &self.image, &[]);
+                pass.draw(0..3, 0..1);
+                self.text_renderer
+                    .render(&self.atlas, &self.viewport, &mut pass)?;
+            }
         }
         self.window.pre_present_notify();
         self.queue.submit([encoder.finish()]);

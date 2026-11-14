@@ -1,6 +1,6 @@
 # M3 scene-data foundation
 
-Date: November 14, 2026. Status: implemented experimental data model, codec and validation. HTML/CSS parsing, manifest/source loading, rendering integration and G3 acceptance remain pending.
+Date: November 14, 2026. Status: implemented experimental data model, codec and validation. Later steps add a [bounded manifest/source package](m3-manifest.md), [strict compiler](m3-compiler.md) and [original static window reference](m3-preview.md). Complete source/media/effect integration and G3 acceptance remain pending.
 
 ## Run the fixed check
 

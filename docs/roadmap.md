@@ -19,7 +19,7 @@ Dates and effort estimates will be added after the first technical spikes establ
 | M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence committed |
 | M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Implementation and font/device follow-up approved; extended display matrix open |
 | M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | Complete for local fixed trusted fixtures; full integrated G2 remains open |
-| M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | In progress: manifest, strict fragment/CSS compiler and validated flat output; visual/media/effects/animation work open |
+| M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | In progress: manifest/compiler and first compiled static window; broader validation/media/effects/animation open |
 | M4 | Sandboxed scripted end-to-end Windows prototype | M1, M2, M3 | Integrated G2 regression and prototype acceptance | Pending |
 | I2 | Selective web import and compatibility report | M4; I1 contracts | Import-specific acceptance; does not block native M5/M6 by default | Planned |
 | M5 | Windows product foundations and performance report | M4 | G5 and Windows release checklist | Pending |
@@ -86,7 +86,8 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 
 - [x] Establish the initial resolved-scene data/validation boundary with an experimental versioned codec, finite numeric/ID/text/resource budgets and original fixed fixtures; [scope and checks](m3-scene.md). This is only the flat foundation, not the completed source compiler or G3.
 - [x] Add strict native manifest validation and retained in-memory source entries, with fixed positive/negative AppContainer fixtures; [source ownership and limits](m3-manifest.md). Filesystem/archive collection, compiler resource mapping and compiled hashes remain open.
-- [x] Implement the first strict fragment/CSS compiler, fixed-pixel cascade/layout, source diagnostics and original static source fixture; [implemented subset](m3-compiler.md). Images, visual integration and complete G3 remain open; the broader items below are not complete from this subset alone.
+- [x] Implement the first strict fragment/CSS compiler, fixed-pixel cascade/layout, source diagnostics and original static source fixture; [implemented subset](m3-compiler.md). Broader visual/media/effect coverage and complete G3 remain open; the items below are not complete from this subset alone.
+- [x] Render the original compiled static fixture in a Windows window and retain a [limited visual reference](m3-preview.md); quiet-idle/new-mode lifecycle checks, media/effects/animation and complete G3 remain open.
 - [ ] Prepare I1 metadata/resource/diagnostic mappings and original synthetic import fixtures; imported semantics do not override the supported native subset.
 - [ ] Implement manifest/source loading, resource references, and versioned initial scene output.
 - [ ] Parse the agreed HTML/CSS subset and report unsupported constructs with useful source locations.
@@ -164,7 +165,7 @@ At delivery, summarize changes, completed checks, untested cases, and useful rev
 
 ## 12. Next task
 
-Proceed to M3's restricted content compiler and native animation using the existing contracts. Keep parsing/decoding boundaries and resource budgets explicit before accepting untrusted input. M4 must integrate production transport/callbacks and complete G2 through that path. Extended M1 hardware coverage and later platform/product gates remain open.
+Resume M3 at the [compiled preview checkpoint](m3-preview.md#resume-point): finish quiet-idle/new-mode lifecycle checks, then image resources, supported compositing/transforms/clipping, animation/pause, compiled hashes and I1 mappings. Keep parsing/decoding boundaries and budgets explicit before accepting untrusted input. M4 must integrate production transport/callbacks and complete G2 through that path. Extended M1 hardware coverage and later platform/product gates remain open.
 
 Sections below are historical progress records; their earlier pending/uncommitted statements describe that stage, not the current status above.
 

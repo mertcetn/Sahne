@@ -1,6 +1,6 @@
 # Prototype Content Contract
 
-Status: the [first M3 fragment/CSS compiler](m3-compiler.md) implements a deliberately narrow subset for original embedded sources, with no arbitrary input or rendering integration yet. Its exact accepted/rejected grammar, values and defaults override draft ambiguities below for that implementation. The [scene foundation](m3-scene.md) validates resolved output; full G3, images, hierarchical effects and animation remain pending.
+Status: the [first M3 fragment/CSS compiler](m3-compiler.md) and [original static window preview](m3-preview.md) implement a deliberately narrow subset with no arbitrary input. Their exact grammar, values, defaults and text-box rules override draft ambiguities below for those implementations. The [scene foundation](m3-scene.md) validates resolved output; full G3, images, hierarchical effects and animation remain pending.
 
 The initial parser accepts UTF-8 fragments with div/span boxes, leading local stylesheet links, and img syntax whose media mapping is still pending. html/head/body wrappers, DOCTYPE, style/script elements and unknown constructs are rejected rather than passed through HTML error recovery. IDs must be unique. No inline event handlers, external URLs, script imports or executable attributes are accepted. The exact implemented rules are in the compiler document linked above.
 
