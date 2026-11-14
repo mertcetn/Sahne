@@ -79,16 +79,19 @@ function Read-SahneBoundedLog {
 
 function Test-SahneCaseEvidence {
     param([string] $Stdout, [string] $Stderr, [int] $ExitCode,
-        [string] $Completion, [int] $ExpectedLaunches)
+        [string] $Completion, [int] $ExpectedLaunches, [int] $ExpectedRegistryCleanups = 0)
     $launches = [regex]::Matches($Stdout, '(?m)^Verified AppContainer identity').Count
     $cleanups = [regex]::Matches($Stdout, '(?m)^Profile cleanup verified:').Count
     $passes = [regex]::Matches($Stdout, '(?m)^Probe passed[;:]').Count
+    $registryCleanups = [regex]::Matches($Stdout, '(?m)^Registry fixture cleanup verified:').Count
     [pscustomobject]@{
         Passed = ($Completion -eq 'Exited' -and $ExitCode -eq 0 -and
             [string]::IsNullOrWhiteSpace($Stderr) -and $passes -eq 1 -and
-            $launches -eq $ExpectedLaunches -and $cleanups -eq $ExpectedLaunches)
+            $launches -eq $ExpectedLaunches -and $cleanups -eq $ExpectedLaunches -and
+            $registryCleanups -eq $ExpectedRegistryCleanups)
         Launches = $launches
         ProfileCleanups = $cleanups
         PassMarkers = $passes
+        RegistryCleanups = $registryCleanups
     }
 }

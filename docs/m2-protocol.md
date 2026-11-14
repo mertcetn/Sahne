@@ -44,6 +44,8 @@ The ipc-write-drain fixture sets bit 13 after verifying its fixed 1 MiB transpor
 
 The cpu-busy fixture sends bit 14 as an armed stage after its policy/baseline checks: ProbeResult(3) must be exactly 0x4017 after valid Hello/Pong context and nonce. This triggers a second internal ready notification, not successful one-shot completion. The worker then loops; the CPU case requires timeout after arming, independently validated CPU accounting/policy and the expected live PID before watchdog stop. Malformed/unarmed timeouts and early EOF fail. No tag/version or production authority is added. See [CPU arming and acceptance](m2-cpu-rate.md).
 
+The registry fixture sets bit 15 only after eight key-right requests and direct child creation/key deletion are denied with error 5. Its exact final mask is 0x8017, with the ordinary nonce/context/EOF/exit checks and independent host sentinel/namespace/deletion verification. No registry request message, capability or wire version is introduced. See [Registry matrix](m2-registry.md).
+
 check_context compares the expected session, sequence and revision without advancing any state. The host must perform body and ownership validation before committing accepted state or advancing its sequence/revision. Session randomness, peer identity, ACLs and handle ownership are not supplied by a binary header.
 
 ## I/O and failure policy

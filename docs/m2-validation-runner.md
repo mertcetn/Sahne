@@ -11,9 +11,9 @@ pwsh -NoProfile -File tools/test-sandbox-runner.ps1
 pwsh -NoProfile -File tools/test-sandbox.ps1
 ```
 
-The first command tests the host-process guard with four original helper processes: exit zero, exit seven, forced timeout and excessive output. It also tests bounded log reads and seven evidence-acceptance cases. These helpers do not create AppContainer profiles. No Pester module or new package installation is required.
+The first command tests the host-process guard with four original helper processes: exit zero, exit seven, forced timeout and excessive output. It also tests bounded log reads and nine evidence-acceptance cases, including required registry cleanup. These helpers do not create AppContainer profiles. No Pester module or new package installation is required.
 
-The second command builds wallpaper-sandbox-probe in release mode with --locked and runs the thirty expected-success native/JS/recovery scenarios sequentially. The default plan expects thirty-six worker launches/profile cleanups. It stops at the first failed case and exits 1. Build, metadata, launch and evidence failures also produce failed reports where report storage remains available. The ordinary successful exit is zero.
+The second command builds wallpaper-sandbox-probe in release mode with --locked and runs the thirty-one expected-success native/JS/recovery scenarios sequentially. The default plan expects thirty-seven worker launches/profile cleanups and one registry cleanup. It stops at the first failed case and exits 1. Build, metadata, launch and evidence failures also produce failed reports where report storage remains available. The ordinary successful exit is zero.
 
 For a selected diagnostic case:
 
@@ -34,6 +34,7 @@ A passing case requires all of these independently:
 - Empty stderr, so a logged cleanup failure cannot silently pass.
 - Exactly one final Probe passed marker.
 - The expected number of launch confirmations and explicit profile cleanup confirmations for that selector, including every recovery attempt.
+- Schema 2 requires exactly one registry cleanup confirmation for registry, and zero for other selectors; missing or unexpected cleanup markers fail.
 
 The native executable remains responsible for token/ACL, wire, timing, CPU, filesystem and other case-specific assertions. Counting its transcript is a regression wrapper for trusted fixed fixtures, not independent attestation from untrusted worker output. Status=Passed means the selected corpus passed; G2Complete remains false until the wider acceptance gate is explicitly reviewed. Subsets do not claim full default coverage.
 
@@ -53,13 +54,17 @@ The runner writes its Markdown report to GITHUB_STEP_SUMMARY and prints JSON bet
 
 No new action version, Rust dependency, worker API, permission or sandbox limit is introduced. The workflow reuses the existing checkout pin rather than changing the project's build/release dependency baseline. Its previously documented runtime-maintenance warning remains unresolved; hosted compatibility is not claimed here. The new workflow was not pushed or dispatched in this task. Existing main/release automation is unchanged.
 
-## Local validation
+## Initial local validation — November 12, 2026
 
 The final default invocation produced `target/sandbox-validation/ad20d4e02d8945f18e578cbed29608be/`: Status=Passed, FullDefaultSuite=true, BuildPerformed=true, thirty case results, thirty-six launches/cleanups and G2Complete=false. JSON counts and current runner/guard source SHA256 were independently checked. Earlier default runs also passed; they are not combined to inflate this invocation's counts.
 
 The final guard self-test passed four real profile-free helper processes, bounded-log reading and seven evidence checks, with artifacts under `target/sandbox-runner-tests/space path 0004d01aa1384cf398888ffbdf8d2e74/`. The real investigative network run `6c26e0ab34ef4b2fbffa238e2663de79` produced Failed/exit 1 for its inconclusive loopback result, with one verified profile cleanup. A local GitHub-format smoke test checked Markdown, JSON framing and disabled command processing for one healthy case; this did not contact or execute GitHub Actions.
 
 PowerShell parser checks, local documentation links and diff checks passed. Workflow syntax/settings were reviewed locally; no hosted workflow or alternate platform was executed. Rust/native implementation and Cargo dependencies are unchanged in this continuation. No push or release was performed; the new runner/workflow/docs remain uncommitted. No visual judgment or physical input is required for the local checks.
+
+## Registry continuation — November 14, 2026
+
+The [registry matrix](m2-registry.md) expands the current default plan to thirty-one cases/thirty-seven launches. Report SchemaVersion is now 2 and includes RegistryCleanups/ExpectedRegistryCleanups in JSON and a corresponding Markdown column. The schema-2 default run `667432ed41e04eddb59d0f8e52b61fd8` passed with one verified registry cleanup and G2Complete=false. Historical schema-1 reports above retain their original thirty-case scope. No hosted workflow run or new release is inferred.
 
 Primary documentation consulted November 12, 2026:
 

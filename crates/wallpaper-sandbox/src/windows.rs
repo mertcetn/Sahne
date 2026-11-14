@@ -31,8 +31,10 @@ mod cpu;
 mod filesystem;
 pub use cpu::probe_cpu_budget;
 mod profile;
+mod registry;
 pub use filesystem::{probe_filesystem, verify_filesystem_fixture};
 use profile::Profile;
+pub use registry::probe_registry;
 
 fn wide(value: impl AsRef<std::ffi::OsStr>) -> io::Result<Vec<u16>> {
     let mut text: Vec<u16> = value.as_ref().encode_wide().collect();
@@ -202,7 +204,10 @@ impl Drop for Attributes {
     }
 }
 fn host_user_acl() -> io::Result<LocalAllocation> {
-    // Use the actual host user's SID, not a broad default pipe DACL or package grant.
+    host_user_acl_with_rights(FILE_ALL_ACCESS)
+}
+fn host_user_acl_with_rights(access: u32) -> io::Result<LocalAllocation> {
+    // Use the actual host user's SID, not a broad default object DACL or package grant.
     // SAFETY: Borrowed current-process pseudo handle; token() owns only its returned token.
     let user_token = token(unsafe { GetCurrentProcess() })?;
     let mut bytes = 0;
@@ -233,7 +238,7 @@ fn host_user_acl() -> io::Result<LocalAllocation> {
     // SAFETY: Successful query supplies TOKEN_USER and backing SID storage in this buffer.
     let sid = unsafe { (*user.as_ptr().cast::<TOKEN_USER>()).User.Sid };
     let entry = EXPLICIT_ACCESS_W {
-        grfAccessPermissions: FILE_ALL_ACCESS,
+        grfAccessPermissions: access,
         grfAccessMode: SET_ACCESS,
         grfInheritance: NO_INHERITANCE,
         Trustee: TRUSTEE_W {
@@ -567,10 +572,18 @@ pub struct Sandbox {
     _endpoint: Option<EndpointFixture>,
     strict_handles: bool,
     profile: Profile,
+    registry: Option<registry::RegistryFixture>,
     cpu_rate: u32,
     started: std::time::Instant,
 }
 impl Sandbox {
+    pub fn cleanup_registry(&mut self) -> io::Result<bool> {
+        if let Some(fixture) = self.registry.as_mut() {
+            fixture.cleanup()?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
     pub fn verify_cpu_rate(&self) -> io::Result<()> {
         cpu::verify_usage(self)
     }
@@ -648,6 +661,7 @@ pub fn spawn_probe(
         "ipc-write-drain",
         "cpu-busy",
         "filesystem",
+        "registry",
         "hang",
         "oversized",
         "crash",
@@ -690,6 +704,11 @@ pub fn spawn_probe(
             EndpointFixture::new(session)
                 .map_err(|e| io::Error::other(format!("Endpoint positive control: {e}")))?,
         )
+    } else {
+        None
+    };
+    let registry = if case == "registry" {
+        Some(registry::RegistryFixture::new(session)?)
     } else {
         None
     };
@@ -849,6 +868,7 @@ pub fn spawn_probe(
         _endpoint: endpoint,
         strict_handles,
         profile,
+        registry,
         cpu_rate,
         started: std::time::Instant::now(),
     };

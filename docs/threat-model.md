@@ -6,6 +6,8 @@ The experiment now includes [fixed original JS fixtures](m2-js.md) for arithmeti
 
 The [control-channel experiment](m2-ipc-security.md) verifies explicit pipe DACLs and data-only inherited handles. The [filesystem matrix](m2-filesystem.md) separates synthetic private/staging access denials from selected permitted executable/system reads. Neither is exhaustive Windows isolation certification.
 
+The [synthetic registry matrix](m2-registry.md) adds direct rights/create/delete denials against one fresh private host key, with strict post-stop cleanup. It does not audit all registry namespaces or AppContainer's own registry-hive deletion.
+
 ## Boundaries
 
 Packages, compiled scenes, JavaScript, images, fonts, and worker messages are untrusted. The host, OS kernel, and GPU driver are trusted. Assume a worker can be compromised through a native engine/parser defect. Keep GPU access in the host and parsing/decoding in restricted helpers. Host validation applies even to compiler-generated data.

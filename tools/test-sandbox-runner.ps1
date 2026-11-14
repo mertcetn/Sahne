@@ -43,4 +43,10 @@ foreach ($fixture in $bad) {
         -ExitCode $fixture.Exit -Completion $fixture.Completion -ExpectedLaunches 1
     if ($check.Passed) { throw 'Invalid or incomplete evidence was accepted' }
 }
-Write-Host "Runner checks passed: four real helper processes, bounded log reading and seven evidence checks. Artifacts: $testRoot"
+$registryGood = $good + "Registry fixture cleanup verified: fixture`n"
+$registryPass = Test-SahneCaseEvidence -Stdout $registryGood -Stderr '' -ExitCode 0 `
+    -Completion Exited -ExpectedLaunches 1 -ExpectedRegistryCleanups 1
+$registryMissing = Test-SahneCaseEvidence -Stdout $good -Stderr '' -ExitCode 0 `
+    -Completion Exited -ExpectedLaunches 1 -ExpectedRegistryCleanups 1
+if (-not $registryPass.Passed -or $registryMissing.Passed) { throw 'Registry cleanup evidence check failed' }
+Write-Host "Runner checks passed: four real helper processes, bounded log reading and nine evidence checks. Artifacts: $testRoot"

@@ -12,7 +12,7 @@ if (-not $IsWindows) { throw 'The sandbox validation runner requires Windows.' }
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $plan = [ordered]@{
     healthy=1; 'network-egress'=1; memory=1; process=1; handles=1; endpoint=1
-    'ipc-rights'=1; filesystem=1; 'ipc-write-drain'=1; 'ipc-write-stall'=1; 'cpu-busy'=1
+    'ipc-rights'=1; filesystem=1; registry=1; 'ipc-write-drain'=1; 'ipc-write-stall'=1; 'cpu-busy'=1
     hang=1; oversized=1; crash=1; 'ipc-flood'=1; 'ipc-stall'=1; 'ipc-truncated'=1
     'ipc-replay'=1; 'ipc-open'=1; 'js-basic'=1; 'js-interrupt'=1; 'js-memory'=1
     'js-stack'=1; 'js-jobs'=1; 'restart-recover'=2; 'restart-exhaust'=3
@@ -31,7 +31,7 @@ New-Item -ItemType Directory -Path $runRoot | Out-Null
 Write-Host "Sandbox validation reports: $runRoot"
 $rows = [Collections.Generic.List[object]]::new()
 $report = [ordered]@{
-    SchemaVersion = 1
+    SchemaVersion = 2
     StartedUtc = [DateTime]::UtcNow.ToString('o')
     FinishedUtc = $null
     Commit = $null
@@ -72,6 +72,7 @@ try {
     $report.BinarySha256 = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
     foreach ($case in $Cases) {
         $expected = if ($case -eq 'network') { 1 } else { $plan[$case] }
+        $expectedRegistry = if ($case -eq 'registry') { 1 } else { 0 }
         $processResult = Invoke-SahneGuardedProcess -FilePath $binary -ArgumentList @('--case',$case) `
             -WorkingDirectory $repoRoot -OutputDirectory (Join-Path $runRoot $case) `
             -TimeoutSeconds $CaseTimeoutSeconds -OutputLimitBytes $report.OutputLimitBytes
@@ -88,12 +89,14 @@ try {
             Write-Host "::$($commandToken)::"
         }
         $evidence = Test-SahneCaseEvidence -Stdout $stdout -Stderr $stderr `
-            -ExitCode $processResult.ExitCode -Completion $processResult.Completion -ExpectedLaunches $expected
+            -ExitCode $processResult.ExitCode -Completion $processResult.Completion -ExpectedLaunches $expected `
+            -ExpectedRegistryCleanups $expectedRegistry
         $rows.Add([pscustomobject]@{
             Case = $case; Passed = $evidence.Passed; Completion = $processResult.Completion
             ExitCode = $processResult.ExitCode; ElapsedMs = $processResult.ElapsedMs
             ExpectedLaunches = $expected; Launches = $evidence.Launches
             ProfileCleanups = $evidence.ProfileCleanups; PassMarkers = $evidence.PassMarkers
+            RegistryCleanups = $evidence.RegistryCleanups; ExpectedRegistryCleanups = $expectedRegistry
             Stdout = "$case/stdout.log"; Stderr = "$case/stderr.log"
         })
         Write-Host "$case : passed=$($evidence.Passed), exit=$($processResult.ExitCode), cleanup=$($evidence.ProfileCleanups)/$expected"
@@ -114,11 +117,11 @@ finally {
             "Revision: $($report.Commit). Dirty worktree: $($report.DirtyWorktree)."
             "Binary SHA256: $($report.BinarySha256)"
             ''
-            '| Case | Passed | Exit | Completion | Launches | Profile cleanups | ms |'
-            '| --- | --- | --- | --- | --- | --- | --- |'
+            '| Case | Passed | Exit | Completion | Launches | Profile cleanups | Registry cleanups | ms |'
+            '| --- | --- | --- | --- | --- | --- | --- | --- |'
         )
         foreach ($row in $rows) {
-            $markdown += "| $($row.Case) | $($row.Passed) | $($row.ExitCode) | $($row.Completion) | $($row.Launches)/$($row.ExpectedLaunches) | $($row.ProfileCleanups)/$($row.ExpectedLaunches) | $($row.ElapsedMs) |"
+            $markdown += "| $($row.Case) | $($row.Passed) | $($row.ExitCode) | $($row.Completion) | $($row.Launches)/$($row.ExpectedLaunches) | $($row.ProfileCleanups)/$($row.ExpectedLaunches) | $($row.RegistryCleanups)/$($row.ExpectedRegistryCleanups) | $($row.ElapsedMs) |"
         }
         $markdown += @('', 'Passing this fixed corpus does not close G2. Loopback denial and broader isolation/integration remain open.')
         if ($report.Failure) { $markdown += "Failure: $($report.Failure)" }

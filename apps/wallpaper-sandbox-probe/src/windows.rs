@@ -216,7 +216,7 @@ fn worker(args: &[String]) -> Result<()> {
             }
         }
         "healthy" | "network" | "network-egress" | "memory" | "cpu-busy" | "process"
-        | "handles" | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem"
+        | "handles" | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem" | "registry"
         | "ipc-flood" | "ipc-open" | "js-basic" | "js-interrupt" | "js-memory" | "js-stack"
         | "js-jobs" => {}
         _ => return Err("Unknown probe case".into()),
@@ -325,6 +325,23 @@ fn worker(args: &[String]) -> Result<()> {
     if case == "cpu-busy" {
         wallpaper_sandbox::probe_cpu_budget()?;
     }
+    if case == "registry"
+        && let Err(error) = wallpaper_sandbox::probe_registry(hostpid, session)
+    {
+        write_frame(
+            &mut output,
+            &envelope(
+                session,
+                2,
+                Body::Reject {
+                    code: 6,
+                    message: error.to_string().chars().take(60).collect(),
+                },
+            ),
+        )?;
+        output.flush()?;
+        return Ok(());
+    }
     let script_result = if case.starts_with("js-") {
         script::run(case)?;
         script::RESULT_BIT
@@ -342,7 +359,8 @@ fn worker(args: &[String]) -> Result<()> {
         | (u32::from(case == "ipc-rights") << 11)
         | (u32::from(case == "filesystem") << 12)
         | (u32::from(case == "ipc-write-drain") << 13)
-        | (u32::from(case == "cpu-busy") << 14);
+        | (u32::from(case == "cpu-busy") << 14)
+        | (u32::from(case == "registry") << 15);
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     if case == "handles" {
         // The host must observe normal checks and an explicit armed stage before
@@ -423,6 +441,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "CPU case: cpu-busy. Probe Jobs have a verified 10% CPU hard cap; this fixture uses a stricter 1%. The armed native loop must consume measurable bounded CPU while remaining alive until the unchanged watchdog stops it. This is a scheduling-rate experiment, not a production policy certification."
         );
+        println!(
+            "Registry case: registry. A fresh volatile user-only synthetic key has host positive controls. Eight worker access requests plus direct create/delete must return access denied. After worker stop, its fixed sentinel/namespace must be unchanged and the owned key must be absent after cleanup. No existing user registry values are read or changed."
+        );
         return Ok(());
     }
     let case = match args {
@@ -455,6 +476,7 @@ fn host(args: &[String]) -> Result<()> {
         "ipc-write-stall",
         "ipc-write-drain",
         "filesystem",
+        "registry",
         "hang",
         "oversized",
         "crash",
@@ -493,8 +515,8 @@ fn host(args: &[String]) -> Result<()> {
             }
             (
                 "healthy" | "network" | "network-egress" | "memory" | "process" | "handles"
-                | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem" | "js-basic"
-                | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
+                | "endpoint" | "ipc-rights" | "ipc-write-drain" | "filesystem" | "registry"
+                | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -505,6 +527,7 @@ fn host(args: &[String]) -> Result<()> {
                         "endpoint" => 1024,
                         "ipc-rights" => 2048,
                         "filesystem" => 4096,
+                        "registry" => 32768,
                         "ipc-write-drain" => 8192,
                         "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {
                             script::RESULT_BIT
@@ -546,6 +569,11 @@ fn host(args: &[String]) -> Result<()> {
                 if case == "filesystem" {
                     println!(
                         "Filesystem matrix verified: sixteen direct OS denials (error 5); staged data/executable and System32/kernel32.dll reads plus staging listing permitted."
+                    );
+                }
+                if case == "registry" {
+                    println!(
+                        "Registry matrix verified: eight access opens and direct child creation/key deletion denied with error 5; mask=0x8017."
                     );
                 }
                 if case.starts_with("js-") {

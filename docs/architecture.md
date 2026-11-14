@@ -445,3 +445,9 @@ PID inspection found an implicit conhost.exe under the earlier CREATE_NO_WINDOW 
 A Windows/PowerShell runner now builds the trusted probe and executes its fixed thirty-case corpus with explicit expected launch/cleanup counts. A separate outer host deadline/output guard, bounded log reader and strict evidence checks produce JSON/Markdown provenance reports under ignored target/. Native sandbox assertions remain authoritative; report success does not certify G2 or enable untrusted content.
 
 A manual-only windows-2025 workflow reuses the existing pinned checkout action and runs runner/Rust/native checks with read-only permissions. Reports are retained as the job summary and bounded workflow-log output; no new artifact action or release behavior is added. Hosted execution remains unverified. See [Runner commands, failure behavior and evidence](m2-validation-runner.md).
+
+## 30. M2 synthetic registry boundary
+
+A fixed registry fixture creates one fresh volatile, protected host-user-only key in HKCU/Software's 64-bit view. Host access/create/delete controls precede ten direct AppContainer denials. After worker stop/I/O joins, the host verifies only its original synthetic value/namespace, closes/deletes the owned key and requires absence. Registry-specific handle owners and a non-recursive bounded fallback keep cleanup scoped to this instance; failures prohibit success/retry.
+
+No registry handle, capability or general registry API is granted to scripts. Only the existing windows-sys Registry binding feature is added; package versions and lockfile remain unchanged. Runner schema 2 records mandatory registry cleanup, with thirty-one default cases/thirty-seven worker launches. This fixture does not audit AppContainer registry registrations or certify broader registry isolation. See [Registry matrix and cleanup scope](m2-registry.md).

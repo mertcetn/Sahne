@@ -195,6 +195,13 @@ impl ProbeAttempt {
                 "Response classification and Job stop/I/O thread joins exceeded one second".into(),
             );
         }
+        let registry_cleanup = Instant::now();
+        if self.sandbox.cleanup_registry()? {
+            println!(
+                "Registry fixture cleanup verified: sentinel/namespace unchanged and owned key absent (error 2); elapsed={:?}",
+                registry_cleanup.elapsed()
+            );
+        }
         let profile_cleanup = Instant::now();
         self.sandbox.cleanup_profile()?;
         println!(
