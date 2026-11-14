@@ -1,12 +1,12 @@
 # Sahne — Development Roadmap
 
-Updated: November 11, 2026.
+Updated: November 14, 2026.
 
 ## 1. Scope and current state
 
 Deliver a restricted HTML/CSS/JavaScript wallpaper engine on Windows first, then stable Linux support on selected mainstream configurations. Android is deferred until desktop milestones are complete. macOS requires a future scope decision.
 
-The repository has working rules, an architecture, source-based feasibility research, and a Linux support plan. The repository has been created and the existing documentation committed. M0 foundation validation is complete: a minimal workspace, draft contracts, clean-source build, hosted CI, and a downloaded development release have been verified. Rendering/sandbox validation and performance measurements remain pending in later milestones. See [M0 validation record](m0-validation.md).
+M0 foundation validation is complete: the workspace, draft contracts, clean-source build, hosted CI and a downloaded development release have been verified. M1 has local Windows rendering/lifecycle evidence with an extended display matrix still open. M2's fixed trusted Windows sandbox/IPC spike is complete, with its initial G2 evidence and remaining production-gate work recorded in [M2 completion](m2-acceptance.md). Untrusted content and full integrated G2 remain disabled/open; content compilation, product integration, performance and Linux validation are later milestones. See [M0 validation record](m0-validation.md).
 
 This roadmap sequences the existing design; it does not introduce a new architecture. Technical decisions belong in [Project architecture](architecture.md), research and gate definitions in [Feasibility research](feasibility-research.md), and Linux acceptance details in [Linux support plan](linux-support.md).
 
@@ -18,7 +18,7 @@ Dates and effort estimates will be added after the first technical spikes establ
 | --- | --- | --- | --- | --- |
 | M0 | Reproducible development foundation and initial contracts | Existing design documents | Workspace builds; contracts and security tests are reviewable | Complete; evidence committed |
 | M1 | Windows rendering and desktop attachment spike | M0 foundation | G1 | Implementation and font/device follow-up approved; extended display matrix open |
-| M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | In progress: native/IPC and fixed JS budget fixtures; full G2 open |
+| M2 | Windows sandbox and IPC spike | M0 foundation and threat model | Initial G2 evidence | Complete for local fixed trusted fixtures; full integrated G2 remains open |
 | M3 | Restricted content compiler and native animation | M1; M0 content contract | G3 | Pending |
 | M4 | Sandboxed scripted end-to-end Windows prototype | M1, M2, M3 | Integrated G2 regression and prototype acceptance | Pending |
 | I2 | Selective web import and compatibility report | M4; I1 contracts | Import-specific acceptance; does not block native M5/M6 by default | Planned |
@@ -66,17 +66,19 @@ Pass the research report's Windows surface gate, including 10 Explorer restarts 
 
 - [x] Launch a trusted minimal worker in an experimental AppContainer policy with configured Job limits and an explicit handle list; production AppContainer/LPAC policy and negative-handle tests remain open.
 - [x] Specify I1's M2 capability/inspection boundary: no imported permission escalation, raw paths as worker APIs or execution during inspection. M3 mappings/callback semantics and the overall I1 gate remain open.
-- [ ] Establish the actual permitted IPC channel with schema, size, ownership, and queue limits.
+- [x] Establish the spike's actual permitted IPC channel with schema, size, ownership and queue limits; [128 sequential exchanges and mid-session faults](m2-roundtrip.md) complement the one-shot and write-pressure cases. Production source/scene transport remains M4 work.
 - [x] Harden and validate the initial one-shot channel's explicit DACLs and data-only handles; record existing schema/deadline/one-slot bounds. Persistent source/scene channels and broader channel-pressure policy remain open; see [channel evidence](m2-ipc-security.md).
 - [x] Embed the reviewed pinned engine with minimal features for fixed trusted source fixtures; general source/package transport remains disabled.
 - [x] Add and exercise initial runtime memory/stack limits, cooperative interruption, bounded Promise jobs and an independent host watchdog; integrated callback policy remains M4 work.
-- [ ] Exercise direct OS denials through trusted test code inside the sandbox, not merely missing JavaScript APIs.
+- [x] Exercise direct OS denials through trusted native code inside the sandbox: selected files, registry, TCP, process, endpoint and handle operations; record permitted reads and the separate local loopback WFP evidence. This is the [documented spike matrix](m2-acceptance.md), not exhaustive OS isolation certification.
 - [x] Exercise a synthetic filesystem matrix with host positive controls and sixteen worker denials; record selected permitted staged/system reads separately. Broader filesystem/system-read inventory and G2 remain open; see [filesystem evidence](m2-filesystem.md).
 - [x] Exercise initial fixed-source infinite JS, native stalls, OOM, IPC faults/floods, crashes and bounded restart behavior; sustained/integrated pressure and broader G2 coverage remain open.
 
 ### Completion evidence — initial G2
 
 Allowed IPC succeeds, prohibited access fails as specified, and the host remains responsive through failure cases. Record permitted executable/library/system reads separately. Pass the G2 spike criteria before enabling untrusted content. If isolation fails, resolve the policy or implementation instead of weakening it.
+
+Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one profile cleanups passed, with twenty-one Rust tests. See [M2 requirement/evidence matrix and mandatory follow-up](m2-acceptance.md). This closes the technical spike and records initial G2 evidence; it does not close integrated G2 or authorize untrusted content. Existing limits and the strict native loopback timeout failure remain unchanged.
 
 ## 6. M3 — Restricted compiler and native animation
 
@@ -159,7 +161,9 @@ At delivery, summarize changes, completed checks, untested cases, and useful rev
 
 ## 12. Next task
 
-Proceed to the G1 Windows surface spike (M1) and G2 sandbox spike (M2) using the M0 contracts. Keep spike evidence separate from stable product claims.
+Proceed to M3's restricted content compiler and native animation using the existing contracts. Keep parsing/decoding boundaries and resource budgets explicit before accepting untrusted input. M4 must integrate production transport/callbacks and complete G2 through that path. Extended M1 hardware coverage and later platform/product gates remain open.
+
+Sections below are historical progress records; their earlier pending/uncommitted statements describe that stage, not the current status above.
 
 ## 13. M0 progress — November 11, 2026
 

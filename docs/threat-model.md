@@ -1,6 +1,6 @@
 # Threat Model and Spike Validation
 
-Status: M0 contracts with a trusted M2 Windows AppContainer experiment. Partial direct-OS and failure-containment evidence is recorded in [M2 sandbox spike](m2-sandbox.md); network acceptance and the full G2 suite remain open. No sandbox is certified and no untrusted packages/scripts are enabled.
+Status: M2's fixed trusted Windows AppContainer technical spike is complete, with initial direct-OS and containment evidence in the [M2 acceptance matrix](m2-acceptance.md). Full integrated G2, broader network/OS policy and production content-path validation remain open. No sandbox is certified and no untrusted packages/scripts are enabled.
 
 The experiment now includes [fixed original JS fixtures](m2-js.md) for arithmetic/API absence, cooperative interruption, OOM, recursion and Promise-job limits. Source interpretation occurs only in the restricted worker; the host remains responsible for independent deadlines and validated IPC. Known upstream advisories and maintenance uncertainty are assessed in [Engine dependency review](m2-js-dependencies.md). These tests do not certify engine safety or enable arbitrary content.
 
