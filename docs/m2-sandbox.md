@@ -23,7 +23,7 @@ The separate network investigation is deliberately stricter:
 .\target\release\wallpaper-sandbox-probe.exe --case network
 ```
 
-It tries a TCP connection to a listener created by the host on 127.0.0.1 and an ephemeral port. Only explicit Windows access denial (5 or 10013) satisfies the case. A timeout, refused connection or successful connection fails the case. On the current machine this returns a timeout with no raw OS error, so the case exits nonzero and network isolation remains unverified. No external network service or third-party wallpaper is contacted. Failure must not be worked around by granting network capabilities or a loopback exemption.
+It tries a TCP connection to a listener created by the host on 127.0.0.1 and an ephemeral port, after a verified host positive connection. Only explicit Windows access denial (5 or 10013) satisfies the native case. A timeout, refused connection or successful connection fails that case. On the current machine this returns a timeout with no raw OS error, so the native case still exits nonzero. A later [read-only WFP diagnostic](m2-loopback.md) independently confirmed a receiving-side AppContainer Loopback block for the local fixture; this supplemental evidence does not turn a bare timeout into a native pass or complete G2. No external network service or third-party wallpaper is contacted. Failure must not be worked around by granting network capabilities or a loopback exemption.
 
 ## Launch boundary
 

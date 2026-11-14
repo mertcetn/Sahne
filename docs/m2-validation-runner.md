@@ -22,7 +22,7 @@ pwsh -NoProfile -File tools/test-sandbox.ps1 -SkipBuild -Cases cpu-busy
 pwsh -NoProfile -File tools/test-sandbox.ps1 -SkipBuild -Cases network
 ```
 
-SkipBuild reuses the existing executable and records BuildPerformed=false; it is a diagnostic convenience, not proof that the current checkout produced that executable. Selected runs have FullDefaultSuite=false. Duplicate or unknown case names are rejected before launch. Network is an explicit investigative selector and is excluded from the default expected-success plan. The current inconclusive loopback result fails acceptance and returns 1; the runner does not reinterpret timeout as access denial.
+SkipBuild reuses the existing executable and records BuildPerformed=false; it is a diagnostic convenience, not proof that the current checkout produced that executable. Selected runs have FullDefaultSuite=false. Duplicate or unknown case names are rejected before launch. Network is an explicit investigative selector and is excluded from the default expected-success plan. A bare loopback timeout fails native acceptance and returns 1; the runner does not reinterpret timeout as access denial. A separate [elevated read-only WFP diagnostic](m2-loopback.md) now confirms matching receiving-side blocks on the recorded local machine and reports its evidence separately.
 
 ## Evidence and reports
 

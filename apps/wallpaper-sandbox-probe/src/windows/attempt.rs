@@ -3,7 +3,7 @@ use super::{Body, ProbeReply, Result, envelope, read_response, write_frame};
 use std::{
     fs,
     io::{self, Write},
-    net::{SocketAddr, TcpListener},
+    net::{SocketAddr, TcpListener, TcpStream},
     path::PathBuf,
     sync::{
         Arc,
@@ -46,6 +46,25 @@ impl ProbeAttempt {
         fs::create_dir_all(&base)?;
         let root = base.join(format!("{}-{session:016x}", std::process::id()));
         let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))?;
+        if case == "network" {
+            // Prove this exact listener accepts a host connection before testing
+            // the restricted worker. Drain that control connection from its backlog.
+            let address = listener.local_addr()?;
+            let control = TcpStream::connect_timeout(&address, Duration::from_secs(1))?;
+            listener.set_nonblocking(true)?;
+            let (accepted, peer) = listener.accept()?;
+            if peer != control.local_addr()? || accepted.local_addr()? != address {
+                return Err("Loopback positive-control endpoint mismatch".into());
+            }
+            drop(accepted);
+            drop(control);
+            println!("Loopback host control passed: 127.0.0.1:{}", address.port());
+            println!("Loopback host process: {}", std::process::id());
+            println!(
+                "Loopback worker image: {}",
+                root.join("bin/probe.exe").display()
+            );
+        }
         let wallpaper_sandbox::Channel {
             sandbox,
             mut input,

@@ -17,6 +17,8 @@ jobs:
       - run: rustup show
       - name: Validate runner failure handling
         run: ./tools/test-sandbox-runner.ps1
+      - name: Validate loopback evidence matching
+        run: ./tools/test-loopback-evidence.ps1
       - name: Rust regressions
         run: cargo test --workspace --locked
       - name: Run fixed native sandbox corpus
