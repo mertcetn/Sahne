@@ -1,6 +1,6 @@
 # M3 compiled static preview
 
-Date: November 14, 2026. Status: original embedded HTML/CSS rendered in a local Windows D3D12 window. M3/G3 remain incomplete.
+Updated: November 15, 2026. Status: original embedded HTML/CSS rendered in a local Windows D3D12 window, with controlled idle/recreation/device-loss checks. M3/G3 remain incomplete.
 
 ## Run
 
@@ -22,6 +22,8 @@ Text has line height 1.25 times font size, no automatic wrapping and clipping to
 
 Drawing uses the existing change/recovery-driven event loop; it introduces no animation timer. The initial interactive run is not a quiet-idle benchmark. Compiled-mode quiet-idle, automated resize/reference comparisons, explicit recreation/device-loss regressions, additional DPI/hardware, desktop attachment and broader text/stacking fixtures remain follow-up validation. Existing M1 evidence must not be read as proof that those new-mode combinations have passed.
 
+The November 15 controlled checks below now cover the quiet-idle and explicit recreation/device-loss items on this machine. Automated resize/reference comparisons, additional DPI/hardware, desktop attachment and broader text/stacking fixtures remain unverified.
+
 ## Observed local reference
 
 ![Original compiled static example at a 960x600 client area](images/m3-static-reference.jpg)
@@ -38,4 +40,17 @@ Primary documentation consulted November 14, 2026: [wgpu 30.0.1 bind group layou
 
 ## Resume point
 
-Finish quiet-idle and compiled-mode lifecycle checks, then extend M3 with validated image resources, stacking/clipping/transforms/group opacity, native animation/pause semantics and compiled provenance/hashes. Keep I1 metadata/resource/callback mappings and full G3 evidence explicit. The current flat compiler still rejects unsupported effects/media rather than silently producing an approximation.
+Extend M3 with validated image resources, stacking/clipping/transforms/group opacity, native animation/pause semantics and compiled provenance/hashes. Keep remaining visual/platform checks, I1 metadata/resource/callback mappings and full G3 evidence explicit. The current flat compiler still rejects unsupported effects/media rather than silently producing an approximation.
+
+## Controlled lifecycle checks — November 15, 2026
+
+Same local Windows/D3D12 target, committed source 2951f4a, release build with `--locked`. Every process was owned, hidden-console, separately logged and bounded by the existing 25-second outer guard; cases ran sequentially, without UI automation or build/executable-lock contention. Report: ignored `target/m3-lifecycle/0fbe932bea4e40ba84b9de68f10dde3d/summary.json`.
+
+| Case | Arguments | Result |
+| --- | --- | --- |
+| Compiled quiet idle | `--example static --seconds 6` | Exit 0, one frame, one generation, three startup surface notifications |
+| Original M1 baseline | `--seconds 3` | Exit 0, one frame, one generation |
+| Compiled reconstruction | `--example static --seconds 8 --test-recreate 2` | Exit 0, three frames/three generations, zero pending recreations |
+| Compiled device loss | `--example static --seconds 8 --test-device-loss` | Exit 0, two frames/two generations, actual requested callback seen and restored frame confirmed |
+
+Idle acceptance required at most three total startup presentations and a healthy timed exit; the observation was exactly one frame across six seconds. The loss fixture still requires the real callback from the requested generation before a later-generation frame, rather than equating any redraw with recovery. These observations do not prove every native fault, GPU/driver, lock/resume or monitor transition. No dependency, limit, sandbox permission or runtime code changed for this validation. The current pinned wgpu Device destroy/callback documentation was rechecked; no validation checks were disabled.
