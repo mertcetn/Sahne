@@ -1,4 +1,5 @@
 mod compiled;
+mod groups;
 mod lifecycle;
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
@@ -34,7 +35,7 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS, optionally with a fixed PNG; no external file path. Escape closes window mode. Test recreation does not restart Explorer."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. Groups mode awaits GPU/window/visual validation. Escape closes window mode. Test recreation does not restart Explorer."
                 );
                 return Ok(());
             }
@@ -43,7 +44,8 @@ fn main() -> Result<()> {
                 compiled_example = Some(match args.next().as_deref() {
                     Some("static") => compiled::Example::Static,
                     Some("image") => compiled::Example::Image,
-                    _ => return Err("Choose an original static or image example".into()),
+                    Some("groups") => compiled::Example::Groups,
+                    _ => return Err("Choose an original static, image or groups example".into()),
                 });
             }
             "--test-device-loss" => test_device_loss = true,
@@ -156,6 +158,7 @@ impl App {
                 .with_title(match self.compiled_example {
                     Some(compiled::Example::Static) => "Sahne — M3 compiled static example",
                     Some(compiled::Example::Image) => "Sahne — M3 compiled image example",
+                    Some(compiled::Example::Groups) => "Sahne — M3 compiled groups example",
                     None => "Sahne — M1 trusted scene",
                 })
                 .with_inner_size(LogicalSize::new(960.0, 600.0));
@@ -364,6 +367,7 @@ struct State {
     atlas: TextAtlas,
     text_renderer: TextRenderer,
     compiled: Option<compiled::Renderer>,
+    groups: Option<groups::Renderer>,
     window: Arc<Window>,
 }
 impl State {
@@ -521,18 +525,34 @@ impl State {
         let mut atlas = TextAtlas::new(&device, &queue, &cache, config.format);
         let text_renderer =
             TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
-        let compiled = if let Some(example) = compiled_example {
-            Some(compiled::Renderer::new(
-                &device,
-                &queue,
-                config.format,
-                &mut fonts,
-                &mut atlas,
-                example,
-            )?)
+        let groups = if compiled_example == Some(compiled::Example::Groups) {
+            let memory_scope = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+            let validation_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let result = groups::Renderer::new(&device, &queue, config.format, &mut fonts);
+            let validation = validation_scope.pop();
+            let memory = memory_scope.pop();
+            let validation = validation.await;
+            let memory = memory.await;
+            if let Some(error) = validation.or(memory) {
+                return Err(format!("Group GPU initialization failed: {error}").into());
+            }
+            Some(result?)
         } else {
             None
         };
+        let compiled =
+            if let Some(example) = compiled_example.filter(|v| *v != compiled::Example::Groups) {
+                Some(compiled::Renderer::new(
+                    &device,
+                    &queue,
+                    config.format,
+                    &mut fonts,
+                    &mut atlas,
+                    example,
+                )?)
+            } else {
+                None
+            };
         Ok(Self {
             surface_retries: 0,
             surface,
@@ -549,6 +569,7 @@ impl State {
             atlas,
             text_renderer,
             compiled,
+            groups,
             window,
         })
     }
@@ -606,7 +627,15 @@ impl State {
                 height: self.config.height,
             },
         );
-        if let Some(compiled) = self.compiled.as_mut() {
+        if let Some(groups) = self.groups.as_mut() {
+            groups.prepare(
+                &self.device,
+                &self.queue,
+                &mut self.fonts,
+                self.config.width,
+                self.config.height,
+            )?;
+        } else if let Some(compiled) = self.compiled.as_mut() {
             compiled.prepare(&mut compiled::Prepare {
                 device: &self.device,
                 queue: &self.queue,
@@ -643,7 +672,9 @@ impl State {
         }
         let view = frame.texture.create_view(&Default::default());
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        {
+        if let Some(groups) = self.groups.as_mut() {
+            groups.encode(&mut encoder, &view, self.config.width, self.config.height)?;
+        } else {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {

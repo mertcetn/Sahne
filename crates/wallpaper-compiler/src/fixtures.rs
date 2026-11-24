@@ -1,6 +1,28 @@
 //! Original compile-time fixtures. Never reads an example directory at runtime.
 use wallpaper_format::Package;
 
+/// Separate overflow fixture for the renderer; preserves the original compiler fixture.
+pub fn preview_groups_package() -> wallpaper_format::Result<Package> {
+    Package::from_entries(vec![
+        (
+            "manifest.json".into(),
+            include_bytes!("../../../examples/group-preview/manifest.json").to_vec(),
+        ),
+        (
+            "index.html".into(),
+            include_bytes!("../../../examples/group-preview/index.html").to_vec(),
+        ),
+        (
+            "style.css".into(),
+            include_bytes!("../../../examples/group-preview/style.css").to_vec(),
+        ),
+        (
+            "checker.png".into(),
+            include_bytes!("../../../examples/group-preview/checker.png").to_vec(),
+        ),
+    ])
+}
+
 pub fn groups_package() -> wallpaper_format::Result<Package> {
     Package::from_entries(vec![
         (

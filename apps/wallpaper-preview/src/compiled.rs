@@ -3,10 +3,11 @@ use super::*;
 use glyphon::Wrap;
 use wallpaper_scene::{Content, ValidatedScene};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Example {
     Static,
     Image,
+    Groups,
 }
 
 struct TextItem {
@@ -44,6 +45,7 @@ impl Renderer {
         let package = match example {
             Example::Static => wallpaper_compiler::fixtures::static_package()?,
             Example::Image => wallpaper_compiler::fixtures::image_package()?,
+            Example::Groups => return Err("Group example requires the version-2 renderer".into()),
         };
         let compiled = wallpaper_compiler::compile(
             &package,

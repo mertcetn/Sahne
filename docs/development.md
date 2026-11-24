@@ -47,6 +47,8 @@ Run `cargo run --release -p wallpaper-cli --locked -- --hierarchy-check` to vali
 
 Run `cargo run --release -p wallpaper-cli --locked -- --compile-groups-check` for the original HTML/CSS/PNG fixture compiled through the explicit v2 path, then independently decoded and matched to its image assets. Native `groups-basic`/`groups-invalid` cases exercise this path in AppContainer. The default compiler/preview remain v1; this command does not render groups. See [Opt-in source grammar and group mapping](m3-group-compiler.md).
 
+`wallpaper-preview --example groups` selects a separate renderer implementation whose GPU/window/visual checks are pending; it opens a window. Its CPU plan/shader checks run through `cargo test -p wallpaper-preview --locked` without a device/window. See [Group rendering limits and deferred visual checkpoint](m3-group-preview.md). Do not equate a successful build or CPU reference result with GPU acceptance.
+
 Run `cargo run --release -p wallpaper-preview --locked -- --example static --seconds 30` for the original compiled HTML/CSS window. It accepts only the fixed embedded example, with no external paths or JS. See [Visual reference, fit/text rules and remaining lifecycle validation](m3-preview.md). The original M1 fixture remains the default without `--example`.
 
 ## Protocol boundary checks

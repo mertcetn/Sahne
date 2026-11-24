@@ -72,7 +72,7 @@ Eleven new tests cover group order/opacity retention, nested transform order/cli
 
 No external dependency version/feature, native binding, unsafe exemption or license material is added. The new local scene `fixtures` feature only exposes original typed test data to CLI/probe builds; it performs no I/O. The exact existing external lockfile graph and its previously recorded advisories/maintenance uncertainty remain unchanged. Only local Windows validation is intended here; other targets remain untested.
 
-The [opt-in group source compiler](m3-group-compiler.md) now provides source-tree mapping, diagnostics and independent v2 image checks. Next: implement bounded renderer intermediates/clips/transforms and add overlapping-child visual references that distinguish group opacity from per-child alpha. Keep the existing v1 examples/regression checks until an explicit migration is validated. Animation/timing, I1 mappings, compiled hashes and full G3 remain open.
+The [opt-in group source compiler](m3-group-compiler.md) provides source-tree mapping, diagnostics and independent v2 image checks. A later [bounded renderer implementation](m3-group-preview.md) now needs GPU/window/visual acceptance, including overlapping-child references that distinguish group opacity from per-child alpha. Keep the existing v1 examples/regression checks until an explicit migration is validated. Animation/timing, I1 mappings, compiled hashes and full G3 remain open.
 
 ## Local evidence — November 24, 2026
 

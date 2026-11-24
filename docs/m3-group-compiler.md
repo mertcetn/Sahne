@@ -49,7 +49,7 @@ No external dependency, feature/version, native binding, unsafe exemption or lic
 
 Primary documentation consulted November 24, 2026: [CSS transform functions](https://www.w3.org/TR/css-transforms-1/#transform-functions), [CSS opacity](https://www.w3.org/TR/css-color-4/#transparency), [CSS overflow control](https://www.w3.org/TR/css-overflow-3/#overflow-control) and the existing [native group contract](m3-groups.md). The explicit syntax/origin/range restrictions above govern this prototype; full browser behavior is not implied.
 
-Next: consume v2 groups in a bounded GPU renderer with independent asset validation, ancestor clips and true intermediate group compositing. Validate overlapping-child opacity, transformed text/images, resize, idle and recovery visually before calling these rendered features. Existing preview modes do not consume this output, and this continuation opens no window. Native animation/timing, compiled hashes, I1 mappings and full G3 remain separate unfinished work.
+The later [group renderer implementation](m3-group-preview.md) consumes v2 output in a separate experimental mode, with independent asset checks, bounded intermediates and ancestor clipping. Its GPU/window/visual validation is still pending: overlap opacity, transformed text/images, resize, idle and recovery must pass before claiming rendered support. Existing v1 preview modes remain separate. Native animation/timing, compiled hashes, I1 mappings and full G3 remain unfinished work.
 
 ## Local evidence — November 24, 2026
 

@@ -1,0 +1,5 @@
+.group { left:80px; top:80px; width:320px; height:240px; background-color:#1f2a33; opacity:0.5; transform:translate(10px,20px) scale(2); transform-origin:0 0; overflow:clip; }
+.red { left:0; top:0; width:100px; height:100px; background-color:#f00; }
+.blue { left:50px; top:50px; width:100px; height:100px; background-color:#00f; }
+.label { left:10px; top:160px; width:420px; height:32px; color:#fff; font-size:20px; }
+.pattern { left:280px; top:192px; width:64px; height:64px; }
