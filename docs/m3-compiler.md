@@ -1,6 +1,6 @@
 # M3 strict HTML/CSS compiler foundation
 
-Updated: November 24, 2026. Status: original fixed-source compilation into the experimental flat scene, including [bounded PNG resources](m3-images.md). The earlier [static window reference](m3-preview.md) predates the image renderer; image-mode runtime/visual validation, full G3, effects/animation and arbitrary input remain pending.
+Updated: November 24, 2026. Status: original fixed-source compilation into the experimental flat scene, including [bounded PNG resources and a local image-window reference](m3-images.md). Full G3, effects/animation and arbitrary input remain pending; [preview evidence](m3-preview.md) is limited to recorded local cases.
 
 ## Run
 

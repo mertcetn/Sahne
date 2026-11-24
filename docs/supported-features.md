@@ -1,6 +1,6 @@
 # Prototype Content Contract
 
-Status: the [M3 fragment/CSS compiler](m3-compiler.md), [bounded PNG resources](m3-images.md) and [original static window preview](m3-preview.md) implement a deliberately narrow subset with no arbitrary input. Image preview code awaits runtime/visual verification. Their exact grammar, values, defaults and text-box rules override draft ambiguities below for those implementations. The [scene foundation](m3-scene.md) validates resolved output; full G3, hierarchical effects and animation remain pending.
+Status: the [M3 fragment/CSS compiler](m3-compiler.md), [bounded PNG resources and original image-window reference](m3-images.md) and [static window preview](m3-preview.md) implement a deliberately narrow subset with no arbitrary input. Their exact grammar, values, defaults and text-box rules override draft ambiguities below for those implementations. The [scene foundation](m3-scene.md) validates resolved output; full G3, hierarchical effects and animation remain pending.
 
 The parser accepts UTF-8 fragments with div/span boxes, leading local stylesheet links and img references to the bounded RGBA8 PNG subset. html/head/body wrappers, DOCTYPE, style/script elements and unknown constructs are rejected rather than passed through HTML error recovery. IDs must be unique. No inline event handlers, external URLs, script imports or executable attributes are accepted. The exact implemented rules are in the compiler document linked above.
 

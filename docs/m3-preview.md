@@ -1,6 +1,6 @@
-# M3 compiled static preview
+# M3 compiled preview
 
-Updated: November 24, 2026. Status: the earlier static revision rendered original embedded HTML/CSS in a local Windows D3D12 window, with controlled idle/recreation/device-loss checks. A new [image preview implementation](m3-images.md) awaits runtime/visual checks, including a static-mode regression. M3/G3 remain incomplete.
+Updated: November 24, 2026. Status: original static and PNG examples rendered in local Windows D3D12 windows. [Image visual/resize and both modes' lifecycle regression checks](m3-images.md) now pass on the recorded machine. M3/G3 remain incomplete.
 
 ## Run
 
@@ -8,7 +8,7 @@ Updated: November 24, 2026. Status: the earlier static revision rendered origina
 cargo run --release -p wallpaper-preview --locked -- --example static --seconds 30
 ```
 
-Escape closes window mode. Literal example names `static` and `image` are accepted; a path, URL, unknown example or missing example value fails. `image` selects the new fixed PNG fixture whose runtime/visual verification is pending. The existing default M1 fixture remains available without `--example`. The CLI's `--compile-check` and `--compile-image-check` are nonvisual checks.
+Escape closes window mode. Literal example names `static` and `image` are accepted; a path, URL, unknown example or missing example value fails. `image` selects the separately documented fixed PNG fixture. The existing default M1 fixture remains available without `--example`. The CLI's `--compile-check` and `--compile-image-check` are nonvisual checks.
 
 Static mode embeds examples/static-scene at build time, validates the in-memory package, compiles the restricted HTML/CSS and independently decodes/validates its scene before allocating drawing resources. It opens no source path and executes no JS. This example still has the unchanged panel, title and accent rectangle. Image mode separately embeds examples/static-image and validates decoded pixels against scene resources before upload; arbitrary package loading remains disabled.
 
@@ -40,7 +40,7 @@ Primary documentation consulted November 14, 2026: [wgpu 30.0.1 bind group layou
 
 ## Resume point
 
-Validate the new image upload/blending/window behavior and rerun static-mode idle/recovery on the modified renderer when screen/window access is authorized. Then extend M3 with stacking/clipping/transforms/group opacity, native animation/pause semantics and compiled provenance/hashes. Keep remaining visual/platform checks, I1 metadata/resource/callback mappings and full G3 evidence explicit. The current flat compiler still rejects unsupported effects/media rather than silently producing an approximation.
+Image upload/blending/window behavior and static-mode idle/recovery regression passed locally on November 24; see [exact cases and reference](m3-images.md). Extend M3 with stacking/clipping/transforms/group opacity, native animation/pause semantics and compiled provenance/hashes. Keep remaining visual/platform checks, I1 metadata/resource/callback mappings and full G3 evidence explicit. The current flat compiler still rejects unsupported effects/media rather than silently producing an approximation.
 
 ## Controlled lifecycle checks — November 15, 2026
 
