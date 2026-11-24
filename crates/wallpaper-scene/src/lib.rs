@@ -2,6 +2,7 @@
 use std::{collections::BTreeSet, fmt};
 mod codec;
 pub use codec::decode;
+pub mod hierarchy;
 
 pub const SCENE_VERSION: u16 = 1;
 pub const MAX_NODES: usize = 4096;
@@ -83,6 +84,8 @@ pub enum ErrorCode {
     NonFinite,
     InvalidGeometry,
     InvalidText,
+    InvalidHierarchy,
+    InvalidEffect,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

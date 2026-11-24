@@ -661,6 +661,8 @@ pub fn spawn_probe(
         "compiler-invalid",
         "image-basic",
         "image-invalid",
+        "hierarchy-basic",
+        "hierarchy-invalid",
         "network",
         "network-egress",
         "memory",

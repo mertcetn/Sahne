@@ -5,7 +5,66 @@ use wallpaper_format::{ErrorCode, Package};
 pub const RESULT_BIT: u32 = 1 << 18;
 pub const COMPILER_RESULT_BIT: u32 = 1 << 19;
 pub const IMAGE_RESULT_BIT: u32 = 1 << 20;
+pub const HIERARCHY_RESULT_BIT: u32 = 1 << 21;
 const MANIFEST: &str = r#"{"formatVersion":1,"apiVersion":1,"id":"sahne.fixture","name":"Original sandbox fixture","entry":"index.html","permissions":[],"preferredFps":30}"#;
+
+pub fn run_hierarchy(case: &str) -> Result<()> {
+    if !wallpaper_sandbox::is_appcontainer()? {
+        return Err("Hierarchy fixture requires AppContainer".into());
+    }
+    use wallpaper_scene::{
+        ErrorCode as Code,
+        hierarchy::{self, LayerContent},
+    };
+    let original = hierarchy::fixtures::original();
+    match case {
+        "hierarchy-basic" => {
+            let scene = original.validate()?;
+            let decoded = hierarchy::decode(&scene.encode())?;
+            if decoded != scene
+                || decoded.commands().len() != 5
+                || decoded.resolved()[2].bounds.x != 190.0
+                || decoded.resolved()[2].bounds.y != 200.0
+            {
+                return Err("Hierarchy fixed scene/command mismatch".into());
+            }
+        }
+        "hierarchy-invalid" => {
+            let mut parent = original.clone();
+            parent.layers[1].parent = 4;
+            let mut opacity = original.clone();
+            if let LayerContent::Group { opacity, .. } = &mut opacity.layers[0].content {
+                *opacity = 1.01;
+            }
+            let mut transform = original.clone();
+            if let LayerContent::Group { transform, .. } = &mut transform.layers[0].content {
+                transform.scale[0] = f32::INFINITY;
+            }
+            for (data, expected) in [
+                (parent, Code::InvalidHierarchy),
+                (opacity, Code::InvalidEffect),
+                (transform, Code::NonFinite),
+            ] {
+                if data.validate().unwrap_err().code != expected {
+                    return Err("Hierarchy fixed rejection mismatch".into());
+                }
+            }
+            let bytes = original.validate()?.encode();
+            for end in 0..bytes.len() {
+                if hierarchy::decode(&bytes[..end]).is_ok() {
+                    return Err("Truncated hierarchy accepted".into());
+                }
+            }
+            let mut flag = bytes;
+            flag[75] = 2;
+            if hierarchy::decode(&flag).unwrap_err().code != Code::InvalidEncoding {
+                return Err("Unknown hierarchy clip flag accepted".into());
+            }
+        }
+        _ => return Err("Unknown fixed hierarchy fixture".into()),
+    }
+    Ok(())
+}
 
 pub fn run_image(case: &str) -> Result<()> {
     if !wallpaper_sandbox::is_appcontainer()? {

@@ -43,6 +43,8 @@ Run `cargo run --release -p wallpaper-cli --locked -- --compile-check` for origi
 
 Run `cargo run --release -p wallpaper-cli --locked -- --compile-image-check` for the separate original PNG fixture, pixel decoding and independent scene/asset validation. `cargo test -p wallpaper-media --locked` covers the bounded PNG contract; the `image-basic`/`image-invalid` cases are included in the native sandbox runner. These commands open no window. `cargo run --release -p wallpaper-preview --locked -- --example image --seconds 10` opens the fixed image preview; see [PNG resource limits and local visual evidence](m3-images.md).
 
+Run `cargo run --release -p wallpaper-cli --locked -- --hierarchy-check` to validate the original typed version-2 group fixture, binary roundtrip and derived transform/clip/command order without opening a window. `hierarchy-basic`/`hierarchy-invalid` are included in the native sandbox runner. The compiler and preview still consume version 1; see [Group-data scope, budgets and remaining integration](m3-groups.md).
+
 Run `cargo run --release -p wallpaper-preview --locked -- --example static --seconds 30` for the original compiled HTML/CSS window. It accepts only the fixed embedded example, with no external paths or JS. See [Visual reference, fit/text rules and remaining lifecycle validation](m3-preview.md). The original M1 fixture remains the default without `--example`.
 
 ## Protocol boundary checks

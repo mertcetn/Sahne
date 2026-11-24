@@ -5,13 +5,13 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [] => {
             println!(
-                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check | --compile-check | --compile-image-check]\nExternal package loading and wallpaper execution are not implemented."
+                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check]\nExternal package loading and wallpaper execution are not implemented."
             );
             ExitCode::SUCCESS
         }
         [arg] if arg == "--help" || arg == "-h" => {
             println!(
-                "Usage: wallpaper-cli [--help | --version | --scene-check | --compile-check | --compile-image-check]\n--scene-check validates and roundtrips a fixed built-in scene.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\n--compile-image-check also decodes an original fixed PNG and validates its pixel assets against the scene.\nNo external files, rendering or script execution in these checks."
+                "Usage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check]\n--scene-check validates and roundtrips a fixed built-in flat scene.\n--hierarchy-check validates and roundtrips an original version-2 group fixture; no group rendering.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\n--compile-image-check also decodes an original fixed PNG and validates its pixel assets against the scene.\nNo external files, rendering or script execution in these checks."
             );
             ExitCode::SUCCESS
         }
@@ -23,6 +23,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("Scene self-check failed: {error}");
+                ExitCode::from(1)
+            }
+        },
+        [arg] if arg == "--hierarchy-check" => match check_hierarchy() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Hierarchy self-check failed: {error}");
                 ExitCode::from(1)
             }
         },
@@ -40,6 +47,31 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+fn check_hierarchy() -> Result<(), Box<dyn std::error::Error>> {
+    use wallpaper_scene::hierarchy;
+    let scene = hierarchy::fixtures::original().validate()?;
+    let bytes = scene.encode();
+    let decoded = hierarchy::decode(&bytes)?;
+    if decoded != scene
+        || decoded.encode() != bytes
+        || decoded.commands().len() != 5
+        || decoded.resolved()[2].bounds.x != 190.0
+        || decoded.resolved()[2].bounds.y != 200.0
+    {
+        return Err(
+            std::io::Error::other("Hierarchy roundtrip or derived commands changed").into(),
+        );
+    }
+    println!(
+        "Hierarchy self-check passed: version={}, layers={}, commands={}, encoded bytes={}. Fixed typed data only; no source parsing, rendering or script execution.",
+        decoded.scene().version,
+        decoded.scene().layers.len(),
+        decoded.commands().len(),
+        bytes.len()
+    );
+    Ok(())
 }
 
 fn check_compiler(image: bool) -> Result<(), Box<dyn std::error::Error>> {

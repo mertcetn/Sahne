@@ -7,7 +7,7 @@ publish.workspace = true
 
 [dependencies]
 wallpaper-compiler = { path = "../../crates/wallpaper-compiler", features = ["fixtures"] }
-wallpaper-scene = { path = "../../crates/wallpaper-scene" }
+wallpaper-scene = { path = "../../crates/wallpaper-scene", features = ["fixtures"] }
 wallpaper-media = { path = "../../crates/wallpaper-media" }
 
 [lints]

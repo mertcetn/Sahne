@@ -1,5 +1,5 @@
 use super::*;
-const MAGIC: &[u8; 8] = b"SAHNSCN\0";
+pub(super) const MAGIC: &[u8; 8] = b"SAHNSCN\0";
 
 pub(super) fn encode(scene: &Scene) -> Vec<u8> {
     // Validation bounds this estimate below MAX_SCENE_BYTES, including all text.
@@ -60,18 +60,18 @@ pub(super) fn encode(scene: &Scene) -> Vec<u8> {
     }
     bytes
 }
-fn put_u32(bytes: &mut Vec<u8>, value: u32) {
+pub(super) fn put_u32(bytes: &mut Vec<u8>, value: u32) {
     bytes.extend_from_slice(&value.to_le_bytes());
 }
 
-struct Reader<'a> {
-    bytes: &'a [u8],
-    position: usize,
-    context: Context,
-    text_bytes: usize,
+pub(super) struct Reader<'a> {
+    pub(super) bytes: &'a [u8],
+    pub(super) position: usize,
+    pub(super) context: Context,
+    pub(super) text_bytes: usize,
 }
 impl<'a> Reader<'a> {
-    fn take(&mut self, count: usize) -> Result<&'a [u8]> {
+    pub(super) fn take(&mut self, count: usize) -> Result<&'a [u8]> {
         let end = self
             .position
             .checked_add(count)
@@ -83,17 +83,17 @@ impl<'a> Reader<'a> {
         self.position = end;
         Ok(bytes)
     }
-    fn u32(&mut self) -> Result<u32> {
+    pub(super) fn u32(&mut self) -> Result<u32> {
         // take(4) guarantees this fixed-size conversion, including for hostile input.
         Ok(u32::from_le_bytes(self.take(4)?.try_into().unwrap()))
     }
-    fn float(&mut self) -> Result<f32> {
+    pub(super) fn float(&mut self) -> Result<f32> {
         Ok(f32::from_bits(self.u32()?))
     }
-    fn color(&mut self) -> Result<Color> {
+    pub(super) fn color(&mut self) -> Result<Color> {
         Ok(Color(self.take(4)?.try_into().unwrap()))
     }
-    fn text(&mut self) -> Result<String> {
+    pub(super) fn text(&mut self) -> Result<String> {
         let count = self.u32()? as usize;
         if count > MAX_TEXT_BYTES {
             return Err(error(ErrorCode::BudgetExceeded, self.context));

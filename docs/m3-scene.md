@@ -1,6 +1,6 @@
 # M3 scene-data foundation
 
-Date: November 14, 2026. Status: implemented experimental data model, codec and validation. Later steps add a [bounded manifest/source package](m3-manifest.md), [strict compiler](m3-compiler.md) and [original static window reference](m3-preview.md). Complete source/media/effect integration and G3 acceptance remain pending.
+Version-1 foundation recorded November 14, 2026. Later steps add a [bounded manifest/source package](m3-manifest.md), [strict compiler](m3-compiler.md) and [original static window reference](m3-preview.md). A separate [version-2 group-data boundary](m3-groups.md) was added November 24 without changing v1 source/preview behavior. Complete source/effect integration and G3 acceptance remain pending; this document describes v1.
 
 ## Run the fixed check
 

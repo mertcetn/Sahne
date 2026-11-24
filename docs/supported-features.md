@@ -10,4 +10,6 @@ Initial selectors are ID and class. Cascade ordering is specificity followed by 
 
 Prototype rendering covers colors/backgrounds, static images, text size, translate, scale, and opacity. Specify transform order, stacking, clipping and group compositing in G3 fixtures. Native animation targets only approved properties; timing, animation/script precedence, and pause semantics are defined in the scripting contract before integration.
 
+The [version-2 native group-data contract](m3-groups.md) now specifies ordered groups, axis transforms, rectangular ancestor clips and true group-opacity boundaries, with bounded validation. It is not connected to the compiler/preview yet: source transform, opacity and overflow properties remain rejected. Their data representation alone does not establish rendered support.
+
 Reject unsupported features with file/source diagnostics. Canvas, WebGL, SVG, Grid, shaders, network, audio, and arbitrary website compatibility are excluded. Product additions follow the architecture and require documented behavior plus validation.
