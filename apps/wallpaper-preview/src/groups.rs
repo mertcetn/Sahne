@@ -1,4 +1,4 @@
-//! Fixed original v2 fixture only; multi-pass implementation awaits window validation.
+//! Multi-pass rendering of the original fixed v2 fixture; no external input.
 use super::*;
 use glyphon::Wrap;
 use std::collections::BTreeMap;
@@ -271,7 +271,7 @@ impl Renderer {
         }
         queue.write_buffer(&uniform, 0, &records);
         eprintln!(
-            "Compiled original Groups fixture: layers={}, commands={}, offscreen targets={}, text surfaces={}, known texture bytes={}; pending runtime/visual validation.",
+            "Compiled original Groups fixture: layers={}, commands={}, offscreen targets={}, text surfaces={}, known texture bytes={}.",
             scene.scene().layers.len(),
             scene.commands().len(),
             plan.targets,

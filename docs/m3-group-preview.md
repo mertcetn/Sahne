@@ -1,6 +1,6 @@
-# M3 group renderer implementation — runtime validation pending
+# M3 fixed group renderer and local validation
 
-Updated: November 24, 2026. Status: the original version-2 group fixture is wired to a bounded multi-pass renderer and passes CPU planning/shader tests and compilation. No adapter/device/window was opened for this continuation. GPU initialization, actual drawing, visual agreement, resize/idle/recovery and old-mode runtime regression remain unverified on this revision. M3/G3 are incomplete; do not describe group rendering as validated support yet.
+Updated: November 24, 2026. Status: the original version-2 group fixture passed local Windows D3D12 initialization, visual clipping/opacity/resize checks and controlled lifecycle tests; old static/image modes also passed regression checks. Evidence below is limited to this original fixture and recorded hardware. M3/G3 remain incomplete; arbitrary content, broader effect fixtures and platform/display coverage remain open.
 
 ## Entry point and authorization checkpoint
 
@@ -15,13 +15,13 @@ cargo test -p wallpaper-preview --locked
 cargo run --release -p wallpaper-cli --locked -- --compile-groups-check
 ```
 
-The following command opens a window and is the next validation step, deferred until the user is ready for screen/window access:
+The following command opens the original fixture in a window:
 
 ```powershell
 cargo run --release -p wallpaper-preview --locked -- --example groups --seconds 10
 ```
 
-The existing recreation and device-loss flags are carried through to group mode, but have not been exercised in it. `--desktop` combinations are also unverified. Help explicitly labels group runtime/visual validation as pending. The user requested a pause before this stage; no headless device run or alternate screen-access mechanism was used to bypass it.
+The existing recreation and device-loss flags have now been exercised in group mode on the recorded machine. `--desktop` combinations remain unverified. The implementation originally paused before window/screen access at the user's request; the user subsequently authorized the checks recorded below. No alternate screen-access mechanism was used to bypass that pause.
 
 ## Ordered rendering and opacity
 
@@ -31,13 +31,13 @@ Children paint in source order into the current opacity target. At group end, th
 
 The root clear color is converted from straight sRGB to premultiplied linear values. The final root texture is copied with replacement blending into an aspect-preserving, centered quad in the physical client area, avoiding a second blend over its own background. Letterbox regions use the scene background. All intermediate painting uses native canvas resolution; resizing updates only the final quad. Nearest/clamped sampling is explicit throughout. Large presentation magnification can expose the fixed canvas raster; high-DPI quality equivalence with the v1 direct text path is not claimed.
 
-The initial implementation opens a load-preserving render pass per paint/composite operation, with separate clears and presentation. The fixture plans six paint/composite operations, two canvas targets and one text surface: ten passes on its first frame including text preparation, nine on later redraws. This favors inspectable order over batching and is not a performance claim. The existing change-driven event loop introduces no per-frame animation timer; actual idle behavior still needs measurement.
+The initial implementation opens a load-preserving render pass per paint/composite operation, with separate clears and presentation. The fixture plans six paint/composite operations, two canvas targets and one text surface: ten passes on its first frame including text preparation, nine on later redraws. This favors inspectable order over batching and is not a performance claim. The existing change-driven event loop introduces no per-frame animation timer; the controlled quiet-idle check below observed one presentation in six seconds.
 
 ## Bounds, clipping and text
 
 Validated accumulated transforms determine rectangle/image world-space quads. Every operation receives its effective canvas/ancestor clip. A conservative integer scissor encloses that clip, while the fragment shader rejects pixel centers outside the exact fractional rectangle. Empty/outside clips and zero-area draws are skipped; their source data and resource declarations have already been validated. This is hard axis-aligned clipping, not rounded/path clipping or edge anti-aliasing.
 
-Glyphon's scalar text-area scale cannot directly express distinct X/Y scales. Each visible text node therefore gets a separate transparent, tightly bounded raster target. Text is shaped with the existing bundled Noto Sans, no wrap and 1.25 line height; raster scale is the larger accumulated axis scale, with a minimum of one. Its premultiplied texture is then mapped to the independently transformed world rectangle, preserving anisotropic scale and source paint order. UV extent accounts for ceil-rounded raster dimensions, and the world quad/ancestor clip bounds the final result. This is an implementation awaiting visual validation, including fractional clips and stretched text.
+Glyphon's scalar text-area scale cannot directly express distinct X/Y scales. Each visible text node therefore gets a separate transparent, tightly bounded raster target. Text is shaped with the existing bundled Noto Sans, no wrap and 1.25 line height; raster scale is the larger accumulated axis scale, with a minimum of one. Its premultiplied texture is then mapped to the independently transformed world rectangle, preserving anisotropic scale and source paint order. UV extent accounts for ceil-rounded raster dimensions, and the world quad/ancestor clip bounds the final result. The fixed uniform-scale text case is observed below; fractional-clip and stretched-text GPU references remain open.
 
 Text preparation/raster painting is cached after the first successful command encoding; later window resizes reuse the fixed scene/text textures. A new renderer/device generation rebuilds everything, including this cache. Group mode owns an RGBA8-target Glyphon atlas/viewports rather than reusing the differently formatted swapchain text pipeline. Text shaping, atlas allocation and driver failures still require runtime checks; cached text is not a native animation implementation.
 
@@ -56,7 +56,7 @@ The planner first checks every declared image and the canvas against device text
 
 All applicable limits must pass; a scene accepted by the data codec may still be rejected by this renderer admission policy. Values are not silently clamped or downscaled to evade budgets. Text rectangles are conservatively budgeted before ancestor cropping. Even invisible opacity groups reserve targets. The preview fixture's known texture bytes are 16,804,096: two 8,294,400-byte canvas targets, one 215,040-byte text raster (840x64) and the original 256-byte image. The unchanged compiler fixture's CPU plan separately remains 16,691,456 bytes with its smaller text box.
 
-The texture estimate excludes driver padding/staging, Glyphon atlases, shaping/cache/vertex buffers and existing baseline preview allocations; it is not a total RAM/VRAM measurement or OS limit. Those costs and allocation failures remain material runtime/performance questions before arbitrary content. Initialization uses wgpu validation/OOM error-scope guards, popped in reverse order before awaiting results, then propagates captured errors through the existing bounded initialization recovery path. No adapter limits or sandbox policies are raised. Actual scope/error/recovery behavior has not yet been exercised for this mode.
+The texture estimate excludes driver padding/staging, Glyphon atlases, shaping/cache/vertex buffers and existing baseline preview allocations; it is not a total RAM/VRAM measurement or OS limit. Those costs and allocation failures remain material runtime/performance questions before arbitrary content. Initialization uses wgpu validation/OOM error-scope guards, popped in reverse order before awaiting results, then propagates captured errors through the existing bounded initialization recovery path. No adapter limits or sandbox policies are raised. Normal initialization and requested device-loss recovery passed below; deliberate OOM/validation-error injection was not performed.
 
 ## CPU checks and remaining acceptance
 
@@ -66,10 +66,43 @@ No new dependency, feature, license, native API binding or Cargo.lock change is 
 
 Primary documentation consulted November 24, 2026: [wgpu 30.0.1 blend states](https://docs.rs/wgpu/30.0.1/wgpu/struct.BlendState.html), [scissor rectangles](https://docs.rs/wgpu/30.0.1/wgpu/struct.RenderPass.html#method.set_scissor_rect), [sRGB formats](https://docs.rs/wgpu/30.0.1/wgpu/enum.TextureFormat.html), [error-scope guard lifecycle](https://docs.rs/wgpu/30.0.1/wgpu/struct.ErrorScopeGuard.html) and [Glyphon 0.12.0 preparation/rendering](https://docs.rs/glyphon/0.12.0/glyphon/struct.TextRenderer.html). Pinned Glyphon cache/atlas source confirms straight-alpha blending and accurate color conversion for the local raster target. These API/source checks are not GPU runtime evidence.
 
-Next acceptance requires a user-authorized window run: verify overlap opacity, clipped transformed text/PNG and geometry; retain an actual reference; resize/maximize/restore; measure quiet idle; recreate and request real device-loss callbacks; and regress static/image/M1 modes. More adversarial/synthetic effect fixtures, display/DPI/hardware coverage, production input, animation/timing, hashes/I1 and full G3 remain open.
+The authorized local window/reference, resize, quiet-idle, recreation/device-loss and old-mode regression checks are now recorded below. More adversarial/synthetic effect fixtures, nested-opacity and nonuniform-scale GPU references, fractional clipping, display/DPI/hardware coverage, production input, animation/timing, hashes/I1 and full G3 remain open. CPU tests for those numeric/planning paths do not constitute their visual acceptance.
+
+## Authorized window reference — November 24, 2026
+
+Release source e00a31d, NVIDIA GeForce RTX 3050 Laptop GPU, driver 32.0.16.1062, D3D12, scale 1. This run reported one active 1920x1080 display at 120 Hz. The user explicitly authorized visual testing after the earlier checkpoint.
+
+![Original group opacity and clipped text/PNG at 960x600](images/m3-group-reference.jpg)
+
+This is the unchanged actual-window JPEG, including chrome, not a pixel-exact/colorimetric golden. In a 960x600 client area, the panel occupies `(45,80)` through `(365,320)`. Opaque blue correctly occludes red within the half-opacity group: the overlap has no extra red mixture relative to the rest of the blue rectangle. Panel, child geometry and color appearance agree visually with the source/CPU reference and one composite at group end.
+
+The long text is cut at client x=365, the panel edge. The PNG starts at `(325,272)` and is clipped to 40x48 visible client pixels, retaining visible portions of the original quadrants including the half-alpha lower-right region. Content does not leak beyond the right/bottom panel edges. This observes the fixture's uniform scale and integer-edge clipping, not every transform or fractional clip case.
+
+Maximize changed the client to 1920x1009; the fitted canvas, overlap, text and PNG clipping remained visually consistent. Restore returned to the same 960x600 output. Escape exited 0 after three presented frames/one generation, with zero pending recreations. GPU initialization reported two canvas targets, one text surface and 16,804,096 known texture bytes, with no initialization/rendering error in the log. Log root: ignored target/m3-group-visual/85cdfc1f98844d739d6e19ef49447ede/.
+
+The existing static and PNG windows were separately observed against their previous references and closed normally with Escape: each exited 0 with one presentation/one generation. Logs: target/m3-group-regression/static-c73505cd278340189e725cd402d25f84/ and target/m3-group-regression/image-fd917d9061404648a3a5cb15e8732889/. These are limited visual regressions; they do not establish desktop attachment or additional hardware support.
 
 ## Local nonvisual validation — November 24, 2026
 
 All 106 workspace Rust tests passed, including the preview's thirteen tests (eight new group tests). Workspace release build, Clippy with warnings denied and formatting passed. Exact independent CPU overlap/compositing results and shader validation are recorded by those tests; they do not execute any GPU pipeline. Base revision during checks: 99814e4 with this continuation uncommitted. Existing Cargo incremental-cache hardlink/copy notices remain.
 
-Cargo.lock and external dependencies are unchanged. Native sandbox code/policy/corpus are unchanged and its full suite was not repeated for this preview-only continuation. Hosted CI, non-Windows builds, actual group GPU/device/window/visual checks and existing-mode runtime regressions were not run. The implementation is intentionally stopped at the user's screen-access checkpoint, not marked as G3 acceptance.
+Cargo.lock and external dependencies were unchanged. Native sandbox code/policy/corpus were unchanged and its full suite was not repeated for that preview-only continuation. At this initial checkpoint, hosted CI, non-Windows builds, actual group GPU/device/window/visual checks and existing-mode runtime regressions had not run. Work paused at the user's screen-access checkpoint; the subsequently authorized local evidence is recorded in the window and lifecycle sections. Full G3 remains open.
+
+## Controlled lifecycle regression — November 24, 2026
+
+Ten sequential owned processes passed with a 25-second outer guard and bounded logs. Report: ignored target/m3-group-lifecycle/5f4b67a8035441788db78c7d53521c8e/summary.json, committed source e00a31d, retaining the tested binary SHA256 and per-case arguments/results. Each process exited 0 with zero pending recreations. No UI automation occurred during these timed cases.
+
+| Case | Duration | Frames | Generations | Additional requirement |
+| --- | --- | --- | --- | --- |
+| Groups idle | 6 s | 1 | 1 | No continuous redraw |
+| Groups recreate twice | 8 s | 3 | 3 | Fresh renderer per generation |
+| Groups device loss | 8 s | 2 | 2 | Requested-generation callback and restored frame confirmed |
+| Static idle | 6 s | 1 | 1 | No continuous redraw |
+| Static recreate twice | 8 s | 3 | 3 | Recovery regression |
+| Static device loss | 8 s | 2 | 2 | Callback and restored frame confirmed |
+| Image idle | 6 s | 1 | 1 | No continuous redraw |
+| Image recreate twice | 8 s | 3 | 3 | Recovery regression |
+| Image device loss | 8 s | 2 | 2 | Callback and restored frame confirmed |
+| Original M1 baseline | 4 s | 1 | 1 | Existing path remains functional |
+
+Device-loss acceptance still requires the actual requested-generation callback before a later-generation frame; unrelated redraws do not satisfy it. This is application-requested device destruction, not a forced driver/hardware fault. Quiet-idle observations are six seconds per compiled mode, not a long-duration performance/soak claim. Subsequent code edits only remove stale pending-validation help/log text and update a module comment; rendering algorithms, limits and dependencies are unchanged. The release preview was rebuilt and its nonvisual help checked afterward. Full G3 and the broader effect/platform cases above remain open.
