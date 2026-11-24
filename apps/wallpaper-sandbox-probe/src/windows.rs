@@ -222,6 +222,8 @@ fn worker(args: &[String]) -> Result<()> {
         | "package-invalid"
         | "compiler-basic"
         | "compiler-invalid"
+        | "image-basic"
+        | "image-invalid"
         | "network"
         | "network-egress"
         | "memory"
@@ -388,11 +390,18 @@ fn worker(args: &[String]) -> Result<()> {
     } else {
         0
     };
+    let image_result = if case.starts_with("image-") {
+        package::run_image(case)?;
+        package::IMAGE_RESULT_BIT
+    } else {
+        0
+    };
     let denied = u32::from(read_denied)
         | (u32::from(write_denied) << 1)
         | (u32::from(process_denied) << 2)
         | 16
         | (u32::from(memory_denied) << 5)
+        | image_result
         | (u32::from(case == "process") << 6)
         | script_result
         | package_result
@@ -500,7 +509,7 @@ fn host(args: &[String]) -> Result<()> {
             "Package cases: package-basic and package-invalid. Original fixed in-memory manifest/source entries are validated inside AppContainer. Invalid permissions, version, traversal, FPS and case collision must be rejected. No external path, archive extraction or JavaScript execution."
         );
         println!(
-            "Compiler cases: compiler-basic and compiler-invalid. Original embedded HTML/CSS is compiled and its scene revalidated inside AppContainer; malformed/unsupported source must fail with bounded source diagnostics. No external path or script execution."
+            "Compiler cases: compiler-basic and compiler-invalid. Image cases: image-basic and image-invalid. Original embedded HTML/CSS/PNG is compiled and its scene/assets revalidated inside AppContainer; malformed/unsupported source must fail with bounded diagnostics. No external path or script execution."
         );
         return Ok(());
     }
@@ -527,6 +536,8 @@ fn host(args: &[String]) -> Result<()> {
         "package-invalid",
         "compiler-basic",
         "compiler-invalid",
+        "image-basic",
+        "image-invalid",
         "network",
         "network-egress",
         "memory",
@@ -581,10 +592,10 @@ fn host(args: &[String]) -> Result<()> {
             }
             (
                 "healthy" | "package-basic" | "package-invalid" | "compiler-basic"
-                | "compiler-invalid" | "network" | "network-egress" | "memory"
-                | "memory-incremental" | "process" | "handles" | "endpoint" | "ipc-rights"
-                | "ipc-roundtrip" | "ipc-write-drain" | "filesystem" | "registry" | "js-basic"
-                | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
+                | "compiler-invalid" | "image-basic" | "image-invalid" | "network"
+                | "network-egress" | "memory" | "memory-incremental" | "process" | "handles"
+                | "endpoint" | "ipc-rights" | "ipc-roundtrip" | "ipc-write-drain" | "filesystem"
+                | "registry" | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -593,6 +604,7 @@ fn host(args: &[String]) -> Result<()> {
                         "memory-incremental" => 65536,
                         "package-basic" | "package-invalid" => package::RESULT_BIT,
                         "compiler-basic" | "compiler-invalid" => package::COMPILER_RESULT_BIT,
+                        "image-basic" | "image-invalid" => package::IMAGE_RESULT_BIT,
                         "ipc-roundtrip" => roundtrip::RESULT_BIT,
                         "process" => 64,
                         "handles" => 128,

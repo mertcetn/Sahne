@@ -12,6 +12,7 @@ if (-not $IsWindows) { throw 'The sandbox validation runner requires Windows.' }
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $plan = [ordered]@{
     healthy=1; 'package-basic'=1; 'package-invalid'=1; 'compiler-basic'=1; 'compiler-invalid'=1
+    'image-basic'=1; 'image-invalid'=1
     'network-egress'=1; memory=1; 'memory-incremental'=1; process=1; handles=1; endpoint=1
     'ipc-rights'=1; 'ipc-roundtrip'=1; 'ipc-roundtrip-replay'=1; 'ipc-roundtrip-stall'=1
     filesystem=1; registry=1; 'ipc-write-drain'=1; 'ipc-write-stall'=1; 'cpu-busy'=1

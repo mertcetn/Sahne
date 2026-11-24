@@ -2,6 +2,7 @@ use super::*;
 use css::{Declaration, Property, Rule, Selector};
 use std::collections::BTreeMap;
 use wallpaper_format::Package;
+use wallpaper_media::{RgbaImage, decode_png, validate_assets};
 use wallpaper_scene::{Color, Content, Node, Rect, SCENE_VERSION, Scene, ValidatedScene};
 
 #[derive(Clone, Copy)]
@@ -17,6 +18,7 @@ pub struct Compiled {
     scene: ValidatedScene,
     symbols: BTreeMap<String, Vec<u32>>,
     script: Option<RelativePath>,
+    images: BTreeMap<u32, RgbaImage>,
 }
 impl Compiled {
     pub fn scene(&self) -> &ValidatedScene {
@@ -24,6 +26,9 @@ impl Compiled {
     }
     pub fn symbols(&self) -> &BTreeMap<String, Vec<u32>> {
         &self.symbols
+    }
+    pub fn images(&self) -> &BTreeMap<u32, RgbaImage> {
+        &self.images
     }
     /// Deferred source association only; no script is interpreted by this compiler.
     pub fn script(&self) -> Option<&RelativePath> {
@@ -135,6 +140,9 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
     let mut styles: Vec<Style> = Vec::with_capacity(document.elements.len());
     let mut origins = vec![];
     let mut symbols = BTreeMap::new();
+    let mut images = BTreeMap::new();
+    let mut image_paths = BTreeMap::new();
+    let mut remaining_image_bytes = wallpaper_scene::MAX_DECODED_IMAGE_BYTES;
     for (index, element) in document.elements.iter().enumerate() {
         let parent = element.parent.map(|parent| styles[parent]);
         let mut style = Style::new(parent);
@@ -200,15 +208,41 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
                 })?;
             }
             html::Kind::Image => {
-                if element
+                let path = element
                     .image
                     .as_ref()
-                    .and_then(|path| package.file(path))
-                    .is_none()
-                {
-                    return Err(source.error(ErrorCode::MissingResource, element.span));
+                    .ok_or_else(|| source.error(ErrorCode::InvalidReference, element.span))?;
+                let file = package
+                    .file(path)
+                    .ok_or_else(|| source.error(ErrorCode::MissingResource, element.span))?;
+                if !path.as_str().ends_with(".png") {
+                    return Err(source.error(ErrorCode::InvalidReference, element.span));
                 }
-                return Err(source.error(ErrorCode::ResourceMappingPending, element.span));
+                let resource = if let Some(&id) = image_paths.get(path.as_str()) {
+                    id
+                } else {
+                    if images.len() >= wallpaper_scene::MAX_RESOURCES {
+                        return Err(source.error(ErrorCode::BudgetExceeded, element.span));
+                    }
+                    let image = decode_png(file.bytes(), remaining_image_bytes)
+                        .map_err(|error| source.error(ErrorCode::Image(error), element.span))?;
+                    remaining_image_bytes -= image.pixels().len() as u64;
+                    let id = images.len() as u32 + 1;
+                    scene.resources.push(wallpaper_scene::ImageResource {
+                        id,
+                        width: image.width(),
+                        height: image.height(),
+                    });
+                    images.insert(id, image);
+                    image_paths.insert(path.as_str().to_owned(), id);
+                    id
+                };
+                if style.background.0[3] != 0 {
+                    emit(Content::Rectangle {
+                        color: style.background,
+                    })?;
+                }
+                emit(Content::Image { resource })?;
             }
         }
         if let Some(id) = &element.id {
@@ -229,8 +263,11 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
         .unwrap_or(Span { start: 0, end: 0 });
         source.error(ErrorCode::SceneValidation(error.code), span)
     })?;
+    validate_assets(&scene, &images)
+        .map_err(|error| source.error(ErrorCode::Image(error), Span { start: 0, end: 0 }))?;
     Ok(Compiled {
         scene,
+        images,
         symbols,
         script: package.manifest().script().cloned(),
     })

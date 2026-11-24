@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/wallpaper-cli", "apps/wallpaper-preview", "crates/wallpaper-platform", "crates/wallpaper-protocol", "crates/wallpaper-sandbox", "apps/wallpaper-sandbox-probe", "crates/wallpaper-scene", "crates/wallpaper-format", "crates/wallpaper-compiler"]
+members = ["apps/wallpaper-cli", "apps/wallpaper-preview", "crates/wallpaper-platform", "crates/wallpaper-protocol", "crates/wallpaper-sandbox", "apps/wallpaper-sandbox-probe", "crates/wallpaper-scene", "crates/wallpaper-format", "crates/wallpaper-compiler", "crates/wallpaper-media"]
 resolver = "3"
 
 [workspace.package]

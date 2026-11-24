@@ -13,6 +13,7 @@ wallpaper-sandbox = { path = "../../crates/wallpaper-sandbox" }
 wallpaper-compiler = { path = "../../crates/wallpaper-compiler", features = ["fixtures"] }
 wallpaper-scene = { path = "../../crates/wallpaper-scene" }
 wallpaper-format = { path = "../../crates/wallpaper-format" }
+wallpaper-media = { path = "../../crates/wallpaper-media" }
 rquickjs = { version = "=0.14.0", default-features = false, features = ["std"] }
 
 [lints]

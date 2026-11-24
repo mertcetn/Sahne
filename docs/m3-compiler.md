@@ -1,6 +1,6 @@
 # M3 strict HTML/CSS compiler foundation
 
-Date: November 14, 2026. Status: original fixed-source compilation into the experimental flat scene, with a later [local static window preview](m3-preview.md). Full G3, media/effects/animation and arbitrary input remain pending.
+Updated: November 24, 2026. Status: original fixed-source compilation into the experimental flat scene, including [bounded PNG resources](m3-images.md). The earlier [static window reference](m3-preview.md) predates the image renderer; image-mode runtime/visual validation, full G3, effects/animation and arbitrary input remain pending.
 
 ## Run
 
@@ -22,7 +22,7 @@ Before scene elements, zero or more top-level `<link rel="stylesheet" href="styl
 
 Scene elements are lowercase div, span and img. Div/span require explicit matching end tags; only img/link are void and may use `/>`. Supported element attributes are id, class and style, plus required src for img. Values must be single- or double-quoted, attribute names lowercase, and duplicates fail. IDs/classes are case-sensitive ASCII identifiers: initial letter/underscore followed by letters/digits/underscore/hyphen, at most 64 bytes. Author IDs are unique. Class lists have at most sixteen entries.
 
-Div can contain boxes and whitespace/comments between boxes, but not raw non-whitespace text. Span is a leaf text box; nested elements/comments/mixed inline flow fail. Img parses a validated local reference but **image compilation/decoding is not implemented**: compilation reports missing resource or mapping pending rather than silently omitting it. Group opacity, transforms and clipping are also not implemented in this flat revision.
+Div can contain boxes and whitespace/comments between boxes, but not raw non-whitespace text. Span is a leaf text box; nested elements/comments/mixed inline flow fail. Img resolves a retained lowercase `.png` path, decodes only the [bounded RGBA8 subset](m3-images.md), and emits a scene resource/image primitive. Repeated paths share one decoded asset; image backgrounds precede the image. Missing, malformed or unsupported images fail at the referring HTML element. Group opacity, transforms and ancestor clipping remain unimplemented in this flat revision.
 
 Text preserves literal whitespace inside span, with literal CR/CRLF normalized to LF. Five named references (amp, lt, gt, quot, apos) and semicolon-terminated decimal/hex Unicode references are decoded. Unknown, malformed or control-character references fail; escaped markup stays literal text. Controls other than LF are rejected in scene text. Attribute class whitespace permits ASCII whitespace. Style-attribute character references are excluded so inline CSS byte offsets remain exact in the original HTML.
 
@@ -64,6 +64,6 @@ Local validation passed all 63 workspace Rust tests, release build, Clippy with 
 
 ## Review and remaining gates
 
-The new compiler crate uses only the existing local format/scene crates and inherits unsafe-code prohibition. No external package version or feature is added beyond the previously reviewed JSON graph; CLI/probe now link that graph through the compiler. The fixtures feature embeds only original checked-in sources, never ignored samples/. This is not a claim that handwritten subset parsing is secure: the grammar, bounds and negative corpus require continued adversarial/fuzz/helper validation before arbitrary source input is enabled.
+The compiler inherits unsafe-code prohibition and now uses local format/scene/media crates. The media graph is separately assessed in the [PNG dependency review](m3-png-dependencies.md). The fixtures feature embeds only original checked-in sources, never ignored samples/. This is not a claim that handwritten subset parsing is secure: the grammar, bounds and negative corpus require continued adversarial/fuzz/helper validation before arbitrary source input is enabled.
 
 Primary standards reviewed November 14, 2026: [WHATWG HTML syntax](https://html.spec.whatwg.org/multipage/syntax.html), [CSS Syntax Level 3](https://www.w3.org/TR/css-syntax-3/) and [selector specificity](https://www.w3.org/TR/selectors-4/#specificity). They inform the terminology and relative cascade behavior. This deliberately narrower grammar does not implement their complete tokenization, recovery or selector algorithms. Unsupported behavior stays rejected and documented. Production G2/G3 and arbitrary source/package execution remain open.

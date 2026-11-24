@@ -38,7 +38,7 @@ pub enum ErrorCode {
     InvalidColor,
     MissingResource,
     MissingDimensions,
-    ResourceMappingPending,
+    Image(wallpaper_media::Error),
     SceneValidation(wallpaper_scene::ErrorCode),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]

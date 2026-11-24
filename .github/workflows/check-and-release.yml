@@ -21,6 +21,7 @@ jobs:
       - run: ./target/release/wallpaper-cli.exe --version
       - run: ./target/release/wallpaper-cli.exe --scene-check
       - run: ./target/release/wallpaper-cli.exe --compile-check
+      - run: ./target/release/wallpaper-cli.exe --compile-image-check
       - run: ./target/release/wallpaper-preview.exe --help
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/release'

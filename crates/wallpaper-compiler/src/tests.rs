@@ -204,7 +204,7 @@ fn text_background_and_foreground_share_one_element_binding() {
 }
 
 #[test]
-fn missing_dimensions_resources_and_unimplemented_mapping_are_not_silent() {
+fn missing_dimensions_resources_and_invalid_images_are_not_silent() {
     assert_eq!(
         compile(&package("<div style='width:1px'></div>", ""), viewport())
             .unwrap_err()
@@ -228,8 +228,120 @@ fn missing_dimensions_resources_and_unimplemented_mapping_are_not_silent() {
         )
         .unwrap_err()
         .code,
-        ErrorCode::ResourceMappingPending
+        ErrorCode::Image(wallpaper_media::Error::InvalidPng)
     );
+}
+
+#[test]
+fn image_fixture_pixels_binding_and_independent_assets() {
+    let compiled = compile(&fixtures::image_package().unwrap(), viewport()).unwrap();
+    let decoded = wallpaper_scene::decode(&compiled.scene().encode()).unwrap();
+    wallpaper_media::validate_assets(&decoded, compiled.images()).unwrap();
+    assert_eq!(decoded.scene().nodes.len(), 3);
+    assert_eq!(decoded.scene().resources.len(), 1);
+    assert_eq!(compiled.symbols()["pattern"], [3]);
+    assert_eq!(decoded.scene().nodes[2].bounds.x, 104.0);
+    assert_eq!(decoded.scene().nodes[2].bounds.y, 192.0);
+    assert_eq!(
+        decoded.scene().nodes[2].content,
+        wallpaper_scene::Content::Image { resource: 1 }
+    );
+    let image = &compiled.images()[&1];
+    assert_eq!(
+        (image.width(), image.height(), image.pixels().len()),
+        (8, 8, 256)
+    );
+    for (x, y, rgba) in [
+        (0, 0, [32, 160, 128, 255]),
+        (7, 0, [230, 160, 64, 255]),
+        (0, 7, [40, 64, 128, 255]),
+        (7, 7, [230, 64, 96, 128]),
+    ] {
+        let start = (y * 8 + x) * 4;
+        assert_eq!(&image.pixels()[start..start + 4], &rgba);
+    }
+}
+
+#[test]
+fn repeated_image_path_reuses_one_asset_and_background_precedes_image() {
+    let original = fixtures::image_package().unwrap();
+    let html = "<img id='first' src='checker.png' style='width:10px;height:20px;background-color:#fff'><img id='second' src='checker.png' style='width:30px;height:40px'>";
+    let entries = original
+        .files()
+        .map(|file| {
+            (
+                file.path().as_str().to_owned(),
+                if file.path().as_str() == "index.html" {
+                    html.as_bytes().to_vec()
+                } else {
+                    file.bytes().to_vec()
+                },
+            )
+        })
+        .collect();
+    let compiled = compile(
+        &wallpaper_format::Package::from_entries(entries).unwrap(),
+        viewport(),
+    )
+    .unwrap();
+    assert_eq!(compiled.images().len(), 1);
+    assert_eq!(compiled.scene().scene().resources.len(), 1);
+    assert_eq!(compiled.symbols()["first"], [1, 2]);
+    assert_eq!(compiled.symbols()["second"], [3]);
+    assert!(matches!(
+        compiled.scene().scene().nodes[0].content,
+        wallpaper_scene::Content::Rectangle { .. }
+    ));
+    for node in &compiled.scene().scene().nodes[1..] {
+        assert_eq!(
+            node.content,
+            wallpaper_scene::Content::Image { resource: 1 }
+        );
+    }
+}
+
+#[test]
+fn image_errors_keep_html_location_and_reject_wrong_extension() {
+    let original = fixtures::image_package().unwrap();
+    for (path, bytes, expected) in [
+        (
+            "checker.png",
+            vec![],
+            ErrorCode::Image(wallpaper_media::Error::InvalidPng),
+        ),
+        (
+            "index.html",
+            b"\n<img src='missing.png' style='width:1px;height:1px'>".to_vec(),
+            ErrorCode::MissingResource,
+        ),
+        (
+            "index.html",
+            b"\n<img src='style.css' style='width:1px;height:1px'>".to_vec(),
+            ErrorCode::InvalidReference,
+        ),
+    ] {
+        let entries = original
+            .files()
+            .map(|file| {
+                (
+                    file.path().as_str().to_owned(),
+                    if file.path().as_str() == path {
+                        bytes.clone()
+                    } else {
+                        file.bytes().to_vec()
+                    },
+                )
+            })
+            .collect();
+        let error = compile(
+            &wallpaper_format::Package::from_entries(entries).unwrap(),
+            viewport(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, expected);
+        assert_eq!(error.path.as_str(), "index.html");
+        assert!(error.line >= 2);
+    }
 }
 
 #[test]

@@ -41,6 +41,8 @@ Run `cargo run --release -p wallpaper-cli --locked -- --scene-check` to validate
 
 Run `cargo run --release -p wallpaper-cli --locked -- --compile-check` for original embedded HTML/CSS compilation and independent scene decode. `cargo test -p wallpaper-compiler --locked` checks the strict grammar, cascade/layout, diagnostics and limits. The `compiler-basic`/`compiler-invalid` sandbox cases exercise that code in AppContainer. No external input or rendering is enabled by these commands; see [Compiler subset and commands](m3-compiler.md).
 
+Run `cargo run --release -p wallpaper-cli --locked -- --compile-image-check` for the separate original PNG fixture, pixel decoding and independent scene/asset validation. `cargo test -p wallpaper-media --locked` covers the bounded PNG contract; the `image-basic`/`image-invalid` cases are included in the native sandbox runner. These commands open no window. The implemented `wallpaper-preview --example image` requires a window and still awaits runtime/visual verification; see [PNG resource limits and pending checks](m3-images.md).
+
 Run `cargo run --release -p wallpaper-preview --locked -- --example static --seconds 30` for the original compiled HTML/CSS window. It accepts only the fixed embedded example, with no external paths or JS. See [Visual reference, fit/text rules and remaining lifecycle validation](m3-preview.md). The original M1 fixture remains the default without `--example`.
 
 ## Protocol boundary checks

@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 wallpaper-compiler = { path = "../../crates/wallpaper-compiler", features = ["fixtures"] }
 wallpaper-scene = { path = "../../crates/wallpaper-scene" }
+wallpaper-media = { path = "../../crates/wallpaper-media" }
 wallpaper-platform = { path = "../../crates/wallpaper-platform" }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "dx12", "wgsl"] }
 winit = { version = "=0.30.13", default-features = false, features = ["rwh_06"] }

@@ -11,6 +11,7 @@ fixtures = []
 [dependencies]
 wallpaper-format = { path = "../wallpaper-format" }
 wallpaper-scene = { path = "../wallpaper-scene" }
+wallpaper-media = { path = "../wallpaper-media" }
 
 [lints]
 workspace = true

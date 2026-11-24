@@ -28,22 +28,23 @@ struct DeviceLost {
 fn main() -> Result<()> {
     let (mut seconds, mut desktop_mode, mut recreate) = (None, false, 0u32);
     let mut test_device_loss = false;
-    let mut compiled_example = false;
+    let mut compiled_example = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example static compiles original embedded HTML/CSS; no external file path. Escape closes window mode. Test recreation does not restart Explorer."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS, optionally with a fixed PNG; no external file path. Image-mode visual/runtime validation is pending. Escape closes window mode. Test recreation does not restart Explorer."
                 );
                 return Ok(());
             }
             "--desktop" => desktop_mode = true,
             "--example" => {
-                if args.next().as_deref() != Some("static") {
-                    return Err("Only the original static example is available".into());
-                }
-                compiled_example = true;
+                compiled_example = Some(match args.next().as_deref() {
+                    Some("static") => compiled::Example::Static,
+                    Some("image") => compiled::Example::Image,
+                    _ => return Err("Choose an original static or image example".into()),
+                });
             }
             "--test-device-loss" => test_device_loss = true,
             "--seconds" => {
@@ -106,7 +107,7 @@ struct App {
     state: Option<State>,
     desktop: Option<wallpaper_platform::Desktop>,
     desktop_mode: bool,
-    compiled_example: bool,
+    compiled_example: Option<compiled::Example>,
     next_probe: Instant,
     next_retry: Option<Instant>,
     budget: lifecycle::RecoveryBudget,
@@ -152,10 +153,10 @@ impl App {
                 None
             };
             let attrs = Window::default_attributes()
-                .with_title(if self.compiled_example {
-                    "Sahne — M3 compiled static example"
-                } else {
-                    "Sahne — M1 trusted scene"
+                .with_title(match self.compiled_example {
+                    Some(compiled::Example::Static) => "Sahne — M3 compiled static example",
+                    Some(compiled::Example::Image) => "Sahne — M3 compiled image example",
+                    None => "Sahne — M1 trusted scene",
                 })
                 .with_inner_size(LogicalSize::new(960.0, 600.0));
             let attrs = if let Some(ref d) = desktop {
@@ -372,7 +373,7 @@ impl State {
         proxy: EventLoopProxy<DeviceLost>,
         generation: u64,
         report_destroyed: bool,
-        compiled_example: bool,
+        compiled_example: Option<compiled::Example>,
     ) -> Result<Self> {
         let mut desc = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
             events.owned_display_handle(),
@@ -407,7 +408,7 @@ impl State {
         let mut config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
             .ok_or("Unsupported surface")?;
-        if compiled_example {
+        if compiled_example.is_some() {
             config.format = surface
                 .get_capabilities(&adapter)
                 .formats
@@ -520,12 +521,14 @@ impl State {
         let mut atlas = TextAtlas::new(&device, &queue, &cache, config.format);
         let text_renderer =
             TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
-        let compiled = if compiled_example {
+        let compiled = if let Some(example) = compiled_example {
             Some(compiled::Renderer::new(
                 &device,
+                &queue,
                 config.format,
                 &mut fonts,
                 &mut atlas,
+                example,
             )?)
         } else {
             None

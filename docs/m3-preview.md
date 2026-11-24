@@ -1,6 +1,6 @@
 # M3 compiled static preview
 
-Updated: November 15, 2026. Status: original embedded HTML/CSS rendered in a local Windows D3D12 window, with controlled idle/recreation/device-loss checks. M3/G3 remain incomplete.
+Updated: November 24, 2026. Status: the earlier static revision rendered original embedded HTML/CSS in a local Windows D3D12 window, with controlled idle/recreation/device-loss checks. A new [image preview implementation](m3-images.md) awaits runtime/visual checks, including a static-mode regression. M3/G3 remain incomplete.
 
 ## Run
 
@@ -8,9 +8,9 @@ Updated: November 15, 2026. Status: original embedded HTML/CSS rendered in a loc
 cargo run --release -p wallpaper-preview --locked -- --example static --seconds 30
 ```
 
-Escape closes window mode. Only the literal example name `static` is accepted; a path, URL, unknown example or missing example value fails. The existing default M1 fixture remains available without `--example`. The CLI's `--compile-check` remains a nonvisual check.
+Escape closes window mode. Literal example names `static` and `image` are accepted; a path, URL, unknown example or missing example value fails. `image` selects the new fixed PNG fixture whose runtime/visual verification is pending. The existing default M1 fixture remains available without `--example`. The CLI's `--compile-check` and `--compile-image-check` are nonvisual checks.
 
-The new mode embeds examples/static-scene at build time, validates the in-memory package, compiles the restricted HTML/CSS and independently decodes/validates its scene before allocating drawing resources. It opens no source path and executes no JS. The current example has a panel, title and accent rectangle; images/media and arbitrary package loading remain disabled.
+Static mode embeds examples/static-scene at build time, validates the in-memory package, compiles the restricted HTML/CSS and independently decodes/validates its scene before allocating drawing resources. It opens no source path and executes no JS. This example still has the unchanged panel, title and accent rectangle. Image mode separately embeds examples/static-image and validates decoded pixels against scene resources before upload; arbitrary package loading remains disabled.
 
 ## Rendering behavior
 
@@ -34,13 +34,13 @@ Observed environment: Windows 11 build 26200, NVIDIA GeForce RTX 3050 Laptop GPU
 
 Two new pure checks cover canvas aspect/letterbox geometry and sRGB/alpha conversion; all 65 workspace Rust tests passed, including the preview's four tests. Preview Clippy, release build, formatting and local documentation links passed. Help and unknown-example rejection passed without opening a window. The new mode was visually exercised, but its explicit recreation/device-loss flags were not run during this phase. No user testing is requested for checks the agent can perform when work resumes.
 
-No external package version or feature changes in this continuation: the preview now links the already reviewed local compiler/scene crates and their existing JSON graph. Existing renderer/font dependency risks and source/asset isolation requirements remain unchanged. The shader is fixed project code, not a source-package shader feature. Arbitrary source, fonts, images and GPU instructions remain unavailable.
+The earlier static-preview continuation changed no external package versions/features. The November 24 image implementation adds the separately [reviewed PNG graph](m3-png-dependencies.md). Existing renderer/font dependency risks and source/asset isolation requirements remain unchanged. The shader is fixed project code, not a source-package shader feature. Arbitrary source, fonts, images and GPU instructions remain unavailable.
 
 Primary documentation consulted November 14, 2026: [wgpu 30.0.1 bind group layout](https://docs.rs/wgpu/30.0.1/wgpu/struct.BindGroupLayoutEntry.html), [Glyphon 0.12.0 text preparation/rendering](https://docs.rs/glyphon/0.12.0/glyphon/struct.TextRenderer.html) and [WGSL uniform rules](https://www.w3.org/TR/WGSL/). Existing cached Cosmic Text source confirmed the pinned buffer wrap/size and RGBA APIs. Only local Windows runtime behavior is claimed.
 
 ## Resume point
 
-Extend M3 with validated image resources, stacking/clipping/transforms/group opacity, native animation/pause semantics and compiled provenance/hashes. Keep remaining visual/platform checks, I1 metadata/resource/callback mappings and full G3 evidence explicit. The current flat compiler still rejects unsupported effects/media rather than silently producing an approximation.
+Validate the new image upload/blending/window behavior and rerun static-mode idle/recovery on the modified renderer when screen/window access is authorized. Then extend M3 with stacking/clipping/transforms/group opacity, native animation/pause semantics and compiled provenance/hashes. Keep remaining visual/platform checks, I1 metadata/resource/callback mappings and full G3 evidence explicit. The current flat compiler still rejects unsupported effects/media rather than silently producing an approximation.
 
 ## Controlled lifecycle checks — November 15, 2026
 

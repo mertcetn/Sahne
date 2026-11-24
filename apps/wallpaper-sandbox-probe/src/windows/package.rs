@@ -4,7 +4,78 @@ use wallpaper_format::{ErrorCode, Package};
 
 pub const RESULT_BIT: u32 = 1 << 18;
 pub const COMPILER_RESULT_BIT: u32 = 1 << 19;
+pub const IMAGE_RESULT_BIT: u32 = 1 << 20;
 const MANIFEST: &str = r#"{"formatVersion":1,"apiVersion":1,"id":"sahne.fixture","name":"Original sandbox fixture","entry":"index.html","permissions":[],"preferredFps":30}"#;
+
+pub fn run_image(case: &str) -> Result<()> {
+    if !wallpaper_sandbox::is_appcontainer()? {
+        return Err("Image fixture requires AppContainer".into());
+    }
+    let original = wallpaper_compiler::fixtures::image_package()?;
+    let viewport = wallpaper_compiler::Viewport {
+        width: 1920,
+        height: 1080,
+        background: wallpaper_scene::Color([12, 17, 22, 255]),
+    };
+    match case {
+        "image-basic" => {
+            let compiled = wallpaper_compiler::compile(&original, viewport)?;
+            let decoded = wallpaper_scene::decode(&compiled.scene().encode())?;
+            wallpaper_media::validate_assets(&decoded, compiled.images())?;
+            let image = compiled.images().get(&1).ok_or("Missing fixed image")?;
+            if decoded.scene().nodes.len() != 3
+                || decoded.scene().resources.len() != 1
+                || image.width() != 8
+                || image.height() != 8
+                || image.pixels().len() != 256
+                || image.pixels()[..4] != [32, 160, 128, 255]
+                || image.pixels()[252..] != [230, 64, 96, 128]
+            {
+                return Err("Image fixture changed pixels or metadata".into());
+            }
+        }
+        "image-invalid" => {
+            use wallpaper_media::Error as Code;
+            let path = wallpaper_format::RelativePath::parse("checker.png")?;
+            let bytes = original.file(&path).ok_or("Missing image source")?.bytes();
+            let mut crc = bytes.to_vec();
+            crc[29] ^= 1;
+            for (data, budget, expected) in [
+                (vec![], 256, Code::InvalidPng),
+                (bytes[..bytes.len() - 1].to_vec(), 256, Code::InvalidPng),
+                (crc, 256, Code::Checksum),
+                (bytes.to_vec(), 255, Code::BudgetExceeded),
+            ] {
+                if wallpaper_media::decode_png(&data, budget).unwrap_err() != expected {
+                    return Err("Image fixture rejection mismatch".into());
+                }
+            }
+            let entries = original
+                .files()
+                .map(|file| {
+                    (
+                        file.path().as_str().to_owned(),
+                        if file.path() == &path {
+                            vec![]
+                        } else {
+                            file.bytes().to_vec()
+                        },
+                    )
+                })
+                .collect();
+            let package = Package::from_entries(entries)?;
+            let error = wallpaper_compiler::compile(&package, viewport).unwrap_err();
+            if error.code != wallpaper_compiler::ErrorCode::Image(Code::InvalidPng)
+                || error.path.as_str() != "index.html"
+                || error.line != 4
+            {
+                return Err("Image source diagnostic mismatch".into());
+            }
+        }
+        _ => return Err("Unknown fixed image fixture".into()),
+    }
+    Ok(())
+}
 fn files(manifest: String) -> Vec<(String, Vec<u8>)> {
     vec![
         ("manifest.json".into(), manifest.into_bytes()),
