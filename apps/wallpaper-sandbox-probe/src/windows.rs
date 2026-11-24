@@ -226,6 +226,8 @@ fn worker(args: &[String]) -> Result<()> {
         | "image-invalid"
         | "hierarchy-basic"
         | "hierarchy-invalid"
+        | "groups-basic"
+        | "groups-invalid"
         | "network"
         | "network-egress"
         | "memory"
@@ -404,6 +406,12 @@ fn worker(args: &[String]) -> Result<()> {
     } else {
         0
     };
+    let group_compiler_result = if case.starts_with("groups-") {
+        package::run_group_compiler(case)?;
+        package::GROUP_COMPILER_RESULT_BIT
+    } else {
+        0
+    };
     let denied = u32::from(read_denied)
         | (u32::from(write_denied) << 1)
         | (u32::from(process_denied) << 2)
@@ -411,6 +419,7 @@ fn worker(args: &[String]) -> Result<()> {
         | (u32::from(memory_denied) << 5)
         | image_result
         | hierarchy_result
+        | group_compiler_result
         | (u32::from(case == "process") << 6)
         | script_result
         | package_result
@@ -523,6 +532,9 @@ fn host(args: &[String]) -> Result<()> {
         println!(
             "Hierarchy cases: hierarchy-basic and hierarchy-invalid. Original version-2 group data and derived transform/clip/command order are checked inside AppContainer; no source input or group rendering."
         );
+        println!(
+            "Group compiler cases: groups-basic and groups-invalid. Original HTML/CSS/PNG sources compile to version-2 groups with independent scene/asset checks; no group rendering or script execution."
+        );
         return Ok(());
     }
     let case = match args {
@@ -552,6 +564,8 @@ fn host(args: &[String]) -> Result<()> {
         "image-invalid",
         "hierarchy-basic",
         "hierarchy-invalid",
+        "groups-basic",
+        "groups-invalid",
         "network",
         "network-egress",
         "memory",
@@ -607,10 +621,10 @@ fn host(args: &[String]) -> Result<()> {
             (
                 "healthy" | "package-basic" | "package-invalid" | "compiler-basic"
                 | "compiler-invalid" | "image-basic" | "image-invalid" | "hierarchy-basic"
-                | "hierarchy-invalid" | "network" | "network-egress" | "memory"
-                | "memory-incremental" | "process" | "handles" | "endpoint" | "ipc-rights"
-                | "ipc-roundtrip" | "ipc-write-drain" | "filesystem" | "registry" | "js-basic"
-                | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
+                | "hierarchy-invalid" | "groups-basic" | "groups-invalid" | "network"
+                | "network-egress" | "memory" | "memory-incremental" | "process" | "handles"
+                | "endpoint" | "ipc-rights" | "ipc-roundtrip" | "ipc-write-drain" | "filesystem"
+                | "registry" | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -621,6 +635,7 @@ fn host(args: &[String]) -> Result<()> {
                         "compiler-basic" | "compiler-invalid" => package::COMPILER_RESULT_BIT,
                         "image-basic" | "image-invalid" => package::IMAGE_RESULT_BIT,
                         "hierarchy-basic" | "hierarchy-invalid" => package::HIERARCHY_RESULT_BIT,
+                        "groups-basic" | "groups-invalid" => package::GROUP_COMPILER_RESULT_BIT,
                         "ipc-roundtrip" => roundtrip::RESULT_BIT,
                         "process" => 64,
                         "handles" => 128,

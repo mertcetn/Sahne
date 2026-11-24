@@ -158,11 +158,24 @@ pub fn decode_png(bytes: &[u8], remaining_bytes: u64) -> Result<RgbaImage> {
 /// Recheck an independently decoded scene against exact immutable pixel assets,
 /// including unused declarations. No extra IDs or dimension substitutions.
 pub fn validate_assets(scene: &ValidatedScene, images: &BTreeMap<u32, RgbaImage>) -> Result<()> {
-    if images.len() != scene.scene().resources.len() {
+    validate_resource_table(&scene.scene().resources, images)
+}
+/// Match immutable pixels against independently validated version-2 declarations.
+pub fn validate_hierarchy_assets(
+    scene: &wallpaper_scene::hierarchy::ValidatedHierarchy,
+    images: &BTreeMap<u32, RgbaImage>,
+) -> Result<()> {
+    validate_resource_table(&scene.scene().resources, images)
+}
+fn validate_resource_table(
+    resources: &[wallpaper_scene::ImageResource],
+    images: &BTreeMap<u32, RgbaImage>,
+) -> Result<()> {
+    if images.len() != resources.len() {
         return Err(Error::AssetMismatch);
     }
     let mut total = 0u64;
-    for resource in &scene.scene().resources {
+    for resource in resources {
         let image = images.get(&resource.id).ok_or(Error::AssetMismatch)?;
         if image.width != resource.width || image.height != resource.height {
             return Err(Error::AssetMismatch);

@@ -5,13 +5,13 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [] => {
             println!(
-                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check]\nExternal package loading and wallpaper execution are not implemented."
+                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check]\nExternal package loading and wallpaper execution are not implemented."
             );
             ExitCode::SUCCESS
         }
         [arg] if arg == "--help" || arg == "-h" => {
             println!(
-                "Usage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check]\n--scene-check validates and roundtrips a fixed built-in flat scene.\n--hierarchy-check validates and roundtrips an original version-2 group fixture; no group rendering.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\n--compile-image-check also decodes an original fixed PNG and validates its pixel assets against the scene.\nNo external files, rendering or script execution in these checks."
+                "Usage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check]\n--scene-check validates and roundtrips a fixed built-in flat scene.\n--hierarchy-check validates and roundtrips an original version-2 group fixture; no group rendering.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\n--compile-image-check also decodes an original fixed PNG and validates its pixel assets against the scene.\n--compile-groups-check compiles original HTML/CSS/PNG into version-2 groups and independently checks scene/assets.\nNo external files, rendering or script execution in these checks."
             );
             ExitCode::SUCCESS
         }
@@ -33,6 +33,13 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
+        [arg] if arg == "--compile-groups-check" => match check_group_compiler() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Group compiler self-check failed: {error}");
+                ExitCode::from(1)
+            }
+        },
         [arg] if arg == "--compile-check" || arg == "--compile-image-check" => {
             match check_compiler(arg == "--compile-image-check") {
                 Ok(()) => ExitCode::SUCCESS,
@@ -47,6 +54,43 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+fn check_group_compiler() -> Result<(), Box<dyn std::error::Error>> {
+    let package = wallpaper_compiler::fixtures::groups_package()?;
+    let compiled = wallpaper_compiler::compile_groups(
+        &package,
+        wallpaper_compiler::Viewport {
+            width: 1920,
+            height: 1080,
+            background: wallpaper_scene::Color([12, 17, 22, 255]),
+        },
+    )?;
+    let bytes = compiled.scene().encode();
+    let decoded = wallpaper_scene::hierarchy::decode(&bytes)?;
+    wallpaper_media::validate_hierarchy_assets(&decoded, compiled.images())?;
+    if &decoded != compiled.scene()
+        || decoded.encode() != bytes
+        || decoded.scene().layers.len() != 10
+        || decoded.commands().len() != 15
+        || compiled.symbols().get("blue") != Some(&5)
+        || decoded.resolved()[4].bounds.x != 190.0
+        || decoded.resolved()[4].bounds.y != 200.0
+    {
+        return Err(std::io::Error::other(
+            "Compiled group scene changed during independent validation",
+        )
+        .into());
+    }
+    println!(
+        "Group compiler self-check passed: version={}, layers={}, commands={}, images={}, encoded bytes={}. Original embedded sources only; no group rendering or script execution.",
+        decoded.scene().version,
+        decoded.scene().layers.len(),
+        decoded.commands().len(),
+        compiled.images().len(),
+        bytes.len()
+    );
+    Ok(())
 }
 
 fn check_hierarchy() -> Result<(), Box<dyn std::error::Error>> {

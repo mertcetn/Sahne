@@ -24,6 +24,10 @@ pub enum Property {
     Color(Color),
     BackgroundColor(Color),
     PositionAbsolute,
+    Opacity(f32),
+    Transform(Option<wallpaper_scene::hierarchy::Transform>),
+    TransformOriginTopLeft,
+    OverflowClip(bool),
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Declaration {
@@ -43,6 +47,12 @@ pub struct Stylesheet {
 }
 
 pub fn parse(source: Source<'_>) -> Result<Stylesheet> {
+    parse_mode(source, false)
+}
+pub fn parse_groups(source: Source<'_>) -> Result<Stylesheet> {
+    parse_mode(source, true)
+}
+fn parse_mode(source: Source<'_>, groups: bool) -> Result<Stylesheet> {
     let masked = mask_comments(source, source.text, 0)?;
     let mut position = 0;
     let mut stylesheet = Stylesheet {
@@ -102,7 +112,7 @@ pub fn parse(source: Source<'_>) -> Result<Stylesheet> {
                 },
             ));
         }
-        let declarations = parse_masked(source, &masked[open + 1..close], open + 1)?;
+        let declarations = parse_masked(source, &masked[open + 1..close], open + 1, groups)?;
         stylesheet.declaration_count += declarations.len();
         if stylesheet.declaration_count > MAX_DECLARATIONS {
             return Err(source.error(
@@ -128,12 +138,18 @@ pub fn parse(source: Source<'_>) -> Result<Stylesheet> {
 
 /// Inline declarations preserve offsets into their enclosing HTML source.
 pub fn declarations(source: Source<'_>, span: Span) -> Result<Vec<Declaration>> {
+    declarations_mode(source, span, false)
+}
+pub fn declarations_groups(source: Source<'_>, span: Span) -> Result<Vec<Declaration>> {
+    declarations_mode(source, span, true)
+}
+fn declarations_mode(source: Source<'_>, span: Span, groups: bool) -> Result<Vec<Declaration>> {
     let value = source
         .text
         .get(span.start..span.end)
         .ok_or_else(|| source.error(ErrorCode::Syntax, span))?;
     let masked = mask_comments(source, value, span.start)?;
-    parse_masked(source, &masked, span.start)
+    parse_masked(source, &masked, span.start, groups)
 }
 fn mask_comments(source: Source<'_>, input: &str, base: usize) -> Result<String> {
     if input.len() > MAX_SOURCE_BYTES {
@@ -184,7 +200,12 @@ fn mask_comments(source: Source<'_>, input: &str, base: usize) -> Result<String>
     // Original UTF-8 remains intact outside whole comment ranges; inside is ASCII.
     Ok(String::from_utf8(bytes).unwrap())
 }
-fn parse_masked(source: Source<'_>, input: &str, base: usize) -> Result<Vec<Declaration>> {
+fn parse_masked(
+    source: Source<'_>,
+    input: &str,
+    base: usize,
+    groups: bool,
+) -> Result<Vec<Declaration>> {
     let mut declarations = vec![];
     let mut offset = 0;
     for part in input.split(';') {
@@ -232,6 +253,27 @@ fn parse_masked(source: Source<'_>, input: &str, base: usize) -> Result<Vec<Decl
             ),
             "position" if value == "absolute" => Property::PositionAbsolute,
             "position" => return Err(fail(ErrorCode::UnsupportedValue)),
+            "opacity" if groups => Property::Opacity(
+                number(value, 0.0, 1.0).ok_or_else(|| fail(ErrorCode::InvalidNumber))?,
+            ),
+            "transform" if groups => Property::Transform(
+                transform(value).ok_or_else(|| fail(ErrorCode::UnsupportedValue))?,
+            ),
+            "transform-origin" if groups => {
+                let mut parts = value.split_ascii_whitespace();
+                if parts.next().and_then(|v| pixels(v, 0.0, 0.0)).is_none()
+                    || parts.next().and_then(|v| pixels(v, 0.0, 0.0)).is_none()
+                    || parts.next().is_some()
+                {
+                    return Err(fail(ErrorCode::UnsupportedValue));
+                }
+                Property::TransformOriginTopLeft
+            }
+            "overflow" if groups => Property::OverflowClip(match value {
+                "visible" => false,
+                "clip" => true,
+                _ => return Err(fail(ErrorCode::UnsupportedValue)),
+            }),
             _ => return Err(fail(ErrorCode::UnsupportedProperty)),
         };
         declarations.push(Declaration { property, span });
@@ -244,6 +286,9 @@ fn pixels(value: &str, minimum: f32, maximum: f32) -> Option<f32> {
     } else {
         value.strip_suffix("px")?
     };
+    number(value, minimum, maximum)
+}
+fn number(value: &str, minimum: f32, maximum: f32) -> Option<f32> {
     if value.len() > 32 {
         return None;
     }
@@ -260,6 +305,55 @@ fn pixels(value: &str, minimum: f32, maximum: f32) -> Option<f32> {
     }
     let number = value.parse::<f32>().ok()?;
     (number.is_finite() && (minimum..=maximum).contains(&number)).then_some(number)
+}
+fn transform(value: &str) -> Option<Option<wallpaper_scene::hierarchy::Transform>> {
+    if value == "none" {
+        return Some(None);
+    }
+    if value.len() > 160 {
+        return None;
+    }
+    let mut rest = value;
+    let mut output = wallpaper_scene::hierarchy::Transform::default();
+    let mut translated = false;
+    let mut scaled = false;
+    for _ in 0..2 {
+        if rest.is_empty() {
+            break;
+        }
+        let (name, body) = rest.split_once('(')?;
+        let (args, tail) = body.split_once(')')?;
+        let mut parts = args.split(',').map(str::trim_ascii);
+        let first = parts.next()?;
+        let second = parts.next();
+        if parts.next().is_some() {
+            return None;
+        }
+        match name {
+            "translate" if !translated && !scaled => {
+                output.translate = [
+                    pixels(first, -32768.0, 32768.0)?,
+                    pixels(second?, -32768.0, 32768.0)?,
+                ];
+                translated = true;
+            }
+            "scale" if !scaled => {
+                let x = number(first, 0.0, 16.0)?;
+                output.scale = [x, second.map_or(Some(x), |s| number(s, 0.0, 16.0))?];
+                scaled = true;
+            }
+            _ => return None,
+        }
+        // CSS functions must be whitespace-separated in this restricted grammar.
+        if !tail.is_empty() && !tail.as_bytes()[0].is_ascii_whitespace() {
+            return None;
+        }
+        rest = tail.trim_ascii_start();
+    }
+    if !rest.is_empty() || !(translated || scaled) {
+        return None;
+    }
+    Some(Some(output))
 }
 fn color(value: &str) -> Option<Color> {
     if value == "transparent" {

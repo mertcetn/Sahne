@@ -6,7 +6,73 @@ pub const RESULT_BIT: u32 = 1 << 18;
 pub const COMPILER_RESULT_BIT: u32 = 1 << 19;
 pub const IMAGE_RESULT_BIT: u32 = 1 << 20;
 pub const HIERARCHY_RESULT_BIT: u32 = 1 << 21;
+pub const GROUP_COMPILER_RESULT_BIT: u32 = 1 << 22;
 const MANIFEST: &str = r#"{"formatVersion":1,"apiVersion":1,"id":"sahne.fixture","name":"Original sandbox fixture","entry":"index.html","permissions":[],"preferredFps":30}"#;
+
+pub fn run_group_compiler(case: &str) -> Result<()> {
+    if !wallpaper_sandbox::is_appcontainer()? {
+        return Err("Group compiler fixture requires AppContainer".into());
+    }
+    let original = wallpaper_compiler::fixtures::groups_package()?;
+    let viewport = wallpaper_compiler::Viewport {
+        width: 1920,
+        height: 1080,
+        background: wallpaper_scene::Color([12, 17, 22, 255]),
+    };
+    match case {
+        "groups-basic" => {
+            let compiled = wallpaper_compiler::compile_groups(&original, viewport)?;
+            let decoded = wallpaper_scene::hierarchy::decode(&compiled.scene().encode())?;
+            wallpaper_media::validate_hierarchy_assets(&decoded, compiled.images())?;
+            let image = compiled.images().get(&1).ok_or("Missing group image")?;
+            if &decoded != compiled.scene()
+                || decoded.scene().layers.len() != 10
+                || decoded.commands().len() != 15
+                || compiled.symbols().get("blue") != Some(&5)
+                || decoded.resolved()[4].bounds.x != 190.0
+                || decoded.resolved()[4].bounds.y != 200.0
+                || image.pixels().len() != 256
+                || image.pixels()[252..] != [230, 64, 96, 128]
+            {
+                return Err("Group compiler fixed result mismatch".into());
+            }
+        }
+        "groups-invalid" => {
+            use wallpaper_compiler::ErrorCode as Code;
+            for (css, expected) in [
+                (".group{transform:rotate(10deg)}", Code::UnsupportedValue),
+                (".group{opacity:1.1}", Code::InvalidNumber),
+                (".group{overflow:hidden}", Code::UnsupportedValue),
+                (
+                    ".group{width:10px;height:10px;transform:scale(2)}",
+                    Code::MissingTransformOrigin,
+                ),
+            ] {
+                let entries = original
+                    .files()
+                    .map(|file| {
+                        (
+                            file.path().as_str().to_owned(),
+                            if file.path().as_str() == "style.css" {
+                                css.as_bytes().to_vec()
+                            } else {
+                                file.bytes().to_vec()
+                            },
+                        )
+                    })
+                    .collect();
+                let error =
+                    wallpaper_compiler::compile_groups(&Package::from_entries(entries)?, viewport)
+                        .unwrap_err();
+                if error.code != expected {
+                    return Err("Group compiler fixed rejection mismatch".into());
+                }
+            }
+        }
+        _ => return Err("Unknown fixed group compiler fixture".into()),
+    }
+    Ok(())
+}
 
 pub fn run_hierarchy(case: &str) -> Result<()> {
     if !wallpaper_sandbox::is_appcontainer()? {

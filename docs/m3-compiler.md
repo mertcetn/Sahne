@@ -1,5 +1,7 @@
 # M3 strict HTML/CSS compiler foundation
 
+This document describes the existing version-1 `compile` path used by the preview. The separate [version-2 `compile_groups` contract](m3-group-compiler.md) adds explicitly opted-in effect parsing and hierarchical output; it is not yet rendered. Version-1 effect rejections and fixtures below remain unchanged.
+
 Updated: November 24, 2026. Status: original fixed-source compilation into the experimental flat scene, including [bounded PNG resources and a local image-window reference](m3-images.md). Full G3, effects/animation and arbitrary input remain pending; [preview evidence](m3-preview.md) is limited to recorded local cases.
 
 ## Run

@@ -3,6 +3,9 @@ use css::{Declaration, Property, Rule, Selector};
 use std::collections::BTreeMap;
 use wallpaper_format::Package;
 use wallpaper_media::{RgbaImage, decode_png, validate_assets};
+use wallpaper_scene::hierarchy::{
+    self, Hierarchy, Layer, LayerContent, Transform, ValidatedHierarchy,
+};
 use wallpaper_scene::{Color, Content, Node, Rect, SCENE_VERSION, Scene, ValidatedScene};
 
 #[derive(Clone, Copy)]
@@ -36,6 +39,33 @@ impl Compiled {
     }
 }
 
+/// Explicit opt-in v2 output. Author IDs refer to groups, never generated draw IDs.
+#[derive(Debug)]
+pub struct CompiledGroups {
+    scene: ValidatedHierarchy,
+    symbols: BTreeMap<String, u32>,
+    script: Option<RelativePath>,
+    images: BTreeMap<u32, RgbaImage>,
+}
+impl CompiledGroups {
+    pub fn scene(&self) -> &ValidatedHierarchy {
+        &self.scene
+    }
+    pub fn symbols(&self) -> &BTreeMap<String, u32> {
+        &self.symbols
+    }
+    pub fn script(&self) -> Option<&RelativePath> {
+        self.script.as_ref()
+    }
+    pub fn images(&self) -> &BTreeMap<u32, RgbaImage> {
+        &self.images
+    }
+}
+enum Compilation {
+    Flat(Compiled),
+    Groups(CompiledGroups),
+}
+
 #[derive(Clone, Copy)]
 struct Style {
     x: f32,
@@ -45,7 +75,11 @@ struct Style {
     foreground: Color,
     background: Color,
     font_size: f32,
-    rank: [u8; 8],
+    rank: [u8; 12],
+    transform: Option<Transform>,
+    origin_top_left: bool,
+    opacity: f32,
+    clip: bool,
 }
 impl Style {
     fn new(parent: Option<Self>) -> Self {
@@ -57,7 +91,11 @@ impl Style {
             foreground: parent.map_or(Color([255; 4]), |style| style.foreground),
             background: Color([0; 4]),
             font_size: parent.map_or(16.0, |style| style.font_size),
-            rank: [0; 8],
+            rank: [0; 12],
+            transform: None,
+            origin_top_left: false,
+            opacity: 1.0,
+            clip: false,
         }
     }
     fn apply(&mut self, declaration: &Declaration, specificity: u8) {
@@ -70,6 +108,10 @@ impl Style {
             Property::BackgroundColor(_) => 5,
             Property::FontSize(_) => 6,
             Property::PositionAbsolute => 7,
+            Property::Opacity(_) => 8,
+            Property::Transform(_) => 9,
+            Property::TransformOriginTopLeft => 10,
+            Property::OverflowClip(_) => 11,
         };
         if specificity < self.rank[index] {
             return;
@@ -84,11 +126,28 @@ impl Style {
             Property::BackgroundColor(value) => self.background = value,
             Property::FontSize(value) => self.font_size = value,
             Property::PositionAbsolute => {}
+            Property::Opacity(value) => self.opacity = value,
+            Property::Transform(value) => self.transform = value,
+            Property::TransformOriginTopLeft => self.origin_top_left = true,
+            Property::OverflowClip(value) => self.clip = value,
         }
     }
 }
 
 pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
+    match compile_internal(package, viewport, false)? {
+        Compilation::Flat(value) => Ok(value),
+        _ => unreachable!(),
+    }
+}
+/// Explicit v2 compilation; this does not enable group rendering in the preview.
+pub fn compile_groups(package: &Package, viewport: Viewport) -> Result<CompiledGroups> {
+    match compile_internal(package, viewport, true)? {
+        Compilation::Groups(value) => Ok(value),
+        _ => unreachable!(),
+    }
+}
+fn compile_internal(package: &Package, viewport: Viewport, groups: bool) -> Result<Compilation> {
     let entry = package.manifest().entry();
     let text = package.require_text(entry, ".html", "entry").map_err(|_| {
         Source {
@@ -127,10 +186,15 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
         if total_css_bytes > MAX_SOURCE_BYTES {
             return Err(source.error(ErrorCode::BudgetExceeded, reference.span));
         }
-        let sheet = css::parse(Source {
+        let css_source = Source {
             path: &reference.path,
             text,
-        })?;
+        };
+        let sheet = if groups {
+            css::parse_groups(css_source)
+        } else {
+            css::parse(css_source)
+        }?;
         declarations += sheet.declaration_count;
         if rules.len() + sheet.rules.len() > MAX_RULES || declarations > MAX_DECLARATIONS {
             return Err(source.error(ErrorCode::BudgetExceeded, reference.span));
@@ -143,6 +207,9 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
     let mut images = BTreeMap::new();
     let mut image_paths = BTreeMap::new();
     let mut remaining_image_bytes = wallpaper_scene::MAX_DECODED_IMAGE_BYTES;
+    let mut layers = vec![];
+    let mut group_ids = vec![];
+    let mut group_symbols = BTreeMap::new();
     for (index, element) in document.elements.iter().enumerate() {
         let parent = element.parent.map(|parent| styles[parent]);
         let mut style = Style::new(parent);
@@ -158,7 +225,11 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
             }
         }
         if let Some((_, span)) = &element.inline_style {
-            let inline = css::declarations(source, *span)?;
+            let inline = if groups {
+                css::declarations_groups(source, *span)
+            } else {
+                css::declarations(source, *span)
+            }?;
             declarations += inline.len();
             if declarations > MAX_DECLARATIONS {
                 return Err(source.error(ErrorCode::BudgetExceeded, *span));
@@ -167,8 +238,10 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
                 style.apply(declaration, 3);
             }
         }
-        style.x += parent.map_or(0.0, |style| style.x);
-        style.y += parent.map_or(0.0, |style| style.y);
+        if !groups {
+            style.x += parent.map_or(0.0, |style| style.x);
+            style.y += parent.map_or(0.0, |style| style.y);
+        }
         let (Some(width), Some(height)) = (style.width, style.height) else {
             return Err(source.error(ErrorCode::MissingDimensions, element.span));
         };
@@ -179,15 +252,58 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
             height,
         };
         let first = scene.nodes.len();
-        let mut emit = |content| -> Result<()> {
-            if scene.nodes.len() >= wallpaper_scene::MAX_NODES {
+        let group_id = if groups {
+            if style.transform.is_some() && !style.origin_top_left {
+                return Err(source.error(ErrorCode::MissingTransformOrigin, element.span));
+            }
+            if layers.len() >= wallpaper_scene::MAX_NODES {
                 return Err(source.error(ErrorCode::BudgetExceeded, element.span));
             }
-            scene.nodes.push(Node {
-                id: scene.nodes.len() as u32 + 1,
+            let id = layers.len() as u32 + 1;
+            layers.push(Layer {
+                id,
+                parent: element.parent.map_or(0, |i| group_ids[i]),
                 bounds,
-                content,
+                content: LayerContent::Group {
+                    transform: style.transform.unwrap_or_default(),
+                    opacity: style.opacity,
+                    clip: style.clip,
+                },
             });
+            origins.push(index);
+            group_ids.push(id);
+            id
+        } else {
+            0
+        };
+        let mut emit = |content| -> Result<()> {
+            if (if groups {
+                layers.len()
+            } else {
+                scene.nodes.len()
+            }) >= wallpaper_scene::MAX_NODES
+            {
+                return Err(source.error(ErrorCode::BudgetExceeded, element.span));
+            }
+            if groups {
+                layers.push(Layer {
+                    id: layers.len() as u32 + 1,
+                    parent: group_id,
+                    bounds: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        width,
+                        height,
+                    },
+                    content: LayerContent::Draw(content),
+                });
+            } else {
+                scene.nodes.push(Node {
+                    id: scene.nodes.len() as u32 + 1,
+                    bounds,
+                    content,
+                });
+            }
             origins.push(index);
             Ok(())
         };
@@ -246,14 +362,18 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
             }
         }
         if let Some(id) = &element.id {
-            symbols.insert(
-                id.clone(),
-                scene.nodes[first..].iter().map(|node| node.id).collect(),
-            );
+            if groups {
+                group_symbols.insert(id.clone(), group_id);
+            } else {
+                symbols.insert(
+                    id.clone(),
+                    scene.nodes[first..].iter().map(|node| node.id).collect(),
+                );
+            }
         }
         styles.push(style);
     }
-    let scene = scene.validate().map_err(|error| {
+    let scene_error = |error: wallpaper_scene::SceneError| {
         let span = match error.context {
             wallpaper_scene::Context::Node(index) => origins
                 .get(index)
@@ -262,13 +382,34 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
         }
         .unwrap_or(Span { start: 0, end: 0 });
         source.error(ErrorCode::SceneValidation(error.code), span)
-    })?;
+    };
+    if groups {
+        let scene = Hierarchy {
+            version: hierarchy::VERSION,
+            width: scene.width,
+            height: scene.height,
+            background: scene.background,
+            resources: scene.resources,
+            layers,
+        }
+        .validate()
+        .map_err(scene_error)?;
+        wallpaper_media::validate_hierarchy_assets(&scene, &images)
+            .map_err(|error| source.error(ErrorCode::Image(error), Span { start: 0, end: 0 }))?;
+        return Ok(Compilation::Groups(CompiledGroups {
+            scene,
+            images,
+            symbols: group_symbols,
+            script: package.manifest().script().cloned(),
+        }));
+    }
+    let scene = scene.validate().map_err(scene_error)?;
     validate_assets(&scene, &images)
         .map_err(|error| source.error(ErrorCode::Image(error), Span { start: 0, end: 0 }))?;
-    Ok(Compiled {
+    Ok(Compilation::Flat(Compiled {
         scene,
         images,
         symbols,
         script: package.manifest().script().cloned(),
-    })
+    }))
 }

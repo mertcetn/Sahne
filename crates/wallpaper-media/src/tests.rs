@@ -235,3 +235,44 @@ fn raw_pixels_and_exact_scene_asset_matching() {
     );
     validate_assets(&scene(vec![]), &BTreeMap::new()).unwrap();
 }
+
+#[test]
+fn hierarchy_assets_are_checked_against_independently_decoded_v2_metadata() {
+    use wallpaper_scene::hierarchy::{Hierarchy, VERSION};
+    let raw = Hierarchy {
+        version: VERSION,
+        width: 10,
+        height: 10,
+        background: Color([0; 4]),
+        resources: vec![ImageResource {
+            id: 7,
+            width: 2,
+            height: 1,
+        }],
+        layers: vec![],
+    };
+    let declared = wallpaper_scene::hierarchy::decode(&raw.validate().unwrap().encode()).unwrap();
+    let mut images = BTreeMap::new();
+    assert_eq!(
+        validate_hierarchy_assets(&declared, &images),
+        Err(Error::AssetMismatch)
+    );
+    images.insert(8, decode_png(&encoded(), 8).unwrap());
+    assert_eq!(
+        validate_hierarchy_assets(&declared, &images),
+        Err(Error::AssetMismatch)
+    );
+    images.clear();
+    images.insert(7, RgbaImage::from_rgba8(1, 2, vec![0; 8]).unwrap());
+    assert_eq!(
+        validate_hierarchy_assets(&declared, &images),
+        Err(Error::AssetMismatch)
+    );
+    images.insert(7, decode_png(&encoded(), 8).unwrap());
+    validate_hierarchy_assets(&declared, &images).unwrap();
+    images.insert(9, RgbaImage::from_rgba8(1, 1, vec![0; 4]).unwrap());
+    assert_eq!(
+        validate_hierarchy_assets(&declared, &images),
+        Err(Error::AssetMismatch)
+    );
+}

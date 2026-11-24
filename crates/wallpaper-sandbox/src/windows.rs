@@ -663,6 +663,8 @@ pub fn spawn_probe(
         "image-invalid",
         "hierarchy-basic",
         "hierarchy-invalid",
+        "groups-basic",
+        "groups-invalid",
         "network",
         "network-egress",
         "memory",

@@ -6,7 +6,7 @@ pub mod css;
 #[cfg(any(test, feature = "fixtures"))]
 pub mod fixtures;
 pub mod html;
-pub use compile::{Compiled, Viewport, compile};
+pub use compile::{Compiled, CompiledGroups, Viewport, compile, compile_groups};
 
 pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_DEPTH: usize = 32;
@@ -38,6 +38,7 @@ pub enum ErrorCode {
     InvalidColor,
     MissingResource,
     MissingDimensions,
+    MissingTransformOrigin,
     Image(wallpaper_media::Error),
     SceneValidation(wallpaper_scene::ErrorCode),
 }
@@ -102,5 +103,7 @@ fn ascii_space(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\r' | b'\n' | 0x0c)
 }
 
+#[cfg(test)]
+mod group_tests;
 #[cfg(test)]
 mod tests;
