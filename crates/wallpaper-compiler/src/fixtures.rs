@@ -1,6 +1,28 @@
 //! Original compile-time fixtures. Never reads an example directory at runtime.
 use wallpaper_format::Package;
 
+/// Original nested-opacity, anisotropic-scale and fractional/empty-clip sources.
+pub fn effect_groups_package() -> wallpaper_format::Result<Package> {
+    Package::from_entries(vec![
+        (
+            "manifest.json".into(),
+            include_bytes!("../../../examples/group-effects/manifest.json").to_vec(),
+        ),
+        (
+            "index.html".into(),
+            include_bytes!("../../../examples/group-effects/index.html").to_vec(),
+        ),
+        (
+            "style.css".into(),
+            include_bytes!("../../../examples/group-effects/style.css").to_vec(),
+        ),
+        (
+            "checker.png".into(),
+            include_bytes!("../../../examples/group-effects/checker.png").to_vec(),
+        ),
+    ])
+}
+
 /// Separate overflow fixture for the renderer; preserves the original compiler fixture.
 pub fn preview_groups_package() -> wallpaper_format::Result<Package> {
     Package::from_entries(vec![

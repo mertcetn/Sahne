@@ -8,7 +8,7 @@ Updated: November 24, 2026. Status: original static, PNG and group examples rend
 cargo run --release -p wallpaper-preview --locked -- --example static --seconds 30
 ```
 
-Escape closes window mode. Literal example names `static`, `image` and `groups` are accepted; a path, URL, unknown example or missing example value fails. `image` selects the separately documented fixed PNG fixture. `groups` selects the [v2 fixed group/clipping fixture with limited local visual evidence](m3-group-preview.md). The existing default M1 fixture remains available without `--example`. The CLI's compile-check commands are nonvisual.
+Escape closes window mode. Literal example names `static`, `image`, `groups` and `groups-effects` are accepted; a path, URL, unknown example or missing example value fails. `image` selects the separately documented fixed PNG fixture. `groups` selects the [v2 fixed group/clipping fixture with limited local visual evidence](m3-group-preview.md). `groups-effects` selects the [additional effect fixture awaiting GPU/window validation](m3-effect-fixtures.md). The existing default M1 fixture remains available without `--example`. The CLI's compile-check commands are nonvisual.
 
 Static mode embeds examples/static-scene at build time, validates the in-memory package, compiles the restricted HTML/CSS and independently decodes/validates its scene before allocating drawing resources. It opens no source path and executes no JS. This example still has the unchanged panel, title and accent rectangle. Image mode separately embeds examples/static-image and validates decoded pixels against scene resources before upload; arbitrary package loading remains disabled.
 

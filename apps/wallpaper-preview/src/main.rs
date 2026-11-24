@@ -35,18 +35,23 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. Escape closes window mode. Test recreation does not restart Explorer."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. groups-effects awaits GPU/window/visual validation. Escape closes window mode. Test recreation does not restart Explorer."
                 );
                 return Ok(());
             }
             "--desktop" => desktop_mode = true,
             "--example" => {
-                compiled_example = Some(match args.next().as_deref() {
-                    Some("static") => compiled::Example::Static,
-                    Some("image") => compiled::Example::Image,
-                    Some("groups") => compiled::Example::Groups,
-                    _ => return Err("Choose an original static, image or groups example".into()),
-                });
+                compiled_example =
+                    Some(match args.next().as_deref() {
+                        Some("static") => compiled::Example::Static,
+                        Some("image") => compiled::Example::Image,
+                        Some("groups") => compiled::Example::Groups,
+                        Some("groups-effects") => compiled::Example::GroupEffects,
+                        _ => return Err(
+                            "Choose an original static, image, groups or groups-effects example"
+                                .into(),
+                        ),
+                    });
             }
             "--test-device-loss" => test_device_loss = true,
             "--seconds" => {
@@ -159,6 +164,7 @@ impl App {
                     Some(compiled::Example::Static) => "Sahne — M3 compiled static example",
                     Some(compiled::Example::Image) => "Sahne — M3 compiled image example",
                     Some(compiled::Example::Groups) => "Sahne — M3 compiled groups example",
+                    Some(compiled::Example::GroupEffects) => "Sahne — M3 group effects example",
                     None => "Sahne — M1 trusted scene",
                 })
                 .with_inner_size(LogicalSize::new(960.0, 600.0));
@@ -525,10 +531,12 @@ impl State {
         let mut atlas = TextAtlas::new(&device, &queue, &cache, config.format);
         let text_renderer =
             TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
-        let groups = if compiled_example == Some(compiled::Example::Groups) {
+        let groups = if let Some(fixture) =
+            compiled_example.and_then(compiled::Example::group_fixture)
+        {
             let memory_scope = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
             let validation_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-            let result = groups::Renderer::new(&device, &queue, config.format, &mut fonts);
+            let result = groups::Renderer::new(&device, &queue, config.format, &mut fonts, fixture);
             let validation = validation_scope.pop();
             let memory = memory_scope.pop();
             let validation = validation.await;
@@ -541,7 +549,7 @@ impl State {
             None
         };
         let compiled =
-            if let Some(example) = compiled_example.filter(|v| *v != compiled::Example::Groups) {
+            if let Some(example) = compiled_example.filter(|v| v.group_fixture().is_none()) {
                 Some(compiled::Renderer::new(
                     &device,
                     &queue,

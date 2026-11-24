@@ -1,0 +1,18 @@
+.heading { left:80px; top:48px; width:1640px; height:48px; font-size:36px; color:#9bdcca; }
+.title { top:112px; width:500px; height:40px; font-size:24px; color:#fff; }
+.outer { left:80px; top:160px; width:400px; height:280px; opacity:0.5; overflow:clip; }
+.inner { left:20px; top:20px; width:300px; height:220px; opacity:0.5; overflow:clip; }
+.red { width:160px; height:160px; background-color:#f00; }
+.blue { left:80px; top:80px; width:160px; height:160px; background-color:#00f; }
+.badge { left:320px; top:20px; width:60px; height:60px; background-color:#fff; }
+.scale-panel { left:620px; top:160px; width:480px; height:280px; background-color:#1f2a33; overflow:clip; }
+.stretched { left:20px; top:20px; width:200px; height:160px; transform:scale(1.5,0.75); transform-origin:0 0; }
+.stretched-text { width:180px; height:40px; font-size:28px; color:#9bdcca; }
+.stretched-image { top:60px; width:160px; height:120px; }
+.control-text { left:20px; top:210px; width:400px; height:40px; font-size:28px; color:#fff; }
+.fraction-panel { left:1220px; top:160px; width:520px; height:280px; background-color:#1f2a33; overflow:clip; }
+.low-clip { left:20.25px; top:20.25px; width:100px; height:100px; overflow:clip; }
+.high-clip { left:180.75px; top:20.75px; width:100px; height:100px; overflow:clip; }
+.empty-clip { left:340.5px; top:20.5px; width:0; height:100px; overflow:clip; }
+.fill { left:-10px; top:-10px; width:140px; height:140px; background-color:#fff; }
+.fraction-note { left:20px; top:200px; width:480px; height:40px; font-size:22px; color:#fff; }

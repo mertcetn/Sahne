@@ -49,6 +49,8 @@ Run `cargo run --release -p wallpaper-cli --locked -- --compile-groups-check` fo
 
 `cargo run --release -p wallpaper-preview --locked -- --example groups --seconds 10` opens the original group/clipping window. Local visual/resize/lifecycle evidence is recorded within its limited scope. CPU plan/shader checks run through `cargo test -p wallpaper-preview --locked` without a device/window. See [Group rendering limits, reference and remaining checks](m3-group-preview.md). A successful build or CPU reference result alone does not establish GPU acceptance.
 
+The new `--example groups-effects` literal selects a separate nested-opacity, anisotropic-scale and fractional/empty-clip fixture. Its CPU checks are part of the same preview test command, but actual GPU/window/visual/lifecycle checks are pending. See [Effect cases and expected CPU samples](m3-effect-fixtures.md) before running its window command. Existing compiler CLI checks still select their original fixtures.
+
 Run `cargo run --release -p wallpaper-preview --locked -- --example static --seconds 30` for the original compiled HTML/CSS window. It accepts only the fixed embedded example, with no external paths or JS. See [Visual reference, fit/text rules and remaining lifecycle validation](m3-preview.md). The original M1 fixture remains the default without `--example`.
 
 ## Protocol boundary checks

@@ -300,3 +300,127 @@ fn preview_fixture_deliberately_overflows_text_and_png_beyond_the_parent_clip() 
     assert!(png.bounds.x + png.bounds.width > png.clip.x + png.clip.width);
     assert!(png.bounds.y + png.bounds.height > png.clip.y + png.clip.height);
 }
+
+fn effects() -> (wallpaper_compiler::CompiledGroups, Plan) {
+    let compiled = wallpaper_compiler::compile_groups(
+        &wallpaper_compiler::fixtures::effect_groups_package().unwrap(),
+        wallpaper_compiler::Viewport {
+            width: 1920,
+            height: 1080,
+            background: SceneColor([12, 17, 22, 255]),
+        },
+    )
+    .unwrap();
+    let decoded = hierarchy::decode(&compiled.scene().encode()).unwrap();
+    wallpaper_media::validate_hierarchy_assets(&decoded, compiled.images()).unwrap();
+    assert_eq!(&decoded, compiled.scene());
+    let plan = Plan::new(&decoded, 8192).unwrap();
+    (compiled, plan)
+}
+fn resolved(compiled: &wallpaper_compiler::CompiledGroups, id: &str) -> hierarchy::ResolvedLayer {
+    compiled.scene().resolved()[compiled.symbols()[id] as usize - 1]
+}
+
+#[test]
+fn effect_fixture_preserves_nested_opacity_and_distinguishes_one_level_badge() {
+    let (compiled, plan) = effects();
+    assert_eq!(
+        (
+            compiled.scene().scene().layers.len(),
+            compiled.scene().commands().len()
+        ),
+        (44, 66)
+    );
+    assert_eq!(
+        (
+            plan.targets,
+            plan.ops.len(),
+            plan.texts.len(),
+            plan.texture_bytes
+        ),
+        (3, 22, 7, 25_643_936)
+    );
+    let composites: Vec<_> = plan
+        .ops
+        .iter()
+        .filter_map(|op| match op.paint {
+            Paint::Premultiplied(Texture::Target(source)) => {
+                Some((source, op.target, plan.quads[op.quad].opacity))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(composites, [(2, 1, 0.5), (1, 0, 0.5)]);
+    let bg = plan::linear_color(plan.background.0);
+    for (x, y, color, factor) in [
+        (190.5, 270.5, [0.0, 0.0, 1.0], 0.25),
+        (110.5, 190.5, [1.0, 0.0, 0.0], 0.25),
+        (410.5, 190.5, [1.0; 3], 0.5),
+    ] {
+        let pixel = sample(&plan, x, y);
+        for i in 0..3 {
+            assert!((pixel[i] - (bg[i] * (1.0 - factor) + color[i] * factor)).abs() < 0.000001);
+        }
+        assert_eq!(pixel[3], 1.0);
+    }
+    assert_eq!(sample(&plan, 190.5, 410.5), bg); // Blue content ends at the inner clip, not the outer one.
+}
+
+#[test]
+fn effect_fixture_keeps_nonuniform_text_and_image_transforms_separate_from_control() {
+    let (compiled, plan) = effects();
+    assert_eq!(
+        resolved(&compiled, "stretchedText").bounds,
+        rect(640.0, 180.0, 270.0, 30.0)
+    );
+    assert_eq!(
+        resolved(&compiled, "stretchedImage").bounds,
+        rect(640.0, 225.0, 240.0, 90.0)
+    );
+    assert_eq!(
+        resolved(&compiled, "controlText").bounds,
+        rect(640.0, 370.0, 400.0, 40.0)
+    );
+    let scaled = plan
+        .texts
+        .iter()
+        .find(|text| text.text == "Wide / short" && text.raster_scale == 1.5)
+        .unwrap();
+    assert_eq!(scaled.pixels, [270, 60]);
+    let control = plan
+        .texts
+        .iter()
+        .find(|text| text.text == "Wide / short" && text.raster_scale == 1.0)
+        .unwrap();
+    assert_eq!(control.pixels, [400, 40]);
+    assert_eq!(compiled.images()[&1].pixels().len(), 256);
+    assert_eq!(&compiled.images()[&1].pixels()[252..], &[230, 64, 96, 128]);
+}
+
+#[test]
+fn effect_fixture_requires_fractional_pixel_center_tests_and_empty_clip_culling() {
+    let (compiled, plan) = effects();
+    let low = resolved(&compiled, "lowFill").clip;
+    let high = resolved(&compiled, "highFill").clip;
+    assert_eq!(low, rect(1240.25, 180.25, 100.0, 100.0));
+    assert_eq!(high, rect(1400.75, 180.75, 100.0, 100.0));
+    assert_eq!(plan::scissor(low, 1920, 1080), Some([1240, 180, 101, 101]));
+    assert_eq!(plan::scissor(high, 1920, 1080), Some([1400, 180, 101, 101]));
+    let panel = plan::linear_color([31, 42, 51, 255]);
+    for (x, y, expected) in [
+        (1240.5, 181.5, [1.0; 4]),
+        (1400.5, 181.5, panel),
+        (1340.5, 200.5, panel),
+        (1500.5, 200.5, [1.0; 4]),
+        (1250.5, 180.5, [1.0; 4]),
+        (1410.5, 180.5, panel),
+        (1250.5, 280.5, panel),
+        (1410.5, 280.5, [1.0; 4]),
+    ] {
+        assert_eq!(sample(&plan, x, y), expected);
+    }
+    let empty = resolved(&compiled, "emptyFill").clip;
+    assert_eq!(empty.width, 0.0);
+    assert_eq!(plan::scissor(empty, 1920, 1080), None);
+    assert_eq!(sample(&plan, 1560.5, 200.5), panel);
+}

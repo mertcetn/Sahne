@@ -7,6 +7,11 @@ mod plan;
 use plan::{Paint, Plan, Quad, Texture};
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const RECORD: usize = 80;
+#[derive(Clone, Copy, Debug)]
+pub enum Fixture {
+    Original,
+    Effects,
+}
 struct Surface {
     view: wgpu::TextureView,
     bindings: wgpu::BindGroup,
@@ -39,11 +44,15 @@ impl Renderer {
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
         fonts: &mut FontSystem,
+        fixture: Fixture,
     ) -> Result<Self> {
         if !format.is_srgb() {
             return Err("Group preview requires an sRGB surface".into());
         }
-        let package = wallpaper_compiler::fixtures::preview_groups_package()?;
+        let package = match fixture {
+            Fixture::Original => wallpaper_compiler::fixtures::preview_groups_package()?,
+            Fixture::Effects => wallpaper_compiler::fixtures::effect_groups_package()?,
+        };
         let compiled = wallpaper_compiler::compile_groups(
             &package,
             wallpaper_compiler::Viewport {
@@ -271,7 +280,7 @@ impl Renderer {
         }
         queue.write_buffer(&uniform, 0, &records);
         eprintln!(
-            "Compiled original Groups fixture: layers={}, commands={}, offscreen targets={}, text surfaces={}, known texture bytes={}.",
+            "Compiled original Groups {fixture:?} fixture: layers={}, commands={}, offscreen targets={}, text surfaces={}, known texture bytes={}.",
             scene.scene().layers.len(),
             scene.commands().len(),
             plan.targets,

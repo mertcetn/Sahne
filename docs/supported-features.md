@@ -12,4 +12,6 @@ Prototype rendering covers colors/backgrounds, static images, text size, transla
 
 The [version-2 native group-data contract](m3-groups.md) specifies ordered groups, axis transforms, rectangular ancestor clips and true group-opacity boundaries. The separate [opt-in group compiler](m3-group-compiler.md) accepts its restricted opacity/transform/overflow syntax and validates hierarchical output/images. The [fixed group renderer](m3-group-preview.md) has local visual clipping/opacity/resize and lifecycle evidence for its original fixture. Nested-opacity/nonuniform-scale/fractional-clip GPU references and broader G3 coverage remain open. Default v1 paths still reject effects; this does not enable arbitrary source input.
 
+The [additional effect fixture](m3-effect-fixtures.md) now has CPU source-over/geometry/pixel-center reference tests and a separate preview literal. Its GPU/window/visual checks are pending; neither an embedded example nor a CPU reference expands the recorded rendered-support scope.
+
 Reject unsupported features with file/source diagnostics. Canvas, WebGL, SVG, Grid, shaders, network, audio, and arbitrary website compatibility are excluded. Product additions follow the architecture and require documented behavior plus validation.

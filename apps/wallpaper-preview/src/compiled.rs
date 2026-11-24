@@ -8,6 +8,16 @@ pub enum Example {
     Static,
     Image,
     Groups,
+    GroupEffects,
+}
+impl Example {
+    pub fn group_fixture(self) -> Option<groups::Fixture> {
+        match self {
+            Self::Groups => Some(groups::Fixture::Original),
+            Self::GroupEffects => Some(groups::Fixture::Effects),
+            _ => None,
+        }
+    }
 }
 
 struct TextItem {
@@ -45,7 +55,9 @@ impl Renderer {
         let package = match example {
             Example::Static => wallpaper_compiler::fixtures::static_package()?,
             Example::Image => wallpaper_compiler::fixtures::image_package()?,
-            Example::Groups => return Err("Group example requires the version-2 renderer".into()),
+            Example::Groups | Example::GroupEffects => {
+                return Err("Group example requires the version-2 renderer".into());
+            }
         };
         let compiled = wallpaper_compiler::compile(
             &package,
