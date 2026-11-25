@@ -559,3 +559,7 @@ The Windows developer CLI can regenerate and compare a version 2 record from the
 ## 55. Animated reference pose
 
 The animated-shapes preview can freeze at the one-second midpoint using its standard scene sampler and renderer. This mode contributes no animation wakeups and supplies a reproducible pose for the visual reference. The local CPU checks cover the fixed sample and scheduling. See [Fixed midpoint reference mode](m3-animated-preview.md#fixed-midpoint-reference-mode).
+
+## 56. M4 host scene transactions
+
+A host-owned state machine stages bounded text and RGBA edits for an explicit writable set in a validated flat scene. It checks the session, sequence and base revision and validates the candidate before publishing a revision and typed acknowledgement. A rejected batch closes the session and retains the accepted scene. The host state machine currently has CPU coverage. Wire and worker integration follow. See [M4 host scene transactions](m4-scene-transactions.md).
