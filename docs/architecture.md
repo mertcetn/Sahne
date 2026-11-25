@@ -567,3 +567,7 @@ A host-owned state machine stages bounded text and RGBA edits for an explicit wr
 ## 57. M4 scene batches over the Windows probe transport
 
 The control codec carries bounded scene batches and correlated revision acknowledgements. The AppContainer probe exercises a committed update and a terminal rejection through its existing owned reader and writer. Host comparison verifies that the accepted scene survives rejection. See [Wire format and Windows fixture](m4-scene-transactions.md#wire-format-and-windows-fixture).
+
+## 58. M4 fixed JavaScript scene update
+
+The AppContainer probe runs a fixed clock callback in bounded QuickJS. It returns a staged text change from a fixture-scoped element binding, which the worker sends through the scene IPC adapter and correlates with the host acknowledgement. See [Fixed JavaScript clock update](m4-scene-transactions.md#fixed-javascript-clock-update).

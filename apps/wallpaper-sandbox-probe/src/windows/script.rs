@@ -18,6 +18,14 @@ pub fn run(case: &str) -> Result<()> {
     if !wallpaper_sandbox::is_appcontainer()? {
         return Err("JS fixture refuses non-AppContainer execution".into());
     }
+    let (runtime, interrupted) = bounded_runtime()?;
+    // Base objects plus source evaluation and Promises; no loaders, native modules,
+    // typed arrays, RegExp, Date, host callbacks or browser/system APIs are installed.
+    let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
+    run_case(case, &runtime, &context, &interrupted)
+}
+
+fn bounded_runtime() -> Result<(Runtime, Arc<AtomicBool>)> {
     let runtime = Runtime::new()?;
     // Keep the default C allocator: rust-alloc/allocator features would disable this limit.
     runtime.set_memory_limit(HEAP_BYTES);
@@ -32,9 +40,15 @@ pub fn run(case: &str) -> Result<()> {
         }
         expired
     })));
-    // Base objects plus source evaluation and Promises; no loaders, native modules,
-    // typed arrays, RegExp, Date, host callbacks or browser/system APIs are installed.
-    let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
+    Ok((runtime, interrupted))
+}
+
+fn run_case(
+    case: &str,
+    runtime: &Runtime,
+    context: &Context,
+    interrupted: &AtomicBool,
+) -> Result<()> {
     match case {
         "js-basic" => {
             let valid = context.with(|ctx| {
@@ -127,4 +141,24 @@ pub fn run(case: &str) -> Result<()> {
     }
     // Runtime/context are destroyed with any pending jobs; no job runner continues afterward.
     Ok(())
+}
+
+/// The fixture's sole author binding is assigned by the host contract, not by JS.
+pub fn clock_edit() -> Result<wallpaper_scene::transaction::Edit> {
+    if !wallpaper_sandbox::is_appcontainer()? {
+        return Err("Clock fixture refuses non-AppContainer execution".into());
+    }
+    let (runtime, interrupted) = bounded_runtime()?;
+    let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
+    let value = context.with(|ctx| {
+        ctx.eval::<String, _>(include_str!("clock_fixture.js"))
+            .map_err(|_| "Fixed clock script failed")
+    })?;
+    if interrupted.load(Ordering::Relaxed)
+        || runtime.is_job_pending()
+        || value.len() > wallpaper_scene::MAX_TEXT_BYTES
+    {
+        return Err("Clock fixture exceeded its execution or text budget".into());
+    }
+    Ok(wallpaper_scene::transaction::Edit::Text { node: 1, value })
 }

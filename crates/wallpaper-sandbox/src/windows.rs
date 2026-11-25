@@ -677,6 +677,7 @@ pub fn spawn_probe(
         "ipc-roundtrip-replay",
         "ipc-roundtrip-stall",
         "scene-transaction",
+        "scene-script",
         "ipc-write-stall",
         "ipc-write-drain",
         "cpu-busy",

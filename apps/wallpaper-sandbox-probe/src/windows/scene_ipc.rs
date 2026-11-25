@@ -104,6 +104,7 @@ pub fn worker(
     session: u64,
     nonce: u64,
     denied: u32,
+    scripted: bool,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
     let text = |value: &str| Edit::Text {
@@ -116,7 +117,11 @@ pub fn worker(
             session,
             1,
             Body::SceneBatch {
-                edits: vec![text("12:34")],
+                edits: vec![if scripted {
+                    script::clock_edit()?
+                } else {
+                    text("12:34")
+                }],
             },
         ),
     )?;

@@ -24,3 +24,11 @@ The bounded control codec adds message kinds 6 and 7 to protocol version 1. Exis
 Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case scene-transaction`. This fixed Windows fixture uses the existing zero-capability AppContainer, inherited pipes, Job limits, response deadline, and one-slot writer queue. The worker receives a real acknowledgement for its first update and a terminal rejection for a later batch containing a valid color change followed by invalid text. The host compares the retained scene bytes and revision, and the worker observes EOF after rejection. This path accepts fixed typed edits. Script-visible element lookup and renderer publication remain separate M4 work.
 
 Local evidence: `target/sandbox-validation/15db3a27c2ad42a7884b33e3044ea8e3/`. The scene fixture and the healthy, roundtrip, replay and stall controls passed. The first run stopped at the launcher's case allowlist, which was updated for the fixed fixture.
+
+## Fixed JavaScript clock update
+
+Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case scene-script` to exercise a fixed JavaScript update over the same IPC path. The AppContainer worker runs an embedded script in QuickJS with a 16 MiB heap, 256 KiB stack and a 100 ms interrupt deadline. It provides a fixture-scoped `document.getElementById` binding for `clock`. Unknown IDs return null. The text setter stages a string and the getter sees it immediately within the callback. The callback uses the fixed sample time `12:34`. Rust maps its result to the fixture's host-selected node, checks the UTF-8 byte limit and sends the text edit. The worker waits for the matching acknowledgement before continuing.
+
+The fixture's document is local to the embedded script. It covers one lookup and one staged edit. A reusable DOM adapter, timer scheduling, real clock delivery, creator scripts and visual updates are subsequent work. This path shares the existing runtime limits and checks for pending jobs before sending the edit.
+
+Local report: `target/sandbox-validation/304a91be87ee4c1199959c1a65480ea3/`. The JavaScript scene fixture, typed scene control and five existing JS limit/API controls passed with seven verified profile cleanups. [Pinned QuickJS Rust API](https://docs.rs/rquickjs/0.14.0/rquickjs/struct.Runtime.html)
