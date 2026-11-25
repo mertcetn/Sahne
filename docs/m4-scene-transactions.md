@@ -32,3 +32,11 @@ Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case scene-scr
 The fixture's document is local to the embedded script. It covers one lookup and one staged edit. A reusable DOM adapter, timer scheduling, real clock delivery, creator scripts and visual updates are subsequent work. This path shares the existing runtime limits and checks for pending jobs before sending the edit.
 
 Local report: `target/sandbox-validation/304a91be87ee4c1199959c1a65480ea3/`. The JavaScript scene fixture, typed scene control and five existing JS limit/API controls passed with seven verified profile cleanups. [Pinned QuickJS Rust API](https://docs.rs/rquickjs/0.14.0/rquickjs/struct.Runtime.html)
+
+## Multiple element bindings
+
+The fixed script uses the shared worker-side adapter for an author-ID table supplied by Rust. The adapter returns stable objects within one invocation and null for absent names. A text element exposes staged `textContent`, and both text and rectangle elements expose `style.color` as a four-byte RGBA array. Multiple writes to one property emit only the final value. Color arrays are copied at the setter and getter boundaries. Rust maps local indices to the selected scene nodes, checks the edit count and UTF-8 budgets and emits typed edits. Source and bindings remain embedded in this probe.
+
+The `scene-script` case now records the text of `clock` and the RGBA color of `accent` in revision 1. The host verifies both fields and checks preservation after terminal rejection. The fixture verifies lookup identity, missing IDs, duplicate-write coalescing and color copy semantics. The actual input remains a deterministic `12:34` sample. A real clock tick, lifecycle callbacks and general script loading remain future work.
+
+The scripted and typed scene cases plus the basic JavaScript and job-limit controls passed with four verified cleanups. Local report: `target/sandbox-validation/8263cc41a63d48b68c2aac016ca4370e/`. All 155 workspace tests and Clippy passed.

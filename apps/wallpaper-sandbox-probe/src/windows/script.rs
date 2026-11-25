@@ -143,22 +143,88 @@ fn run_case(
     Ok(())
 }
 
-/// The fixture's sole author binding is assigned by the host contract, not by JS.
-pub fn clock_edit() -> Result<wallpaper_scene::transaction::Edit> {
+/// Rust resolves the adapter's local indices against the host fixture bindings.
+pub fn clock_edits() -> Result<Vec<wallpaper_scene::transaction::Edit>> {
     if !wallpaper_sandbox::is_appcontainer()? {
         return Err("Clock fixture refuses non-AppContainer execution".into());
     }
     let (runtime, interrupted) = bounded_runtime()?;
     let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
-    let value = context.with(|ctx| {
-        ctx.eval::<String, _>(include_str!("clock_fixture.js"))
-            .map_err(|_| "Fixed clock script failed")
+    let bindings = [("clock", 1, Some("initial")), ("accent", 2, None)];
+    let edits = context.with(|ctx| {
+        run_scene_callback(&ctx, &bindings, include_str!("clock_fixture.js"), "12:34")
     })?;
-    if interrupted.load(Ordering::Relaxed)
-        || runtime.is_job_pending()
-        || value.len() > wallpaper_scene::MAX_TEXT_BYTES
-    {
-        return Err("Clock fixture exceeded its execution or text budget".into());
+    if interrupted.load(Ordering::Relaxed) || runtime.is_job_pending() {
+        return Err("Clock fixture exceeded its execution budget".into());
     }
-    Ok(wallpaper_scene::transaction::Edit::Text { node: 1, value })
+    Ok(edits)
+}
+
+fn run_scene_callback(
+    ctx: &rquickjs::Ctx<'_>,
+    bindings: &[(&str, u32, Option<&str>)],
+    embedded_callback: &str,
+    value: &str,
+) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
+    use rquickjs::{Array, Function};
+    use wallpaper_scene::{
+        Color, MAX_TEXT_BYTES,
+        transaction::{Edit, MAX_BATCH_TEXT_BYTES, MAX_EDITS},
+    };
+
+    if !(1..=MAX_EDITS).contains(&bindings.len()) {
+        return Err("Scene binding count outside bounds".into());
+    }
+    let input = Array::new(ctx.clone())?;
+    for (index, (name, _, text)) in bindings.iter().enumerate() {
+        let entry = Array::new(ctx.clone())?;
+        entry.set(0, *name)?;
+        entry.set(1, *text)?;
+        let color = Array::new(ctx.clone())?;
+        for channel in 0..4 {
+            color.set(channel, 255u8)?;
+        }
+        entry.set(2, color)?;
+        input.set(index, entry)?;
+    }
+    let adapter: Function = ctx.eval(include_str!("dom_adapter.js"))?;
+    let callback: Function = ctx.eval(embedded_callback)?;
+    let staged: Array = adapter
+        .call((input, callback, value))
+        .map_err(|_| "Fixed clock callback failed")?;
+    let count = staged.len();
+    if !(1..=MAX_EDITS).contains(&count) {
+        return Err("Clock fixture edit count outside bounds".into());
+    }
+    let mut edits = Vec::with_capacity(count);
+    let mut total = 0;
+    for index in 0..count {
+        let edit: Array = staged.get(index)?;
+        let binding: usize = edit.get(0)?;
+        let (_, node, text) = *bindings
+            .get(binding)
+            .ok_or("Invalid fixture binding index")?;
+        match edit.get::<u8>(1)? {
+            1 if text.is_some() => {
+                let value: String = edit.get(2)?;
+                total += value.len();
+                if value.len() > MAX_TEXT_BYTES || total > MAX_BATCH_TEXT_BYTES {
+                    return Err("Clock fixture exceeded its UTF-8 text budget".into());
+                }
+                edits.push(Edit::Text { node, value });
+            }
+            2 => {
+                let color: Array = edit.get(2)?;
+                if color.len() != 4 {
+                    return Err("Expected four RGBA bytes".into());
+                }
+                edits.push(Edit::Color {
+                    node,
+                    value: Color([color.get(0)?, color.get(1)?, color.get(2)?, color.get(3)?]),
+                });
+            }
+            _ => return Err("Invalid fixture edit".into()),
+        }
+    }
+    Ok(edits)
 }

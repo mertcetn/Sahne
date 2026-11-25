@@ -15,6 +15,7 @@ pub fn read_response(
     nonce: u64,
     ready: &mpsc::SyncSender<()>,
     requests: mpsc::SyncSender<Message>,
+    scripted: bool,
 ) -> Result<ProbeReply> {
     let hello = read_frame(output)?.ok_or(MissingFrame("scene Hello"))?;
     if hello != envelope(session, 1, Body::Hello { api_version: 1 }) {
@@ -31,23 +32,37 @@ pub fn read_response(
         height: 100,
         background: Color([0; 4]),
         resources: vec![],
-        nodes: vec![Node {
-            id: 1,
-            bounds: Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 100.0,
-                height: 100.0,
+        nodes: vec![
+            Node {
+                id: 1,
+                bounds: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 100.0,
+                },
+                content: Content::Text {
+                    text: "initial".into(),
+                    font_size: 16.0,
+                    color: Color([255; 4]),
+                },
             },
-            content: Content::Text {
-                text: "initial".into(),
-                font_size: 16.0,
-                color: Color([255; 4]),
+            Node {
+                id: 2,
+                bounds: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0,
+                },
+                content: Content::Rectangle {
+                    color: Color([255; 4]),
+                },
             },
-        }],
+        ],
     }
     .validate()?;
-    let mut host = HostScene::new(scene, session, &BTreeSet::from([1]))
+    let mut host = HostScene::new(scene, session, &BTreeSet::from([1, 2]))
         .map_err(|_| "Could not initialize fixture host scene")?;
     let accepted = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
     let ack = accept_scene_batch(&mut host, accepted);
@@ -55,6 +70,18 @@ pub fn read_response(
         || !matches!(&host.scene().scene().nodes[0].content, Content::Text { text, .. } if text == "12:34")
     {
         return Err("Scene acknowledgement or committed text mismatch".into());
+    }
+    let expected_color = if scripted {
+        Color([36, 179, 144, 255])
+    } else {
+        Color([255; 4])
+    };
+    if host.scene().scene().nodes[1].content
+        != (Content::Rectangle {
+            color: expected_color,
+        })
+    {
+        return Err("Committed accent color mismatch".into());
     }
     requests
         .try_send(ack)
@@ -117,11 +144,11 @@ pub fn worker(
             session,
             1,
             Body::SceneBatch {
-                edits: vec![if scripted {
-                    script::clock_edit()?
+                edits: if scripted {
+                    script::clock_edits()?
                 } else {
-                    text("12:34")
-                }],
+                    vec![text("12:34")]
+                },
             },
         ),
     )?;

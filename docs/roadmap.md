@@ -124,7 +124,8 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Implement [bounded host-side flat-scene transactions](m4-scene-transactions.md) and test atomic rollback, revision checks and typed acknowledgements.
 - [x] Carry scene batches, revision acknowledgements and terminal rejection over the [fixed AppContainer transport fixture](m4-scene-transactions.md#wire-format-and-windows-fixture).
 - [x] Verify a [fixed JavaScript clock text change](m4-scene-transactions.md#fixed-javascript-clock-update) through AppContainer IPC and host acknowledgement.
-- [ ] Add reusable element lookup, text/style mutation, timers, pause/resume events, and the live clock example.
+- [x] Verify [multiple element bindings and staged text/RGBA edits](m4-scene-transactions.md#multiple-element-bindings) with the fixed script worker.
+- [ ] Add timers, pause/resume events and the live clock example. Connect the adapter to the production script-visible DOM.
 - [ ] Enforce callback and Promise/microtask budgets, bounded host callbacks, and bounded diagnostic output.
 - [ ] Preserve the last accepted scene or safe fallback after worker failure.
 - [ ] Integrate package/resource validation and restricted helper processing for untrusted parsing/media/font operations before accepting those inputs.

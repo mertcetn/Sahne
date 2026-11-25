@@ -571,3 +571,7 @@ The control codec carries bounded scene batches and correlated revision acknowle
 ## 58. M4 fixed JavaScript scene update
 
 The AppContainer probe runs a fixed clock callback in bounded QuickJS. It returns a staged text change from a fixture-scoped element binding, which the worker sends through the scene IPC adapter and correlates with the host acknowledgement. See [Fixed JavaScript clock update](m4-scene-transactions.md#fixed-javascript-clock-update).
+
+## 59. M4 worker element bindings
+
+The fixed-script worker can bind multiple author IDs to text and rectangle nodes. Its callback adapter stages text and RGBA changes, coalesces writes per property and maps local indices to the worker's selected scene IDs. The host applies the resulting batch atomically. See [Multiple element bindings](m4-scene-transactions.md#multiple-element-bindings).

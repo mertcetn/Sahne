@@ -92,6 +92,7 @@ impl ProbeAttempt {
         let (send, receive) = mpsc::sync_channel(1);
         let (ready_send, ready_receive) = mpsc::sync_channel(1);
         let (requests, request_receive) = mpsc::sync_channel::<Message>(1);
+        let scripted = case == "scene-script";
         let scene_case = matches!(case, "scene-transaction" | "scene-script");
         let interactive = scene_case || case.starts_with("ipc-roundtrip");
         let requests = interactive.then_some(requests);
@@ -166,6 +167,7 @@ impl ProbeAttempt {
                             nonce,
                             &ready_send,
                             requests.expect("scene case owns writer sender"),
+                            scripted,
                         )
                     } else if let Some(requests) = requests {
                         roundtrip::read_response(
