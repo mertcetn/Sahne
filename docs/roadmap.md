@@ -107,7 +107,7 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 - [ ] Add native translate/scale/opacity animation and explicit pause/resume timing.
 - [x] Establish [typed native animation admission, sampling and explicit pause/resume clock](m3-animation.md), with whole-run transform/opacity bounds and CPU regressions. Source/wire/renderer/FPS/platform integration remains open; this does not complete the parent animation task.
 - [x] Add [typed author binding, independent animation codec and fixed animated preview code](m3-animated-preview.md), including stable opacity targets, raster compatibility and capped pause-aware scheduling. Local GPU/window and recovery acceptance passed. CSS animation grammar remains open.
-- [ ] Record the animated-shapes visual reference. The static reference and observed animated window, pause and recovery checks are recorded. The fixed one-second pose mode is implemented. Capture and verify the retained image in a window.
+- [x] Retain visual references for the [static](m3-preview.md) and [animated midpoint](m3-animated-preview.md#fixed-midpoint-reference-mode) fixtures. Local animated window, pause and recovery checks are also recorded.
 - [ ] Validate unsupported-syntax cases, numeric bounds, parser error recovery, and resource budgets.
 
 ### Completion evidence — G3
