@@ -243,6 +243,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "ipc-roundtrip-stall"
         | "scene-transaction"
         | "scene-script"
+        | "scene-timer"
         | "ipc-write-drain"
         | "filesystem"
         | "registry"
@@ -437,15 +438,8 @@ fn worker(args: &[String]) -> Result<()> {
     if case.starts_with("ipc-roundtrip") {
         return roundtrip::worker(&mut input, &mut output, session, nonce, case, denied);
     }
-    if matches!(case.as_str(), "scene-transaction" | "scene-script") {
-        return scene_ipc::worker(
-            &mut input,
-            &mut output,
-            session,
-            nonce,
-            denied,
-            case == "scene-script",
-        );
+    if let Some(mode) = scene_ipc::Mode::for_case(case) {
+        return scene_ipc::worker(&mut input, &mut output, session, nonce, denied, mode);
     }
     write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
     if case == "handles" {
@@ -593,6 +587,7 @@ fn host(args: &[String]) -> Result<()> {
         "ipc-roundtrip-stall",
         "scene-transaction",
         "scene-script",
+        "scene-timer",
         "ipc-write-stall",
         "ipc-write-drain",
         "filesystem",
@@ -639,8 +634,8 @@ fn host(args: &[String]) -> Result<()> {
                 | "hierarchy-invalid" | "groups-basic" | "groups-invalid" | "network"
                 | "network-egress" | "memory" | "memory-incremental" | "process" | "handles"
                 | "endpoint" | "ipc-rights" | "ipc-roundtrip" | "scene-transaction"
-                | "scene-script" | "ipc-write-drain" | "filesystem" | "registry" | "js-basic"
-                | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
+                | "scene-script" | "scene-timer" | "ipc-write-drain" | "filesystem" | "registry"
+                | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -653,7 +648,9 @@ fn host(args: &[String]) -> Result<()> {
                         "hierarchy-basic" | "hierarchy-invalid" => package::HIERARCHY_RESULT_BIT,
                         "groups-basic" | "groups-invalid" => package::GROUP_COMPILER_RESULT_BIT,
                         "ipc-roundtrip" => roundtrip::RESULT_BIT,
-                        "scene-transaction" | "scene-script" => scene_ipc::RESULT_BIT,
+                        "scene-transaction" | "scene-script" | "scene-timer" => {
+                            scene_ipc::RESULT_BIT
+                        }
                         "process" => 64,
                         "handles" => 128,
                         "endpoint" => 1024,

@@ -4,10 +4,73 @@ use std::collections::BTreeSet;
 use wallpaper_protocol::{SCENE_REJECT_CODE, accept_scene_batch};
 use wallpaper_scene::{
     Color, Content, Node, Rect, SCENE_VERSION, Scene,
+    timer::{MIN_DELAY, Timers},
     transaction::{Edit, HostScene},
 };
 
 pub const RESULT_BIT: u32 = 1 << 23;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Typed,
+    Script,
+    Timer,
+}
+
+impl Mode {
+    pub fn for_case(case: &str) -> Option<Self> {
+        match case {
+            "scene-transaction" => Some(Self::Typed),
+            "scene-script" => Some(Self::Script),
+            "scene-timer" => Some(Self::Timer),
+            _ => None,
+        }
+    }
+}
+
+fn format_minute(minute: u16) -> String {
+    format!("{:02}:{:02}", minute / 60, minute % 60)
+}
+
+fn resumed_clock_tick() -> Result<u16> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let start = Instant::now();
+    let mut timers = Timers::new(start);
+    let id = timers
+        .schedule(start, MIN_DELAY, true)
+        .map_err(|_| "Could not register timer")?;
+    timers
+        .set_paused(start, true)
+        .map_err(|_| "Could not pause timer")?;
+    std::thread::sleep(MIN_DELAY * 4);
+    let resumed = Instant::now();
+    if timers.next_wake().is_some()
+        || timers
+            .take_due(resumed)
+            .map_err(|_| "Could not check paused timer")?
+            .is_some()
+    {
+        return Err("Paused timer dispatched a callback".into());
+    }
+    timers
+        .set_paused(resumed, false)
+        .map_err(|_| "Could not resume timer")?;
+    if timers
+        .take_due(resumed)
+        .map_err(|_| "Could not dispatch resumed timer")?
+        != Some(id)
+        || timers
+            .take_due(resumed)
+            .map_err(|_| "Could not check pending timer")?
+            .is_some()
+        || timers.next_wake() != resumed.checked_add(MIN_DELAY)
+    {
+        return Err("Timer did not dispatch exactly once after resume".into());
+    }
+    let seconds = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    Ok(((seconds / 60) % 1440) as u16)
+}
 
 pub fn read_response(
     output: &mut impl Read,
@@ -15,7 +78,7 @@ pub fn read_response(
     nonce: u64,
     ready: &mpsc::SyncSender<()>,
     requests: mpsc::SyncSender<Message>,
-    scripted: bool,
+    mode: Mode,
 ) -> Result<ProbeReply> {
     let hello = read_frame(output)?.ok_or(MissingFrame("scene Hello"))?;
     if hello != envelope(session, 1, Body::Hello { api_version: 1 }) {
@@ -26,6 +89,15 @@ pub fn read_response(
     if pong != envelope(session, 2, Body::Pong { nonce }) {
         return Err("Invalid scene Pong".into());
     }
+    let display_time = if mode == Mode::Timer {
+        let utc_minute = resumed_clock_tick()?;
+        requests
+            .try_send(envelope(session, 2, Body::ClockTick { utc_minute }))
+            .map_err(|_| "Clock tick writer queue unavailable")?;
+        format_minute(utc_minute)
+    } else {
+        "12:34".into()
+    };
     let scene = Scene {
         version: SCENE_VERSION,
         width: 100,
@@ -67,11 +139,11 @@ pub fn read_response(
     let accepted = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
     let ack = accept_scene_batch(&mut host, accepted);
     if ack != envelope(session, 1, Body::SceneAck { revision: 1 })
-        || !matches!(&host.scene().scene().nodes[0].content, Content::Text { text, .. } if text == "12:34")
+        || !matches!(&host.scene().scene().nodes[0].content, Content::Text { text, .. } if text == &display_time)
     {
         return Err("Scene acknowledgement or committed text mismatch".into());
     }
-    let expected_color = if scripted {
+    let expected_color = if mode != Mode::Typed {
         Color([36, 179, 144, 255])
     } else {
         Color([255; 4])
@@ -119,6 +191,11 @@ pub fn read_response(
         return Err("Invalid scene transaction result".into());
     }
     require_eof(output)?;
+    if mode == Mode::Timer {
+        println!(
+            "Clock timer verified: paused dispatch suppressed, one UTC tick acknowledged after resume."
+        );
+    }
     println!(
         "Scene IPC verified: revision 1 acknowledged, invalid batch rejected, accepted scene preserved."
     );
@@ -131,9 +208,19 @@ pub fn worker(
     session: u64,
     nonce: u64,
     denied: u32,
-    scripted: bool,
+    mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
+    let display_time = if mode == Mode::Timer {
+        let tick = read_frame(input)?.ok_or(MissingFrame("clock tick"))?;
+        tick.check_context(session, 2, 0)?;
+        let Body::ClockTick { utc_minute } = tick.body else {
+            return Err("Expected host clock tick".into());
+        };
+        format_minute(utc_minute)
+    } else {
+        "12:34".into()
+    };
     let text = |value: &str| Edit::Text {
         node: 1,
         value: value.into(),
@@ -144,10 +231,10 @@ pub fn worker(
             session,
             1,
             Body::SceneBatch {
-                edits: if scripted {
-                    script::clock_edits()?
+                edits: if mode != Mode::Typed {
+                    script::clock_edits(&display_time)?
                 } else {
-                    vec![text("12:34")]
+                    vec![text(&display_time)]
                 },
             },
         ),

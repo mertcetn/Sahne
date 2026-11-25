@@ -95,6 +95,23 @@ fn ack_requires_exact_checked_revision_on_read_and_write() {
 }
 
 #[test]
+fn clock_tick_carries_only_a_valid_utc_minute() {
+    for minute in [0, 1439] {
+        let tick = message(Body::ClockTick { utc_minute: minute }, 2, 0);
+        let bytes = encode(&tick);
+        assert_eq!(bytes[30], 8);
+        assert_eq!(read_frame(&mut bytes.as_slice()).unwrap(), Some(tick));
+    }
+    let invalid = message(Body::ClockTick { utc_minute: 1440 }, 2, 0);
+    let mut output = Vec::new();
+    assert!(write_frame(&mut output, &invalid).is_err());
+    assert!(output.is_empty());
+    let mut bytes = encode(&message(Body::ClockTick { utc_minute: 1439 }, 2, 0));
+    bytes[31..33].copy_from_slice(&1440u16.to_le_bytes());
+    assert!(read_frame(&mut bytes.as_slice()).is_err());
+}
+
+#[test]
 fn decoded_batches_produce_ack_then_reject_without_losing_accepted_scene() {
     let scene = Scene {
         version: SCENE_VERSION,

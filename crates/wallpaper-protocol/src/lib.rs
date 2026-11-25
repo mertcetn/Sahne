@@ -56,6 +56,7 @@ pub enum Body {
     Reject { code: u16, message: String },
     SceneBatch { edits: Vec<Edit> },
     SceneAck { revision: u64 },
+    ClockTick { utc_minute: u16 },
 }
 impl Message {
     /// Check expected envelope state without advancing any host state.
@@ -121,6 +122,11 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
             scene::check_ack(message.base_revision, *revision)?;
             data.push(7);
             data.extend_from_slice(&revision.to_le_bytes());
+        }
+        Body::ClockTick { utc_minute } => {
+            check_utc_minute(*utc_minute)?;
+            data.push(8);
+            data.extend_from_slice(&utc_minute.to_le_bytes());
         }
     }
     if data.len() > MAX_FRAME_BYTES {
@@ -198,6 +204,11 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
             scene::check_ack(base_revision, revision)?;
             Body::SceneAck { revision }
         }
+        8 => {
+            let utc_minute = data.u16()?;
+            check_utc_minute(utc_minute)?;
+            Body::ClockTick { utc_minute }
+        }
         _ => return Err(Error::Invalid("unknown message kind")),
     };
     if data.pos != bytes.len() {
@@ -209,6 +220,13 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         base_revision,
         body,
     }))
+}
+
+fn check_utc_minute(minute: u16) -> Result<()> {
+    if minute >= 24 * 60 {
+        return Err(Error::Invalid("UTC minute outside day"));
+    }
+    Ok(())
 }
 struct Decoder<'a> {
     bytes: &'a [u8],

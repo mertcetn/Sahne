@@ -678,6 +678,7 @@ pub fn spawn_probe(
         "ipc-roundtrip-stall",
         "scene-transaction",
         "scene-script",
+        "scene-timer",
         "ipc-write-stall",
         "ipc-write-drain",
         "cpu-busy",

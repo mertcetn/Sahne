@@ -16,7 +16,7 @@ $plan = [ordered]@{
     'hierarchy-basic'=1; 'hierarchy-invalid'=1
     'groups-basic'=1; 'groups-invalid'=1
     'network-egress'=1; memory=1; 'memory-incremental'=1; process=1; handles=1; endpoint=1
-    'ipc-rights'=1; 'ipc-roundtrip'=1; 'ipc-roundtrip-replay'=1; 'ipc-roundtrip-stall'=1; 'scene-transaction'=1; 'scene-script'=1
+    'ipc-rights'=1; 'ipc-roundtrip'=1; 'ipc-roundtrip-replay'=1; 'ipc-roundtrip-stall'=1; 'scene-transaction'=1; 'scene-script'=1; 'scene-timer'=1
     filesystem=1; registry=1; 'ipc-write-drain'=1; 'ipc-write-stall'=1; 'cpu-busy'=1
     hang=1; oversized=1; crash=1; 'ipc-flood'=1; 'ipc-stall'=1; 'ipc-truncated'=1
     'ipc-replay'=1; 'ipc-open'=1; 'js-basic'=1; 'js-interrupt'=1; 'js-memory'=1

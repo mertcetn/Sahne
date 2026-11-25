@@ -579,3 +579,7 @@ The fixed-script worker can bind multiple author IDs to text and rectangle nodes
 ## 60. M4 monotonic callback timer queue
 
 The host can hold bounded one-shot and repeating deadlines. Pause suppresses timer wakes and resumption makes overdue timers eligible while retaining bounded dispatch cadence. A repeat schedules from actual dispatch time, so a missed interval produces no replay backlog. See [Timer contract and tests](m4-timers.md).
+
+## 61. M4 host clock tick through AppContainer
+
+A fixed pause/resume fixture sends one host-sampled UTC minute in a bounded control message when the monotonic timer dispatches. The AppContainer worker updates its clock element through script and receives the host's revision acknowledgement. The fixture verifies both skipped overdue intervals and preservation of the accepted scene. See [Host-driven clock tick over IPC](m4-timers.md#host-driven-clock-tick-over-ipc).

@@ -144,7 +144,7 @@ fn run_case(
 }
 
 /// Rust resolves the adapter's local indices against the host fixture bindings.
-pub fn clock_edits() -> Result<Vec<wallpaper_scene::transaction::Edit>> {
+pub fn clock_edits(display_time: &str) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
     if !wallpaper_sandbox::is_appcontainer()? {
         return Err("Clock fixture refuses non-AppContainer execution".into());
     }
@@ -152,7 +152,12 @@ pub fn clock_edits() -> Result<Vec<wallpaper_scene::transaction::Edit>> {
     let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
     let bindings = [("clock", 1, Some("initial")), ("accent", 2, None)];
     let edits = context.with(|ctx| {
-        run_scene_callback(&ctx, &bindings, include_str!("clock_fixture.js"), "12:34")
+        run_scene_callback(
+            &ctx,
+            &bindings,
+            include_str!("clock_fixture.js"),
+            display_time,
+        )
     })?;
     if interrupted.load(Ordering::Relaxed) || runtime.is_job_pending() {
         return Err("Clock fixture exceeded its execution budget".into());

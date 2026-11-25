@@ -92,8 +92,8 @@ impl ProbeAttempt {
         let (send, receive) = mpsc::sync_channel(1);
         let (ready_send, ready_receive) = mpsc::sync_channel(1);
         let (requests, request_receive) = mpsc::sync_channel::<Message>(1);
-        let scripted = case == "scene-script";
-        let scene_case = matches!(case, "scene-transaction" | "scene-script");
+        let scene_mode = scene_ipc::Mode::for_case(case);
+        let scene_case = scene_mode.is_some();
         let interactive = scene_case || case.starts_with("ipc-roundtrip");
         let requests = interactive.then_some(requests);
         let handles_case = case == "handles";
@@ -160,14 +160,14 @@ impl ProbeAttempt {
             std::thread::Builder::new()
                 .name("probe-reader".into())
                 .spawn(move || {
-                    let response = if scene_case {
+                    let response = if let Some(mode) = scene_mode {
                         scene_ipc::read_response(
                             &mut output,
                             session,
                             nonce,
                             &ready_send,
                             requests.expect("scene case owns writer sender"),
-                            scripted,
+                            mode,
                         )
                     } else if let Some(requests) = requests {
                         roundtrip::read_response(
