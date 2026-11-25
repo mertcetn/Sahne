@@ -1,12 +1,13 @@
 //! Strict, bounded native source subset. No browser recovery, I/O or source execution.
 use std::{collections::BTreeSet, fmt};
 use wallpaper_format::RelativePath;
+pub mod animation;
 mod compile;
 pub mod css;
 #[cfg(any(test, feature = "fixtures"))]
 pub mod fixtures;
 pub mod html;
-pub use compile::{Compiled, CompiledGroups, Viewport, compile, compile_groups};
+pub use compile::{Compiled, CompiledGroups, Viewport, compile, compile_animated, compile_groups};
 
 pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_DEPTH: usize = 32;

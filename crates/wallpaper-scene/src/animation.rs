@@ -1,11 +1,13 @@
 //! Experimental typed native animation, bound to one independently validated v2 scene.
-//! No CSS parser, script callbacks, renderer, timer thread or external input API.
+//! No CSS parser, script callbacks, renderer, timer thread or filesystem/network access.
 use crate::hierarchy::{self, LayerContent, ValidatedHierarchy};
 use std::{
     collections::BTreeMap,
     fmt,
     time::{Duration, Instant},
 };
+mod wire;
+pub use wire::{MAX_BYTES, decode};
 
 pub const VERSION: u16 = 1;
 pub const MAX_TRACKS: usize = 128;
@@ -49,6 +51,7 @@ pub struct Animation {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Code {
+    Encoding,
     Version,
     Budget,
     Timing,
@@ -246,6 +249,9 @@ fn validate_envelope(
 }
 
 impl ValidatedAnimation {
+    pub fn encode(&self) -> Vec<u8> {
+        wire::encode(self)
+    }
     pub fn animation(&self) -> &Animation {
         &self.data
     }

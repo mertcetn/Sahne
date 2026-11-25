@@ -31,13 +31,13 @@ pub struct Quad {
     pub opacity: f32,
     pub uv: [f32; 2],
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Op {
     pub target: usize,
     pub quad: usize,
     pub paint: Paint,
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Text {
     pub text: String,
     pub font_size: f32,
@@ -48,6 +48,7 @@ pub struct Text {
     pub pixels: [u32; 2],
 }
 pub struct Plan {
+    stable: bool,
     pub width: u32,
     pub height: u32,
     pub background: Color,
@@ -115,6 +116,33 @@ fn bytes(width: u32, height: u32, max: u32) -> Result<u64> {
 }
 impl Plan {
     pub fn new(scene: &ValidatedHierarchy, max_dimension: u32) -> Result<Self> {
+        Self::build(scene, max_dimension, &[], false)
+    }
+    pub fn animated(
+        scene: &ValidatedHierarchy,
+        max_dimension: u32,
+        isolation: &[u32],
+    ) -> Result<Self> {
+        Self::build(scene, max_dimension, isolation, true)
+    }
+    fn build(
+        scene: &ValidatedHierarchy,
+        max_dimension: u32,
+        isolation: &[u32],
+        stable: bool,
+    ) -> Result<Self> {
+        if isolation.len() > wallpaper_scene::hierarchy::MAX_OPACITY_GROUPS {
+            return Err("Too many animated opacity targets".into());
+        }
+        for (i, &id) in isolation.iter().enumerate() {
+            if isolation[..i].contains(&id)
+                || !scene.scene().layers.iter().any(|layer| {
+                    layer.id == id && matches!(layer.content, LayerContent::Group { .. })
+                })
+            {
+                return Err("Invalid animated opacity target".into());
+            }
+        }
         let data = scene.scene();
         let canvas = Rect {
             x: 0.0,
@@ -130,6 +158,7 @@ impl Plan {
                 .ok_or("Group texture budget overflow")?;
         }
         let mut plan = Self {
+            stable,
             width: data.width,
             height: data.height,
             background: data.background,
@@ -148,16 +177,17 @@ impl Plan {
                     let LayerContent::Group { opacity, .. } = data.layers[index].content else {
                         return Err("Invalid validated group command".into());
                     };
-                    let intermediate = if opacity != 1.0 {
-                        let target = plan.targets;
-                        plan.targets += 1;
-                        total = total
-                            .checked_add(target_bytes)
-                            .ok_or("Group texture budget overflow")?;
-                        Some(target)
-                    } else {
-                        None
-                    };
+                    let intermediate =
+                        if opacity != 1.0 || isolation.contains(&data.layers[index].id) {
+                            let target = plan.targets;
+                            plan.targets += 1;
+                            total = total
+                                .checked_add(target_bytes)
+                                .ok_or("Group texture budget overflow")?;
+                            Some(target)
+                        } else {
+                            None
+                        };
                     stack.push((index, current, intermediate));
                     if let Some(target) = intermediate {
                         current = target;
@@ -187,7 +217,7 @@ impl Plan {
                 Command::Draw(index) => {
                     let layer = &data.layers[index];
                     let resolved = scene.resolved()[index];
-                    if !visible(resolved.bounds, resolved.clip) {
+                    if !stable && !visible(resolved.bounds, resolved.clip) {
                         continue;
                     }
                     let mut quad = Quad {
@@ -268,10 +298,16 @@ impl Plan {
             return Err("Group total texture budget exceeded".into());
         }
         plan.texture_bytes = total;
+        if plan.targets - 1 > wallpaper_scene::hierarchy::MAX_OPACITY_GROUPS
+            || target_bytes * (plan.targets - 1) as u64
+                > wallpaper_scene::hierarchy::MAX_COMPOSITING_BYTES
+        {
+            return Err("Group intermediate reservation exceeded".into());
+        }
         Ok(plan)
     }
     fn push(&mut self, target: usize, quad: Quad, paint: Paint) {
-        if scissor(quad.clip, self.width, self.height).is_none() {
+        if !self.stable && scissor(quad.clip, self.width, self.height).is_none() {
             return;
         }
         let index = self.quads.len();

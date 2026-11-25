@@ -9,12 +9,14 @@ pub enum Example {
     Image,
     Groups,
     GroupEffects,
+    Animated,
 }
 impl Example {
     pub fn group_fixture(self) -> Option<groups::Fixture> {
         match self {
             Self::Groups => Some(groups::Fixture::Original),
             Self::GroupEffects => Some(groups::Fixture::Effects),
+            Self::Animated => Some(groups::Fixture::Animated),
             _ => None,
         }
     }
@@ -55,7 +57,7 @@ impl Renderer {
         let package = match example {
             Example::Static => wallpaper_compiler::fixtures::static_package()?,
             Example::Image => wallpaper_compiler::fixtures::image_package()?,
-            Example::Groups | Example::GroupEffects => {
+            Example::Groups | Example::GroupEffects | Example::Animated => {
                 return Err("Group example requires the version-2 renderer".into());
             }
         };

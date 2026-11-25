@@ -36,7 +36,7 @@ fn scene_with(layers: Vec<Layer>, width: u32, height: u32) -> ValidatedHierarchy
     .validate()
     .unwrap()
 }
-fn base() -> ValidatedHierarchy {
+pub(super) fn base() -> ValidatedHierarchy {
     scene_with(
         vec![
             group(1, 0, 1.0),
@@ -58,7 +58,7 @@ fn base() -> ValidatedHierarchy {
         480,
     )
 }
-fn track(target: u32, property: Property, start: f32, end: f32) -> Track {
+pub(super) fn track(target: u32, property: Property, start: f32, end: f32) -> Track {
     Track {
         target,
         property,
@@ -74,7 +74,7 @@ fn track(target: u32, property: Property, start: f32, end: f32) -> Track {
         ],
     }
 }
-fn program(tracks: Vec<Track>) -> Animation {
+pub(super) fn program(tracks: Vec<Track>) -> Animation {
     Animation {
         version: VERSION,
         duration_ms: 1000,

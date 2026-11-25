@@ -1,0 +1,68 @@
+# M3 native animation integration and fixed preview
+
+Updated: November 25, 2026. Status: bounded animation wire format, typed author-ID binding and fixed animated preview code with CPU checks. **The animated GPU/window mode has not been run.** No rendered animation or platform pause support is claimed yet; full M3/G3 remains open.
+
+## Commands and original fixture
+
+Build with `cargo build --release -p wallpaper-preview --locked`. When window testing is authorized, run:
+
+```powershell
+target/release/wallpaper-preview.exe --example animated-shapes --seconds 30
+```
+
+Space toggles manual pause/resume; key repeat does not toggle repeatedly. Escape closes the window. This literal currently rejects `--desktop` before event-loop creation. It cannot use the effects-only `--test-pixels` flag. Existing `--test-recreate` and `--test-device-loss` flags select the existing explicit reconstruction tests; these animation combinations still need actual runtime evidence. No arbitrary source/package/animation path is accepted.
+
+The original `examples/animated-shapes/` package contains a manifest and static HTML/CSS for three clipped panels. Its fixed native program lives in `wallpaper_compiler::fixtures::animated_shapes_spec`; CSS `@keyframes`/`animation-*` remain unsupported. It has five linear tracks over two seconds, alternating forever (four seconds per full out-and-back cycle):
+
+| Author group | Property | First → last value |
+| --- | --- | --- |
+| `move` | Translate X / Y | 0 → 280 px / 0 → 180 px |
+| `scale` | Scale X / Y, top-left origin | 0.5 → 2.5 / 0.5 → 2 |
+| `fade` | Group opacity | 0 → 1 |
+
+The fade group contains overlapping opaque red/blue children; blue must overwrite red before the group is blended once. At one second the moving rectangle's world bounds are (260,370,120,100), the scale rectangle is (720,280,180,125), and the fade group has opacity 0.5. At zero/two seconds, opacity is exactly 0/1. Static labels remain outside animated groups. The package requests 30 FPS; the host accepts only 1–60 FPS and rounds its frame interval upward (30 FPS gives 33,333,334 ns).
+
+## Source association and independent decoding
+
+`compile_animated(package, viewport, Spec)` explicitly opts into the existing v2 compiler and binds typed `AuthorTrack` target strings to its author/group symbol table. Target names follow the existing bounded identifier grammar (at most 64 ASCII bytes). Unknown/invalid names return a bounded track-index error; source HTML/CSS errors retain their existing diagnostic path/span. Duplicate properties and invalid values/times/envelopes are rejected by the [native model](m3-animation.md). The resulting `CompiledAnimation` exposes immutable animation, symbol, asset and deferred-script references; it executes no script. This API does not add source animation syntax or claim source locations for separately supplied typed keys.
+
+`ValidatedAnimation::encode()` emits a self-contained base v2 scene plus native animation program. `animation::decode(bytes)` bounds input and counts, independently decodes/validates the base and rebuilds/validates target bindings and all animation envelopes. The base travels with the program; numerical target IDs cannot be rebound to an unrelated later scene through this format. Image pixels are not included: the receiver must independently match immutable assets to decoded scene declarations. The fixed preview does so before use.
+
+| Wire field, in order | Encoding |
+| --- | --- |
+| Magic / animation version | 7 ASCII bytes `SAHNANM` plus NUL / u16 version 1 |
+| Base length / base | u32 / complete v2 scene bytes |
+| Duration / delay / iterations | Three u32 values in milliseconds / count; iteration 0 means forever |
+| Alternate / track count | u8 restricted to 0 or 1 / u16 |
+| Each track | u32 group ID, u8 property tag, u16 key count |
+| Each key | u32 millisecond time, f32 IEEE bits |
+
+All integers/bits are little-endian. Property tags are 1 translate-X, 2 translate-Y, 3 scale-X, 4 scale-Y, 5 opacity. The maximum is 2,114,461 bytes: existing 2 MiB base budget, 29 header bytes, at most 128 seven-byte track headers and 2,048 eight-byte keys. Individual tracks retain the 2–64 key limit. Unknown versions/tags/flags, truncated/trailing bytes, hostile counts, duplicate targets/properties, invalid scene/key values and over-budget data fail closed. A complete key payload is checked before its vector is allocated. This is not a new control-protocol kind or permission to send it through the existing 64 KiB control frame; production IPC/worker integration is still deferred.
+
+## Stable renderer resources
+
+The animated plan retains culled/empty/zero-opacity draw slots and forces a reserved intermediate for every animated opacity group. Thus passing through opacity 0 or 1 does not remove/add targets or renumber draw bindings. Existing scene intermediate, renderer texture/text, uniform and device limits apply before allocation. The fixture owns two full-canvas targets and five static text raster surfaces; it uses no image assets.
+
+Each frame independently samples/revalidates the hierarchy and builds a bounded CPU plan. Before any uniform update, the renderer requires identical canvas/background, operation order, target count, texture reservation, quad count and text raster specifications. Mismatches are errors; no GPU texture, uniform buffer or text raster is resized/recreated to conceal them. Only draw uniform contents and the fitted presentation uniform change during steady playback. CPU scene/plan vectors and wgpu's write-buffer staging remain implementation costs; no performance gain or allocation-free rendering claim is made.
+
+Animated text translation/opacity can reuse a raster when its specifications stay identical. Scale changes that would change text raster dimensions/scale are deliberately rejected by the compatibility check; this fixed example animates shapes only. General animated text-scale raster admission/preallocation remains future work. Native transform/clip budgets are not relaxed to accommodate animation.
+
+## Scheduling and pause ownership
+
+Playback belongs to the application, across GPU generations. The initial clock is paused during initialization. Explicit pause reasons are independent bits: manual, occluded, zero client size, application suspension and renderer recovery. Clearing one reason cannot resume while another remains. Successful reconstruction clears transient recovery/suspension/visibility state for the newly created window while preserving manual pause and active elapsed time. This logical behavior has CPU tests; actual window notifications/recovery interactions remain unverified.
+
+The event loop uses `WaitUntil` for the next animation deadline, queues one redraw and schedules the next interval after a draw attempt. It skips missed frames using absolute active elapsed time; there is no catch-up loop or polling thread. Paused or finitely completed playback contributes no animation wake deadline. Static examples have no playback instance and retain their existing event-driven path. Surface resize/expose events may request extra presentations outside the animation-driven FPS cadence; this is not an absolute cap on every presentation during interaction. Existing duration/recovery deadlines still operate.
+
+The clock excludes paused intervals. Manual pause requests one final redraw at the frozen pose; paused resize/expose redraws use that same pose. Clearing the final reason schedules an immediate current-pose redraw and resumes the capped cadence. OS lock, display-off, fullscreen detection, suspend notification reliability and user pause-policy settings are not implemented/certified by this change. It does not infer those policies from monotonic time or claim sleep behavior across platforms.
+
+## Validation and pending window work
+
+CPU tests cover wire roundtrip/every truncation/trailing data/hostile fields/mutations, author target binding and asset retention, invalid names/duplicates/keys, fixed plan topology through full transparency/opacity and alternate boundaries, independent midpoint group compositing, retained hidden draws, text-raster reallocation rejection, multiple overlapping pause reasons, recovery clock preservation, finite completion, FPS bounds and a single future deadline after a large stall. They create no GPU/window. Existing static scene/group/effect tests remain part of the workspace checks.
+
+Local checkpoint: all 139 workspace tests, formatting, Clippy and the release workspace build passed. Logs: `target/m3-motion-{tests,clippy,build}.log`. Three guarded release-process checks passed without adapter/window initialization: help exited 0; animated desktop and animated pixel-test combinations exited 1 with their expected diagnostic. Report: `target/m3-motion-arguments/b7fc11884d454b19a6d55988148373d1/summary.json`. Dependencies/lockfile and native sandbox policy are unchanged; the sandbox runtime corpus was not rerun. The user requested a pause at this checkpoint to switch models. Resume with the authorized window/GPU validation checkpoint below; do not infer authorization for screen access from a generic continuation.
+
+Before accepting the rendered checkpoint, run the command under `Invoke-SahneGuardedProcess` with bounded duration, a 45-second outer timeout and 1 MiB logs. Observe all three properties, Space freeze/resume, resize/maximize/restore, and Escape exit; correlate pause logs/frame cadence. Then run bounded animation recreation/device-loss cases and static/groups/effects/pixel regressions. Record actual adapter/driver/display data and exact binary/source provenance; do not infer success from CPU tests. No screenshot or runtime evidence for this mode exists yet.
+
+## Primary references
+
+Consulted November 25, 2026: winit 0.30.13 [`WaitUntil`](https://docs.rs/winit/0.30.13/winit/event_loop/enum.ControlFlow.html), [`request_redraw`](https://docs.rs/winit/0.30.13/winit/window/struct.Window.html#method.request_redraw) and [`KeyEvent::repeat`](https://docs.rs/winit/0.30.13/winit/event/struct.KeyEvent.html#structfield.repeat); wgpu 30.0.1 [`Queue::write_buffer`](https://docs.rs/wgpu/30.0.1/wgpu/struct.Queue.html#method.write_buffer). Existing pinned dependencies are unchanged.

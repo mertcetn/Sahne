@@ -1,6 +1,7 @@
 mod compiled;
 mod groups;
 mod lifecycle;
+mod motion;
 mod pixels;
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
@@ -37,7 +38,7 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap. Animated GPU/runtime validation is pending."
                 );
                 return Ok(());
             }
@@ -49,8 +50,9 @@ fn main() -> Result<()> {
                         Some("image") => compiled::Example::Image,
                         Some("groups") => compiled::Example::Groups,
                         Some("groups-effects") => compiled::Example::GroupEffects,
+                        Some("animated-shapes") => compiled::Example::Animated,
                         _ => return Err(
-                            "Choose an original static, image, groups or groups-effects example"
+                            "Choose an original static, image, groups, groups-effects or animated-shapes example"
                                 .into(),
                         ),
                     });
@@ -84,9 +86,18 @@ fn main() -> Result<()> {
         test_device_loss,
         seconds,
     )?;
+    if desktop_mode && compiled_example == Some(compiled::Example::Animated) {
+        return Err("animated-shapes currently requires window mode".into());
+    }
+    let motion = if compiled_example == Some(compiled::Example::Animated) {
+        Some(motion::Playback::new(Instant::now())?)
+    } else {
+        None
+    };
     let events = EventLoop::<DeviceLost>::with_user_event().build()?;
     events.set_control_flow(ControlFlow::Wait);
     let mut app = App {
+        motion,
         state: None,
         desktop: None,
         desktop_mode,
@@ -149,6 +160,7 @@ fn validate_pixel_mode(
     Ok(())
 }
 struct App {
+    motion: Option<motion::Playback>,
     state: Option<State>,
     desktop: Option<wallpaper_platform::Desktop>,
     desktop_mode: bool,
@@ -169,6 +181,15 @@ struct App {
     next_device_test: Option<Instant>,
 }
 impl App {
+    fn motion_reason(&mut self, events: &ActiveEventLoop, reason: u8, enabled: bool) -> bool {
+        if let Some(motion) = self.motion.as_mut()
+            && let Err(error) = motion.reason(Instant::now(), reason, enabled)
+        {
+            self.fail(events, error);
+            return false;
+        }
+        true
+    }
     fn fail(&mut self, events: &ActiveEventLoop, error: impl std::fmt::Display) {
         self.error = Some(error.to_string());
         self.state = None;
@@ -176,6 +197,9 @@ impl App {
         events.exit();
     }
     fn recover(&mut self, events: &ActiveEventLoop, reason: &str) {
+        if !self.motion_reason(events, motion::RECOVERY, true) {
+            return;
+        }
         if self.test_pixels {
             self.fail(events, reason);
             return;
@@ -209,6 +233,7 @@ impl App {
                     Some(compiled::Example::Image) => "Sahne — M3 compiled image example",
                     Some(compiled::Example::Groups) => "Sahne — M3 compiled groups example",
                     Some(compiled::Example::GroupEffects) => "Sahne — M3 group effects example",
+                    Some(compiled::Example::Animated) => "Sahne — M3 native animated shapes",
                     None => "Sahne — M1 trusted scene",
                 })
                 .with_inner_size(LogicalSize::new(960.0, 600.0));
@@ -248,7 +273,19 @@ impl App {
                     );
                 }
                 state.window.request_redraw();
+                let zero =
+                    state.window.inner_size().width == 0 || state.window.inner_size().height == 0;
                 self.state = Some(state);
+                for (reason, enabled) in [
+                    (motion::HIDDEN, false),
+                    (motion::ZERO_SIZE, zero),
+                    (motion::SUSPENDED, false),
+                    (motion::RECOVERY, false),
+                ] {
+                    if !self.motion_reason(events, reason, enabled) {
+                        return;
+                    }
+                }
             }
             Err(e) => self.recover(events, &format!("Initialization failed: {e}")),
         }
@@ -260,7 +297,10 @@ impl ApplicationHandler<DeviceLost> for App {
             self.create(events);
         }
     }
-    fn suspended(&mut self, _: &ActiveEventLoop) {
+    fn suspended(&mut self, events: &ActiveEventLoop) {
+        if !self.motion_reason(events, motion::SUSPENDED, true) {
+            return;
+        }
         self.state = None;
         self.desktop = None;
         self.next_recreate = None;
@@ -322,7 +362,14 @@ impl ApplicationHandler<DeviceLost> for App {
             }
             self.next_probe = Instant::now() + Duration::from_secs(2);
         }
+        if let (Some(motion), Some(state)) = (self.motion.as_mut(), self.state.as_ref())
+            && motion.wake().is_some_and(|wake| now >= wake)
+        {
+            state.window.request_redraw();
+            motion.queued();
+        }
         let wake = [
+            self.motion.as_ref().and_then(motion::Playback::wake),
             self.deadline,
             self.next_retry,
             self.next_recreate,
@@ -351,56 +398,100 @@ impl ApplicationHandler<DeviceLost> for App {
             return;
         }
         let state = self.state.as_mut().expect("checked window");
-        let result = match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                event:
-                    winit::event::KeyEvent {
-                        logical_key: Key::Named(NamedKey::Escape),
-                        state: ElementState::Pressed,
-                        ..
-                    },
-                ..
-            } => {
-                events.exit();
-                Ok(())
-            }
-            WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
-                eprintln!(
-                    "Surface event: size={:?} scale={}",
-                    state.window.inner_size(),
-                    state.window.scale_factor()
-                );
-                state.resize();
-                state.window.request_redraw();
-                Ok(())
-            }
-            WindowEvent::RedrawRequested => state.draw().map(|presented| {
-                if presented {
-                    if self.test_pixels {
-                        self.pixels_passed = true;
-                        events.exit();
-                    }
-                    self.loss_test.frame(self.generation);
-                    if self.loss_test.needs_request() && self.next_device_test.is_none() {
-                        self.next_device_test = Some(Instant::now() + Duration::from_secs(1));
-                    }
-                    self.frames += 1;
-                    eprintln!(
-                        "Presented frame {} generation={}",
-                        self.frames, self.generation
-                    );
-                    if self.recreate_remaining > 0 && self.next_recreate.is_none() {
-                        self.next_recreate = Some(Instant::now() + Duration::from_secs(1));
-                    }
+        let result = (|| -> Result<()> {
+            match event {
+                WindowEvent::CloseRequested
+                | WindowEvent::KeyboardInput {
+                    event:
+                        winit::event::KeyEvent {
+                            logical_key: Key::Named(NamedKey::Escape),
+                            state: ElementState::Pressed,
+                            ..
+                        },
+                    ..
+                } => {
+                    events.exit();
+                    Ok(())
                 }
-            }),
-            WindowEvent::Occluded(false) => {
-                state.window.request_redraw();
-                Ok(())
+                WindowEvent::KeyboardInput {
+                    event:
+                        winit::event::KeyEvent {
+                            logical_key: Key::Named(NamedKey::Space),
+                            state: ElementState::Pressed,
+                            repeat: false,
+                            ..
+                        },
+                    ..
+                } => {
+                    if let Some(motion) = self.motion.as_mut() {
+                        motion.toggle(Instant::now())?;
+                        state.window.request_redraw();
+                    }
+                    Ok(())
+                }
+                WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                    eprintln!(
+                        "Surface event: size={:?} scale={}",
+                        state.window.inner_size(),
+                        state.window.scale_factor()
+                    );
+                    state.resize();
+                    if let Some(motion) = self.motion.as_mut() {
+                        let size = state.window.inner_size();
+                        motion.reason(
+                            Instant::now(),
+                            motion::ZERO_SIZE,
+                            size.width == 0 || size.height == 0,
+                        )?;
+                    }
+                    state.window.request_redraw();
+                    Ok(())
+                }
+                WindowEvent::RedrawRequested => (|| -> Result<()> {
+                    if let Some(motion) = self.motion.as_mut() {
+                        let sample = motion.sample(Instant::now())?;
+                        state
+                            .groups
+                            .as_mut()
+                            .ok_or("Missing animated group renderer")?
+                            .update_motion(&sample.scene, &state.device, &state.queue)?;
+                    }
+                    let presented = state.draw()?;
+                    if let Some(motion) = self.motion.as_mut() {
+                        motion.rendered(Instant::now())?;
+                    }
+                    if presented {
+                        if self.test_pixels {
+                            self.pixels_passed = true;
+                            events.exit();
+                        }
+                        self.loss_test.frame(self.generation);
+                        if self.loss_test.needs_request() && self.next_device_test.is_none() {
+                            self.next_device_test = Some(Instant::now() + Duration::from_secs(1));
+                        }
+                        self.frames += 1;
+                        eprintln!(
+                            "Presented frame {} generation={}",
+                            self.frames, self.generation
+                        );
+                        if self.recreate_remaining > 0 && self.next_recreate.is_none() {
+                            self.next_recreate = Some(Instant::now() + Duration::from_secs(1));
+                        }
+                    }
+                    Ok(())
+                })(),
+                WindowEvent::Occluded(hidden) => {
+                    if let Some(motion) = self.motion.as_mut() {
+                        motion.reason(Instant::now(), motion::HIDDEN, hidden)?;
+                    }
+                    if !hidden {
+                        state.window.request_redraw();
+                    }
+                    Ok(())
+                }
+                _ => Ok(()),
             }
-            _ => Ok(()),
-        };
+        })();
         if let Err(e) = result {
             self.recover(events, &format!("Renderer error: {e}"));
         }
@@ -804,6 +895,7 @@ mod argument_tests {
             Some(compiled::Example::Static),
             Some(compiled::Example::Image),
             Some(compiled::Example::Groups),
+            Some(compiled::Example::Animated),
         ] {
             assert!(validate_pixel_mode(true, example, false, 0, false, Some(6)).is_err());
         }

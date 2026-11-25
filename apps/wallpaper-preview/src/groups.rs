@@ -11,6 +11,7 @@ const RECORD: usize = 80;
 pub enum Fixture {
     Original,
     Effects,
+    Animated,
 }
 struct Surface {
     texture: Option<wgpu::Texture>,
@@ -24,6 +25,7 @@ struct TextSurface {
     viewport: Viewport,
 }
 pub struct Renderer {
+    isolation: Vec<u32>,
     plan: Plan,
     targets: Vec<Surface>,
     images: BTreeMap<u32, Surface>,
@@ -57,6 +59,7 @@ impl Renderer {
         let package = match fixture {
             Fixture::Original => wallpaper_compiler::fixtures::preview_groups_package()?,
             Fixture::Effects => wallpaper_compiler::fixtures::effect_groups_package()?,
+            Fixture::Animated => wallpaper_compiler::fixtures::animated_shapes_package()?,
         };
         let compiled = wallpaper_compiler::compile_groups(
             &package,
@@ -68,7 +71,16 @@ impl Renderer {
         )?;
         let scene = wallpaper_scene::hierarchy::decode(&compiled.scene().encode())?;
         wallpaper_media::validate_hierarchy_assets(&scene, compiled.images())?;
-        let plan = Plan::new(&scene, device.limits().max_texture_dimension_2d)?;
+        let isolation = if matches!(fixture, Fixture::Animated) {
+            vec![compiled.symbols()["fade"]]
+        } else {
+            vec![]
+        };
+        let plan = if isolation.is_empty() {
+            Plan::new(&scene, device.limits().max_texture_dimension_2d)?
+        } else {
+            Plan::animated(&scene, device.limits().max_texture_dimension_2d, &isolation)?
+        };
         let alignment = device.limits().min_uniform_buffer_offset_alignment as usize;
         if alignment == 0 {
             return Err("Invalid group uniform alignment".into());
@@ -303,6 +315,7 @@ impl Renderer {
             plan.texture_bytes
         );
         Ok(Self {
+            isolation,
             plan,
             targets,
             images,
@@ -318,6 +331,33 @@ impl Renderer {
             bindings,
             stride,
         })
+    }
+    pub fn update_motion(
+        &mut self,
+        scene: &wallpaper_scene::hierarchy::ValidatedHierarchy,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<()> {
+        if self.isolation.is_empty() {
+            return Err("Motion updates require the fixed animated fixture".into());
+        }
+        let next = Plan::animated(
+            scene,
+            device.limits().max_texture_dimension_2d,
+            &self.isolation,
+        )?;
+        compatible_motion(&self.plan, &next)?;
+        let mut records = vec![0; self.stride * self.plan.quads.len()];
+        for (index, quad) in next.quads.iter().enumerate() {
+            write_record(
+                &mut records[index * self.stride..],
+                quad,
+                [next.width, next.height],
+            );
+        }
+        queue.write_buffer(&self.uniform, 0, &records);
+        self.plan = next;
+        Ok(())
     }
     pub fn prepare(
         &mut self,
@@ -464,6 +504,22 @@ impl Renderer {
             a: c[3] as f64,
         }
     }
+}
+fn compatible_motion(previous: &Plan, next: &Plan) -> Result<()> {
+    if previous.width != next.width
+        || previous.height != next.height
+        || previous.background != next.background
+        || previous.targets != next.targets
+        || previous.texture_bytes != next.texture_bytes
+        || previous.quads.len() != next.quads.len()
+        || previous.ops != next.ops
+        || previous.texts != next.texts
+    {
+        return Err(
+            "Animated plan changed fixed GPU topology or text raster; refusing update".into(),
+        );
+    }
+    Ok(())
 }
 fn write_record(bytes: &mut [u8], quad: &Quad, size: [u32; 2]) {
     let values = [

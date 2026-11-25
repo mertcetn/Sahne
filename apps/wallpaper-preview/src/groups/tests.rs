@@ -3,6 +3,80 @@ use wallpaper_scene::{
     Color as SceneColor, Content,
     hierarchy::{self, Hierarchy, Layer, LayerContent, Transform},
 };
+
+#[test]
+fn animated_fixture_reuses_topology_including_fully_transparent_and_opaque_endpoints() {
+    let program = crate::motion::program().unwrap();
+    let isolation: Vec<_> = program
+        .animation()
+        .tracks
+        .iter()
+        .filter(|track| track.property == wallpaper_scene::animation::Property::Opacity)
+        .map(|track| track.target)
+        .collect();
+    let initial = Plan::animated(program.base(), 8192, &isolation).unwrap();
+    assert_eq!(initial.targets, 2);
+    assert_eq!(initial.texts.len(), 5);
+    for ms in [0, 1, 250, 500, 1000, 1500, 1999, 2000, 3000, 4000] {
+        let sampled = program.sample(Duration::from_millis(ms)).unwrap();
+        let plan = Plan::animated(&sampled.scene, 8192, &isolation).unwrap();
+        compatible_motion(&initial, &plan).unwrap();
+    }
+    let sampled = program.sample(Duration::from_millis(1000)).unwrap();
+    let plan = Plan::animated(&sampled.scene, 8192, &isolation).unwrap();
+    // Blue overwrites red inside the isolated group before one half-opacity blend.
+    let actual = sample(&plan, 1500.5, 450.5);
+    let panel = plan::linear_color([31, 42, 51, 255]);
+    for i in 0..3 {
+        let blue = if i == 2 { 1.0 } else { 0.0 };
+        assert!((actual[i] - (panel[i] * 0.5 + blue * 0.5)).abs() < 0.000001);
+    }
+}
+
+#[test]
+fn animated_plans_keep_hidden_quads_and_reject_text_raster_reallocation() {
+    let program = crate::motion::program().unwrap();
+    let fade = program.animation().tracks.last().unwrap().target;
+    let initial = Plan::animated(program.base(), 8192, &[fade]).unwrap();
+    let mut hidden = program.base().scene().clone();
+    for layer in &mut hidden.layers {
+        if matches!(layer.content, LayerContent::Group { .. }) {
+            layer.bounds.width = 0.0;
+        }
+    }
+    compatible_motion(
+        &initial,
+        &Plan::animated(&hidden.validate().unwrap(), 8192, &[fade]).unwrap(),
+    )
+    .unwrap();
+    let mut larger = program.base().scene().clone();
+    let parent = larger
+        .layers
+        .iter()
+        .find(|layer| matches!(layer.content, LayerContent::Draw(Content::Text { .. })))
+        .unwrap()
+        .parent;
+    let LayerContent::Group { transform, .. } = &mut larger
+        .layers
+        .iter_mut()
+        .find(|layer| layer.id == parent)
+        .unwrap()
+        .content
+    else {
+        panic!()
+    };
+    transform.scale[0] = 2.0;
+    assert!(
+        compatible_motion(
+            &initial,
+            &Plan::animated(&larger.validate().unwrap(), 8192, &[fade]).unwrap()
+        )
+        .is_err()
+    );
+    for invalid in [vec![fade, fade], vec![0], vec![u32::MAX]] {
+        assert!(Plan::animated(program.base(), 8192, &invalid).is_err());
+    }
+}
 fn original() -> hierarchy::ValidatedHierarchy {
     let compiled = wallpaper_compiler::compile_groups(
         &wallpaper_compiler::fixtures::groups_package().unwrap(),

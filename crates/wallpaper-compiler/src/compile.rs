@@ -140,12 +140,27 @@ pub fn compile(package: &Package, viewport: Viewport) -> Result<Compiled> {
         _ => unreachable!(),
     }
 }
-/// Explicit v2 compilation; this does not enable group rendering in the preview.
+/// Explicit v2 compilation; the default flat compilation path remains separate.
 pub fn compile_groups(package: &Package, viewport: Viewport) -> Result<CompiledGroups> {
     match compile_internal(package, viewport, true)? {
         Compilation::Groups(value) => Ok(value),
         _ => unreachable!(),
     }
+}
+/// Explicit typed author-ID binding; CSS animation syntax remains unsupported.
+pub fn compile_animated(
+    package: &Package,
+    viewport: Viewport,
+    spec: animation::Spec,
+) -> animation::Result<animation::CompiledAnimation> {
+    let compiled = compile_groups(package, viewport).map_err(animation::Error::Source)?;
+    animation::bind(
+        compiled.scene,
+        compiled.symbols,
+        compiled.script,
+        compiled.images,
+        spec,
+    )
 }
 fn compile_internal(package: &Package, viewport: Viewport, groups: bool) -> Result<Compilation> {
     let entry = package.manifest().entry();

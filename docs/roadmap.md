@@ -101,6 +101,7 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 - [ ] Define and implement supported stacking, transforms, clipping, and opacity semantics.
 - [ ] Add native translate/scale/opacity animation and explicit pause/resume timing.
 - [x] Establish [typed native animation admission, sampling and explicit pause/resume clock](m3-animation.md), with whole-run transform/opacity bounds and CPU regressions. Source/wire/renderer/FPS/platform integration remains open; this does not complete the parent animation task.
+- [x] Add [typed author binding, independent animation codec and fixed animated preview code](m3-animated-preview.md), including stable opacity targets, raster compatibility and capped pause-aware scheduling. CSS animation grammar and actual GPU/window/lifecycle acceptance remain open.
 - [ ] Produce static-scene and animated-shapes examples with expected visual references.
 - [ ] Validate unsupported-syntax cases, numeric bounds, parser error recovery, and resource budgets.
 
@@ -172,7 +173,7 @@ At delivery, summarize changes, completed checks, untested cases, and useful rev
 
 ## 12. Next task
 
-The fixed-fixture [group](m3-group-preview.md), [effect](m3-effect-fixtures.md) and [18-sample GPU](m3-pixel-check.md) checkpoints passed locally. The [typed animation and pause/resume clock foundation](m3-animation.md) now has CPU validation. Continue with source/author association, independent animation encoding/decoding, bounded frame scheduling and an original animated preview; establish stable GPU opacity/text allocations before running animation visuals. Then continue compiled hashes and I1 mappings. Full G3 and broader visual/platform checks remain open. Keep parsing/decoding boundaries and budgets explicit before accepting untrusted input. M4 must integrate production transport/callbacks and complete G2 through that path. Extended M1 hardware coverage and later platform/product gates remain open.
+The fixed-fixture [group](m3-group-preview.md), [effect](m3-effect-fixtures.md) and [18-sample GPU](m3-pixel-check.md) checkpoints passed locally. The animation foundation and [typed binding/codec/fixed playback integration](m3-animated-preview.md) have CPU checks; animated GPU/window execution awaits user availability. Observe movement/scale/group opacity, Space freeze/resume, resize and controlled reconstruction/device loss, then run static/effects regressions before closing that rendered checkpoint. CSS animation source grammar, general animated text scale, compiled hashes and I1 mappings still need work. Full G3 and broader visual/platform checks remain open. Keep parsing/decoding boundaries and budgets explicit before accepting untrusted input. M4 must integrate production transport/callbacks and complete G2 through that path. Extended M1 hardware coverage and later platform/product gates remain open.
 
 Sections below are historical progress records; their earlier pending/uncommitted statements describe that stage, not the current status above.
 

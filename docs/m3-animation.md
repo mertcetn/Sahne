@@ -1,5 +1,7 @@
 # M3 native animation foundation
 
+Subsequent work adds [typed compiler binding, independent encoding/decoding and a fixed animated preview](m3-animated-preview.md). Its GPU/window execution is pending; the foundation status below describes the earlier checkpoint.
+
 Updated: November 25, 2026. Status: typed CPU data admission, sampling and explicit pause/resume clock implemented. **Source animation parsing, animated GPU preview, FPS scheduling and platform pause policy are not implemented by this checkpoint.** The existing static examples and scene wire formats are unchanged; full M3/G3 remains open.
 
 ## Typed contract
