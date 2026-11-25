@@ -40,3 +40,11 @@ The fixed script uses the shared worker-side adapter for an author-ID table supp
 The `scene-script` case now records the text of `clock` and the RGBA color of `accent` in revision 1. The host verifies both fields and checks preservation after terminal rejection. The fixture verifies lookup identity, missing IDs, duplicate-write coalescing and color copy semantics. The actual input remains a deterministic `12:34` sample. A real clock tick, lifecycle callbacks and general script loading remain future work.
 
 The scripted and typed scene cases plus the basic JavaScript and job-limit controls passed with four verified cleanups. Local report: `target/sandbox-validation/8263cc41a63d48b68c2aac016ca4370e/`. All 155 workspace tests and Clippy passed.
+
+## Content snapshots for presentation
+
+The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.
+
+A consumer can call `snapshot_after` with its last opaque key to obtain the latest immutable scene. Keys distinguish session and content revision. The API owns only the latest scene, so several unobserved updates collapse into the freshest snapshot. Consumers should retain only their current snapshot and request a fresh one on session change or renderer recreation. Rendering integration is still open.
+
+A CPU regression checks 12:34 → 12:34 → 12:35 followed by rejection. It observes two content changes, retains the earlier immutable scene independently and rejects stale presentation after rollback. In the local three-tick AppContainer run the UTC minute stayed unchanged after the first commit, and the host observed one content update across three acknowledged revisions. The typed and scripted controls also passed. Local report: `target/sandbox-validation/0a36f0e42d894d229502f4802e775797/`.

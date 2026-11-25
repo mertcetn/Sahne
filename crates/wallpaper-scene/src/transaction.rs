@@ -1,6 +1,9 @@
 //! Host-owned transactions for the flat scene prototype.
 use crate::{Color, Content, MAX_TEXT_BYTES, ValidatedScene};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 pub const MAX_EDITS: usize = 64;
 pub const MAX_BATCH_TEXT_BYTES: usize = 48 * 1024;
@@ -52,12 +55,25 @@ pub enum Reject {
 }
 
 pub struct HostScene {
-    scene: ValidatedScene,
+    scene: Arc<ValidatedScene>,
     writable: BTreeMap<u32, usize>,
     session: u64,
     sequence: u64,
     revision: u64,
+    content_revision: u64,
     closed: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SnapshotKey {
+    session: u64,
+    content_revision: u64,
+}
+
+/// Latest immutable renderable scene. Consumers retain only their current snapshot.
+pub struct Snapshot {
+    pub key: SnapshotKey,
+    pub scene: Arc<ValidatedScene>,
 }
 
 impl HostScene {
@@ -82,11 +98,12 @@ impl HostScene {
             return Err(Reject::Target);
         }
         Ok(Self {
-            scene,
+            scene: Arc::new(scene),
             writable: indices,
             session,
             sequence: 1,
             revision: 0,
+            content_revision: 0,
             closed: false,
         })
     }
@@ -96,6 +113,19 @@ impl HostScene {
     }
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Return the latest scene when content changed or the consumer changed sessions.
+    /// Several accepted updates may collapse into one snapshot.
+    pub fn snapshot_after(&self, previous: Option<SnapshotKey>) -> Option<Snapshot> {
+        let key = SnapshotKey {
+            session: self.session,
+            content_revision: self.content_revision,
+        };
+        (previous != Some(key)).then(|| Snapshot {
+            key,
+            scene: Arc::clone(&self.scene),
+        })
     }
     pub fn is_closed(&self) -> bool {
         self.closed
@@ -129,6 +159,7 @@ impl HostScene {
         }
         let mut seen = BTreeSet::new();
         let mut text_bytes = 0;
+        let mut changed = false;
         for edit in &batch.edits {
             let (id, is_text) = match edit {
                 Edit::Text { node, value } => {
@@ -147,15 +178,32 @@ impl HostScene {
             if !seen.insert((id, is_text)) {
                 return Err(Reject::Duplicate);
             }
-            match (&self.scene.scene().nodes[index].content, is_text) {
-                (Content::Text { .. }, _) | (Content::Rectangle { .. }, false) => {}
+            match (&self.scene.scene().nodes[index].content, edit) {
+                (Content::Text { text, .. }, Edit::Text { value, .. }) => changed |= text != value,
+                (
+                    Content::Text { color, .. } | Content::Rectangle { color },
+                    Edit::Color { value, .. },
+                ) => changed |= color != value,
                 _ => return Err(Reject::Property),
             }
         }
         let revision = self.revision.checked_add(1).ok_or(Reject::Exhausted)?;
         let sequence = self.sequence.checked_add(1).ok_or(Reject::Exhausted)?;
+        if changed {
+            self.replace_scene(batch.edits, revision)?;
+        }
+        self.revision = revision;
+        self.sequence = sequence;
+        Ok(Ack {
+            session: self.session,
+            sequence: batch.sequence,
+            revision,
+        })
+    }
+
+    fn replace_scene(&mut self, edits: Vec<Edit>, revision: u64) -> Result<(), Reject> {
         let mut candidate = self.scene.scene().clone();
-        for edit in batch.edits {
+        for edit in edits {
             match edit {
                 Edit::Text { node, value } => {
                     let Content::Text { text, .. } =
@@ -174,14 +222,9 @@ impl HostScene {
             }
         }
         let scene = candidate.validate().map_err(|_| Reject::Scene)?;
-        self.scene = scene;
-        self.revision = revision;
-        self.sequence = sequence;
-        Ok(Ack {
-            session: self.session,
-            sequence: batch.sequence,
-            revision,
-        })
+        self.scene = Arc::new(scene);
+        self.content_revision = revision;
+        Ok(())
     }
 }
 

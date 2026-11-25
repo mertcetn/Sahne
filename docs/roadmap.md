@@ -130,7 +130,8 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Verify [three acknowledged UTC ticks in the same AppContainer session](m4-timers.md#sequential-clock-updates-in-one-worker-session), with one outstanding update and terminal rollback.
 - [ ] Connect script timer registration and lifecycle callbacks to the worker. Add continuous clock updates and connect the adapter to the production script-visible DOM.
 - [ ] Enforce callback and Promise/microtask budgets, bounded host callbacks, and bounded diagnostic output.
-- [ ] Preserve the last accepted scene or safe fallback after worker failure.
+- [x] Verify [immutable accepted snapshots and suppression of unchanged clock content](m4-scene-transactions.md#content-snapshots-for-presentation).
+- [ ] Preserve the last accepted scene or safe fallback in the renderer after worker failure.
 - [ ] Integrate package/resource validation and restricted helper processing for untrusted parsing/media/font operations before accepting those inputs.
 - [ ] Re-run the complete sandbox failure suite through the integrated content path.
 

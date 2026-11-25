@@ -587,3 +587,7 @@ A fixed pause/resume fixture sends one host-sampled UTC minute in a bounded cont
 ## 62. M4 sequential clock commits
 
 The bounded AppContainer clock fixture now delivers three ticks in one session. Worker readiness follows each correlated acknowledgement. The host waits for readiness and the monotonic deadline before each subsequent tick and preserves the third accepted revision on terminal rejection. See [Sequential clock updates](m4-timers.md#sequential-clock-updates-in-one-worker-session).
+
+## 63. M4 immutable scene snapshots
+
+The host exposes the latest validated scene with a session-scoped content key. Unchanged transactions still receive acknowledgements while consumers see no new snapshot. Changed transactions replace the snapshot atomically and terminal rejection preserves it. The AppContainer clock fixture verifies this behavior at its host consumer. See [Content snapshots](m4-scene-transactions.md#content-snapshots-for-presentation).

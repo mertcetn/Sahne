@@ -194,3 +194,49 @@ fn transport_close_keeps_committed_scene_even_if_ack_was_not_delivered() {
     assert_eq!(host.scene().encode(), accepted);
     assert_eq!(host.revision(), 1);
 }
+
+#[test]
+fn snapshot_coalesces_repeated_clock_text_and_keeps_accepted_content_after_reject() {
+    let mut host = host();
+    let initial = host.snapshot_after(None).unwrap();
+    assert_eq!(
+        host.apply(batch(1, 0, vec![text("12:34")]))
+            .unwrap()
+            .revision,
+        1
+    );
+    let first = host.snapshot_after(Some(initial.key)).unwrap();
+    assert_eq!(
+        host.apply(batch(2, 1, vec![text("12:34")]))
+            .unwrap()
+            .revision,
+        2
+    );
+    assert!(host.snapshot_after(Some(first.key)).is_none());
+    assert!(Arc::ptr_eq(
+        &first.scene,
+        &host.snapshot_after(None).unwrap().scene
+    ));
+    assert_eq!(
+        host.apply(batch(3, 2, vec![text("12:35")]))
+            .unwrap()
+            .revision,
+        3
+    );
+    let next = host.snapshot_after(Some(first.key)).unwrap();
+    assert!(
+        matches!(&next.scene.scene().nodes[0].content, Content::Text { text, .. } if text == "12:35")
+    );
+    assert!(
+        matches!(&first.scene.scene().nodes[0].content, Content::Text { text, .. } if text == "12:34")
+    );
+    assert_eq!(
+        host.apply(batch(4, 3, vec![text("\0")])),
+        Err(Reject::Scene)
+    );
+    assert!(host.snapshot_after(Some(next.key)).is_none());
+    assert!(Arc::ptr_eq(
+        &next.scene,
+        &host.snapshot_after(None).unwrap().scene
+    ));
+}

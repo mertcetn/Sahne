@@ -170,6 +170,11 @@ pub fn read_response(
         None
     };
     let updates = mode.updates();
+    let mut snapshot = host
+        .snapshot_after(None)
+        .ok_or("Missing initial snapshot")?;
+    let mut previous_display = "initial".to_owned();
+    let mut published = 0;
     for sequence in 1..=updates {
         let display_time = if let Some((timers, id)) = timer.as_mut() {
             if sequence > 1 {
@@ -202,6 +207,19 @@ pub fn read_response(
         {
             return Err("Scene acknowledgement or committed content mismatch".into());
         }
+        let expected_change = display_time != previous_display;
+        let updated = host.snapshot_after(Some(snapshot.key));
+        if updated.is_some() != expected_change {
+            return Err("Unexpected presentation update for clock text".into());
+        }
+        if let Some(updated) = updated {
+            if updated.scene.as_ref() != host.scene() {
+                return Err("Published snapshot differs from committed scene".into());
+            }
+            snapshot = updated;
+            published += 1;
+        }
+        previous_display = display_time;
         requests
             .try_send(ack)
             .map_err(|_| "Scene writer queue unavailable")?;
@@ -219,6 +237,7 @@ pub fn read_response(
     ) || !host.is_closed()
         || host.revision() != updates
         || host.scene().encode() != committed
+        || host.snapshot_after(Some(snapshot.key)).is_some()
     {
         return Err("Rejected scene transaction changed host state".into());
     }
@@ -243,6 +262,7 @@ pub fn read_response(
         println!(
             "Clock timer verified: paused dispatch suppressed, {updates} sequential UTC ticks acknowledged after resume."
         );
+        println!("Clock snapshots verified: {published} content changes for {updates} revisions.");
     }
     println!(
         "Scene IPC verified: revision {updates} acknowledged, invalid batch rejected, accepted scene preserved."
