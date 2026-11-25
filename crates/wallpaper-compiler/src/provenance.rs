@@ -1,7 +1,7 @@
 use crate::{Viewport, animation::Spec, compile, compile_animated, compile_groups};
 use std::{
     collections::BTreeMap,
-    io::{self, Write},
+    io::{self, Read, Write},
 };
 use wallpaper_format::{Package, RelativePath};
 
@@ -21,6 +21,78 @@ pub fn write_compiled(
     mode: Mode,
 ) -> Result<()> {
     export(output, package, viewport, mode, false)
+}
+
+/// Verify exact record bytes against a separately supplied source snapshot and build inputs.
+pub fn verify_compiled(
+    input: impl Read,
+    package: &Package,
+    viewport: Viewport,
+    mode: Mode,
+) -> Result<()> {
+    verify(input, |output| {
+        write_compiled(output, package, viewport, mode)
+    })
+}
+
+#[cfg(feature = "fixtures")]
+pub fn verify_fixture(input: impl Read, name: Option<&str>) -> Result<()> {
+    verify(input, |output| write_fixture(output, name))
+}
+
+fn verify<R: Read>(input: R, regenerate: impl FnOnce(&mut Compare<R>) -> Result<()>) -> Result<()> {
+    let mut output = Compare { input, position: 0 };
+    regenerate(&mut output)?;
+    if output.input.read(&mut [0; 1])? != 0 {
+        return Err(output.invalid("Unexpected trailing data", 0).into());
+    }
+    Ok(())
+}
+
+struct Compare<R> {
+    input: R,
+    position: usize,
+}
+
+impl<R> Compare<R> {
+    fn invalid(&self, message: &str, offset: usize) -> io::Error {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{message} at record byte {}", self.position + offset),
+        )
+    }
+}
+
+impl<R: Read> Write for Compare<R> {
+    fn write(&mut self, expected: &[u8]) -> io::Result<usize> {
+        if expected.is_empty() {
+            return Ok(0);
+        }
+        let mut buffer = [0; 8192];
+        let length = expected.len().min(buffer.len());
+        let read = loop {
+            match self.input.read(&mut buffer[..length]) {
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                result => break result?,
+            }
+        };
+        if read == 0 {
+            return Err(self.invalid("Truncated record", 0));
+        }
+        if let Some(offset) = buffer[..read]
+            .iter()
+            .zip(expected)
+            .position(|(a, b)| a != b)
+        {
+            return Err(self.invalid("Record differs from expected compilation", offset));
+        }
+        self.position += read;
+        Ok(read)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 fn export(
@@ -175,4 +247,29 @@ fn count(output: &mut impl Write, value: usize) -> io::Result<()> {
 fn field(output: &mut impl Write, bytes: &[u8]) -> io::Result<()> {
     count(output, bytes.len())?;
     output.write_all(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn receiver_requires_exact_payload_and_eof() {
+        let package = crate::fixtures::image_package().unwrap();
+        let viewport = Viewport {
+            width: 1920,
+            height: 1080,
+            background: wallpaper_scene::Color([12, 17, 22, 255]),
+        };
+        let mut record = Vec::new();
+        write_compiled(&mut record, &package, viewport, Mode::Flat).unwrap();
+        let check = |bytes: &[u8]| verify_compiled(bytes, &package, viewport, Mode::Flat);
+        check(&record).unwrap();
+        assert!(check(&record[..record.len() - 1]).is_err());
+        *record.last_mut().unwrap() ^= 1;
+        assert!(check(&record).is_err());
+        *record.last_mut().unwrap() ^= 1;
+        record.push(0);
+        assert!(check(&record).is_err());
+    }
 }

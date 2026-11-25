@@ -1,6 +1,6 @@
 # M3 compiled provenance fixture
 
-The developer CLI can emit a binary provenance record for the embedded group fixture. It compiles the retained package, independently decodes the resulting v2 scene and validates its image assets before emitting the record. The default command preserves the original v1 group record. Named fixtures and the compiler API emit version 2. Production verification and collection from disk remain open.
+The developer CLI can emit a binary provenance record for the embedded group fixture. It compiles the retained package, independently decodes the resulting v2 scene and validates its image assets before emitting the record. The default command preserves the original v1 group record. Named fixtures and the compiler API emit version 2. Receiver-side exact verification is available for a caller-supplied source snapshot. Production integration and disk collection remain open.
 
 From the repository root in PowerShell 7.4 or later:
 
@@ -47,3 +47,17 @@ Two local release runs per named fixture produced these SHA-256 digests:
 | animated-shapes | 3C7D6CB8FEEC5757E5203CDE337BB2FDB3489547D42FE4477745FF7DEF775406 |
 
 The omitted-name v1 fixture also reproduced its documented digest. An unknown fixture name exited with code 2.
+
+## Receiver verification
+
+`verify_compiled(reader, package, viewport, mode)` regenerates the expected version 2 record from a separately supplied validated package and build inputs. Supply the expected viewport and typed animation spec from the receiver's trusted context. It compares bytes as it writes the regenerated record, uses an 8 KiB comparison buffer, and requires EOF immediately afterward. Incoming counts and sizes never drive allocations. A mismatch, truncation, trailing byte, compile failure, or read error rejects the record. The diagnostic identifies the byte offset for content and length mismatches.
+
+The developer CLI checks the embedded examples through binary stdin. With the exported `image` record saved under `target`, run this from PowerShell:
+
+```powershell
+cmd.exe /d /c "target\release\wallpaper-cli.exe --verify-compiled-provenance-fixture image < target\compiled-provenance.bin"
+```
+
+Select the same name used for export. Omit the name to verify the legacy group record. Exit 0 indicates exact agreement. Exit 1 indicates verification failure and exit 2 indicates invalid arguments. Close the input stream after writing the record so the verifier can check EOF. This API checks reproducibility against the supplied inputs. Publisher authentication and package collection remain separate work.
+
+Local release CLI validation accepted all four named fixtures and the legacy fixture. It rejected a changed RGBA byte, truncated input, a trailing byte, and a valid record checked against a different fixture.

@@ -527,3 +527,7 @@ The developer CLI streams a versioned record for the embedded v2 group fixture a
 ## 47. M3 typed compiled provenance export
 
 The compiler can produce a version 2 provenance record directly from a validated retained package and viewport. The record distinguishes flat, grouped and animated scene data and preserves the ordered ID list for each author symbol. The developer CLI exposes four built-in examples alongside the original version 1 group command. Export validation independently decodes each scene payload and checks its RGBA assets before writing. Receiver verification and disk package collection remain open. See [Compiled provenance](m3-compiled-provenance.md).
+
+## 48. M3 compiled record receiver verification
+
+The receiver regenerates the canonical record from its own retained package, viewport and compilation mode. It compares incoming bytes with a fixed 8 KiB buffer and requires EOF. A remote record cannot drive allocation sizes or supply the expected source snapshot. The fixture CLI verifies binary stdin for legacy and named exports. See [Receiver verification](m3-compiled-provenance.md#receiver-verification).

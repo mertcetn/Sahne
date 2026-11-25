@@ -11,7 +11,7 @@ fn main() -> ExitCode {
         }
         [arg] if arg == "--help" || arg == "-h" => {
             println!(
-                "Usage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check | --compiled-provenance-fixture [static|image|groups|animated-shapes]]\n--scene-check validates and roundtrips a fixed built-in flat scene.\n--hierarchy-check validates and roundtrips an original version-2 group fixture; no group rendering.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\n--compile-image-check also decodes an original fixed PNG and validates its pixel assets against the scene.\n--compile-groups-check compiles original HTML/CSS/PNG into version-2 groups and independently checks scene/assets.\n--compiled-provenance-fixture writes a binary provenance record to stdout. An omitted name selects the legacy groups record.\nNo external files, rendering or script execution in these checks."
+                "Usage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check | --compiled-provenance-fixture [static|image|groups|animated-shapes]]\n--scene-check validates and roundtrips a fixed built-in flat scene.\n--hierarchy-check validates and roundtrips an original version-2 group fixture; no group rendering.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\n--compile-image-check also decodes an original fixed PNG and validates its pixel assets against the scene.\n--compile-groups-check compiles original HTML/CSS/PNG into version-2 groups and independently checks scene/assets.\n--compiled-provenance-fixture writes a binary provenance record to stdout. An omitted name selects the legacy groups record.\n--verify-compiled-provenance-fixture [static|image|groups|animated-shapes] checks binary stdin against the selected embedded fixture.\nThese checks perform no rendering or script execution."
             );
             ExitCode::SUCCESS
         }
@@ -49,8 +49,14 @@ fn main() -> ExitCode {
                 }
             }
         }
-        [arg] if arg == "--compiled-provenance-fixture" => write_provenance(None),
-        [arg, name] if arg == "--compiled-provenance-fixture" => write_provenance(Some(name)),
+        [arg] if arg == "--verify-compiled-provenance-fixture" => provenance_fixture(None, true),
+        [arg, name] if arg == "--verify-compiled-provenance-fixture" => {
+            provenance_fixture(Some(name), true)
+        }
+        [arg] if arg == "--compiled-provenance-fixture" => provenance_fixture(None, false),
+        [arg, name] if arg == "--compiled-provenance-fixture" => {
+            provenance_fixture(Some(name), false)
+        }
         _ => {
             eprintln!("Unsupported arguments. Run wallpaper-cli --help.");
             ExitCode::from(2)
@@ -220,12 +226,18 @@ fn check_scene() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn write_provenance(name: Option<&str>) -> ExitCode {
+fn provenance_fixture(name: Option<&str>, verify: bool) -> ExitCode {
     if name.is_some_and(|name| !matches!(name, "static" | "image" | "groups" | "animated-shapes")) {
         eprintln!("Unknown compiled provenance fixture");
         return ExitCode::from(2);
     }
-    match wallpaper_compiler::provenance::write_fixture(std::io::stdout().lock(), name) {
+    use wallpaper_compiler::provenance;
+    let result = if verify {
+        provenance::verify_fixture(std::io::stdin().lock(), name)
+    } else {
+        provenance::write_fixture(std::io::stdout().lock(), name)
+    };
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("Compiled provenance fixture failed: {error}");
