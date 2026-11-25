@@ -132,7 +132,8 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [ ] Enforce callback and Promise/microtask budgets, bounded host callbacks, and bounded diagnostic output.
 - [x] Verify [immutable accepted snapshots and suppression of unchanged clock content](m4-scene-transactions.md#content-snapshots-for-presentation).
 - [x] Add the [host-driven UTC clock renderer path](m4-clock-preview.md) and deterministic rollover mode with CPU checks.
-- [ ] Validate the clock rollover in a D3D12 window and connect the AppContainer worker to the renderer. Preserve the last accepted rendering after worker failure.
+- [x] Verify the [clock rollover and GPU recovery](m4-clock-preview.md#local-windows-verification) in a local D3D12 window.
+- [ ] Connect the AppContainer worker to the renderer and preserve the last accepted rendering after worker failure.
 - [ ] Integrate package/resource validation and restricted helper processing for untrusted parsing/media/font operations before accepting those inputs.
 - [ ] Re-run the complete sandbox failure suite through the integrated content path.
 
