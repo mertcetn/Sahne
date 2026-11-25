@@ -1826,6 +1826,7 @@ dependencies = [
 name = "wallpaper-platform"
 version = "0.1.0-dev"
 dependencies = [
+ "wallpaper-format",
  "windows-sys 0.61.2",
  "winit",
 ]

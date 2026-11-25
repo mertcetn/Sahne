@@ -1,5 +1,7 @@
-//! Narrow Windows desktop FFI boundary; never used by untrusted workers.
+//! Narrow Windows host FFI boundary; never used by untrusted workers.
 #![deny(unsafe_op_in_unsafe_fn)]
+#[cfg(windows)]
+pub mod package_open;
 #[cfg(windows)]
 mod desktop {
     use std::{io, ptr};

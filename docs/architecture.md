@@ -539,3 +539,7 @@ The proposed web adapter maps retained HTML, CSS and PNG through native validati
 ## 50. Bounded package ingestion from open readers
 
 The package format library can retain a bounded snapshot from caller-supplied readers and run native package validation on the resulting bytes. The platform layer still owns safe file opening and containment, and callers own operational deadlines. See [Bounded snapshot from open readers](m3-manifest.md#bounded-snapshot-from-open-readers).
+
+## 51. Windows relative package open primitive
+
+The host platform opens individual portable path components relative to a directory handle with reparse traversal disabled. It validates the returned disk object's type and rejects multiply linked files. The platform regression covers parent replacement and junction rejection. Root acquisition, handle-based enumeration and package snapshot integration remain open. See [Windows handle-relative opening](m3-manifest.md#windows-handle-relative-opening).
