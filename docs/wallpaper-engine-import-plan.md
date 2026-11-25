@@ -39,4 +39,10 @@ Do not execute JavaScript, evaluate manifest conditions, launch native applicati
 
 ## Decisions still open
 
+### Upstream implementation to review during I2 and I3
+
+Review the C++ Linux project [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine) when the compatibility work begins. In I2, check what it implements for web projects and property callbacks. In I3, examine its PKG/TEX handling and any assumptions about Steam-installed Wallpaper Engine assets. Record the upstream revision and supported format variants before basing Sahne tests on observed behavior.
+
+GitHub lists the project under GPL-3.0. Before adopting code, assess license compatibility, dependencies, security and portability to Sahne's Windows and Linux targets. Use the findings to decide which parts can serve as a reference and whether any direct reuse fits the project. [Upstream repository and license](https://github.com/Almamu/linux-wallpaperengine)
+
 Exact web subset and adapter versioning; report schema; safe condition grammar; static JS analysis tools and their security/license review; I2 release placement; I3 format/texture versions. Resolve through fixtures and measurements, not by relaxing native isolation or assuming a full browser. Steam Workshop acquisition/distribution is outside local import scope.
