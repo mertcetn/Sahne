@@ -22,6 +22,7 @@ const INVALID_HANDLE_EXIT: u32 = 0xc0000008;
 #[derive(Debug, PartialEq, Eq)]
 enum ProbeReply {
     Report(u32),
+    ClockSnapshot { bits: u32, text: [u8; 5] },
     InvalidHandleTermination,
 }
 #[derive(Debug)]
@@ -614,6 +615,12 @@ fn host(args: &[String]) -> Result<()> {
     let root = attempt.root.clone();
     let sandbox = &attempt.sandbox;
     let result = attempt.response.take().ok_or("Missing attempt result")?;
+    let (result, clock_snapshot) = match result {
+        Ok(Ok(ProbeReply::ClockSnapshot { bits, text })) if case == "scene-timer" => {
+            (Ok(Ok(ProbeReply::Report(bits))), Some(text))
+        }
+        other => (other, None),
+    };
     let outcome = (|| -> Result<()> {
         if !attempt.handshake {
             return Err("Worker did not complete handshake".into());
@@ -847,6 +854,16 @@ fn host(args: &[String]) -> Result<()> {
     // Kill even on errors before joining a potentially blocked pipe reader.
     attempt.finish()?;
     outcome?;
+    if let Some(text) = clock_snapshot {
+        let path = root.join("clock-snapshot.bin");
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        file.write_all(&text)?;
+        file.flush()?;
+        println!("Accepted clock snapshot retained at {}", path.display());
+    }
     if case == "filesystem" {
         wallpaper_sandbox::verify_filesystem_fixture(&root)?;
         println!("Filesystem post-stop control: synthetic file contents and namespace unchanged.");

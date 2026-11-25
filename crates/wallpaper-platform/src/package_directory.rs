@@ -20,7 +20,7 @@ use windows_sys::Win32::{
 
 /// Collect from an absolute fixed-drive path with portable ASCII components.
 pub fn collect(path: &str) -> Result<Package, Box<dyn std::error::Error>> {
-    let mut dir = open_root(path)?;
+    let mut dir = open_folder(path)?;
     let mut entries = Vec::new();
     let mut count = 0;
     walk(&mut dir, "", &mut count, &mut entries)?;
@@ -31,7 +31,8 @@ fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
-fn open_root(path: &str) -> io::Result<File> {
+/// Open a fixed-drive folder after validating each parent component.
+pub fn open_folder(path: &str) -> io::Result<File> {
     let bytes = path.as_bytes();
     if bytes.len() > 243
         || bytes.len() < 4

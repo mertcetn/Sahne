@@ -21,3 +21,23 @@ On November 25, 2026, source `b8be040681f84bbad60f69413c57dd9c97fc7305` ran on a
 The rollover window showed [23:59](images/m4-clock-2359.jpg) and then [00:00](images/m4-clock-0000.jpg). Both captures are original 962×632 window images, including chrome. The 00:00 value and UTC label remained visible during maximize to a 1920×1009 client and restoration to 960×600. Escape exited 0. The guarded run recorded four presentations in one generation, with the last two following resize events. Local log: `target/m4-clock-visual/804cbdabc36c4b33b932b62492e9c8f3/stderr.log`.
 
 Two eight-second runs in system-clock mode also passed. Controlled recreation presented three frames over two generations. Requested application-device loss observed the callback and a restored frame, with two presentations over two generations. Both runs exited zero. This checks the local host-driven clock path. The AppContainer-to-renderer path is separate. Local report: `target/m4-clock-lifecycle/7c642b5d7ce7436588be38cc2f869fac/summary.json`.
+
+## Retained AppContainer clock snapshot
+
+The `scene-timer` probe records the accepted clock value after terminal rejection, normal worker exit and verified profile cleanup. The host writes `clock-snapshot.bin` in the probe run folder reported on stdout. The artifact carries exactly five ASCII bytes in UTC HH:MM form. It is a local developer fixture. The file format does not authenticate its origin.
+
+```powershell
+cargo build --release -p wallpaper-preview -p wallpaper-sandbox-probe --locked
+target/release/wallpaper-sandbox-probe.exe --case scene-timer
+```
+
+Use the absolute run folder printed by the probe as `$runFolder`:
+
+```powershell
+target/release/wallpaper-preview.exe --check-clock-worker-snapshot $runFolder
+target/release/wallpaper-preview.exe --example clock --clock-worker-snapshot $runFolder --seconds 15
+```
+
+The loader opens the fixed file name relative to a validated local folder handle, rejects links and reads five bytes plus an EOF check. It accepts only valid UTC hour and minute digits. The preview stages the value in its own validated scene, then holds the snapshot without scheduling clock ticks. The headless check uses this same staging path. The normal host-driven preview remains available independently.
+
+The local AppContainer test accepted three clock revisions, rejected the terminal batch and preserved its last snapshot. The headless preview agreed with the retained 19:57 UTC value. It rejected short input, trailing bytes, hour 24 and minute 60. The worker is finished before the snapshot is opened. This is a retained snapshot handoff. Visual verification of this mode and continuous worker publication remain open.

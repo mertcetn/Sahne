@@ -267,7 +267,18 @@ pub fn read_response(
     println!(
         "Scene IPC verified: revision {updates} acknowledged, invalid batch rejected, accepted scene preserved."
     );
-    Ok(ProbeReply::Report(EXPECTED | RESULT_BIT))
+    let bits = EXPECTED | RESULT_BIT;
+    if mode == Mode::Timer {
+        let Content::Text { text, .. } = &snapshot.scene.scene().nodes[0].content else {
+            return Err("Missing accepted clock text".into());
+        };
+        let text = text
+            .as_bytes()
+            .try_into()
+            .map_err(|_| "Invalid clock snapshot length")?;
+        return Ok(ProbeReply::ClockSnapshot { bits, text });
+    }
+    Ok(ProbeReply::Report(bits))
 }
 
 pub fn worker(

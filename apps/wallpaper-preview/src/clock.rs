@@ -67,7 +67,7 @@ pub fn initial_scene() -> Result<ValidatedScene> {
 
 pub struct Clock {
     host: HostScene,
-    wake: Instant,
+    wake: Option<Instant>,
     rollover: Option<u16>,
 }
 
@@ -77,13 +77,28 @@ impl Clock {
             .map_err(|_| "Could not create fixed clock scene")?;
         Ok(Self {
             host,
-            wake: now,
+            wake: Some(now),
             rollover: test_rollover.then_some(1439),
         })
     }
 
-    pub fn wake(&self) -> Instant {
+    pub fn from_worker(now: Instant, folder: &str) -> Result<Self> {
+        let mut clock = Self::new(now, false)?;
+        let text = worker_text(folder)?;
+        clock.apply_text(text)?;
+        clock.wake = None;
+        Ok(clock)
+    }
+
+    pub fn wake(&self) -> Option<Instant> {
         self.wake
+    }
+
+    pub fn text(&self) -> &str {
+        let Content::Text { text, .. } = &self.host.scene().scene().nodes[1].content else {
+            unreachable!("fixed clock text node")
+        };
+        text
     }
 
     pub fn snapshot_after(&self, key: Option<SnapshotKey>) -> Option<Snapshot> {
@@ -91,7 +106,7 @@ impl Clock {
     }
 
     pub fn tick(&mut self, now: Instant) -> Result<bool> {
-        if now < self.wake {
+        if self.wake.is_none_or(|wake| now < wake) {
             return Ok(false);
         }
         let (minute, delay) = if let Some(minute) = self.rollover {
@@ -100,6 +115,15 @@ impl Clock {
             utc_sample(SystemTime::now().duration_since(UNIX_EPOCH)?)
         };
         let next = now.checked_add(delay).ok_or("Clock deadline overflow")?;
+        let changed = self.apply_text(format!("{:02}:{:02}", minute / 60, minute % 60))?;
+        self.wake = Some(next);
+        if let Some(minute) = self.rollover.as_mut() {
+            *minute = 0;
+        }
+        Ok(changed)
+    }
+
+    fn apply_text(&mut self, value: String) -> Result<bool> {
         let before = self
             .host
             .snapshot_after(None)
@@ -114,16 +138,37 @@ impl Clock {
                 base_revision: revision,
                 edits: vec![Edit::Text {
                     node: CLOCK_ID,
-                    value: format!("{:02}:{:02}", minute / 60, minute % 60),
+                    value,
                 }],
             })
             .map_err(|_| "Fixed clock edit was rejected")?;
-        self.wake = next;
-        if let Some(minute) = self.rollover.as_mut() {
-            *minute = 0;
-        }
         Ok(self.host.snapshot_after(Some(before)).is_some())
     }
+}
+
+fn worker_text(folder: &str) -> Result<String> {
+    use std::io::Read;
+    use wallpaper_platform::{
+        package_directory::open_folder,
+        package_open::{Kind, open_child},
+    };
+
+    let parent = open_folder(folder)?;
+    let mut file = open_child(&parent, "clock-snapshot.bin", Kind::RegularFile)?;
+    let mut bytes = [0; 5];
+    file.read_exact(&mut bytes)?;
+    if file.read(&mut [0])? != 0 {
+        return Err("Clock snapshot has trailing bytes".into());
+    }
+    let [h1, h2, colon, m1, m2] = bytes;
+    if colon != b':'
+        || ![h1, h2, m1, m2].iter().all(u8::is_ascii_digit)
+        || (h1 - b'0') * 10 + (h2 - b'0') >= 24
+        || m1 >= b'6'
+    {
+        return Err("Clock snapshot must contain a five-byte UTC HH:MM value".into());
+    }
+    Ok(String::from_utf8(bytes.to_vec())?)
 }
 
 fn utc_sample(elapsed: Duration) -> (u16, Duration) {
