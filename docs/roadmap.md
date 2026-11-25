@@ -134,7 +134,8 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Add the [host-driven UTC clock renderer path](m4-clock-preview.md) and deterministic rollover mode with CPU checks.
 - [x] Verify the [clock rollover and GPU recovery](m4-clock-preview.md#local-windows-verification) in a local D3D12 window.
 - [x] Verify the [retained AppContainer clock handoff](m4-clock-preview.md#retained-appcontainer-clock-snapshot) through the preview headless entry point.
-- [ ] Visually validate the retained worker clock, then connect live worker snapshots to the renderer and preserve the last accepted rendering after worker failure.
+- [x] Verify the [retained worker clock in a D3D12 window](m4-clock-preview.md#retained-value-visual-result).
+- [ ] Connect live worker snapshots to the renderer and preserve the last accepted rendering after worker failure.
 - [ ] Integrate package/resource validation and restricted helper processing for untrusted parsing/media/font operations before accepting those inputs.
 - [ ] Re-run the complete sandbox failure suite through the integrated content path.
 

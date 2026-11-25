@@ -40,4 +40,8 @@ target/release/wallpaper-preview.exe --example clock --clock-worker-snapshot $ru
 
 The loader opens the fixed file name relative to a validated local folder handle, rejects links and reads five bytes plus an EOF check. It accepts only valid UTC hour and minute digits. The preview stages the value in its own validated scene, then holds the snapshot without scheduling clock ticks. The headless check uses this same staging path. The normal host-driven preview remains available independently.
 
-The local AppContainer test accepted three clock revisions, rejected the terminal batch and preserved its last snapshot. The headless preview agreed with the retained 19:57 UTC value. It rejected short input, trailing bytes, hour 24 and minute 60. The worker is finished before the snapshot is opened. This is a retained snapshot handoff. Visual verification of this mode and continuous worker publication remain open.
+The local AppContainer test accepted three clock revisions, rejected the terminal batch and preserved its last snapshot. The headless preview agreed with the retained 19:57 UTC value. It rejected short input, trailing bytes, hour 24 and minute 60. The worker is finished before the snapshot is opened. This is a retained snapshot handoff. The retained value was verified in a window as recorded below. Continuous worker publication remains open.
+
+### Retained value visual result
+
+On November 25, 2026, source `b2a39c8` displayed the worker run's retained 19:57 UTC value in the 960×600 D3D12 client. The observed digits and UTC label matched the five-byte artifact and the headless check. Escape exited 0. Logs recorded one presentation in one generation. The [worker snapshot reference](images/m4-worker-clock-reference.jpg) is a 962×632 capture including window chrome. Local log: `target/m4-worker-clock-visual/6d083b252f7e4d71a6f07eb254733108/stderr.log`.
