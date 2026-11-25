@@ -551,3 +551,7 @@ The host platform verifies a fixed-drive root, opens descendant components relat
 ## 53. Trusted Windows package CLI
 
 The developer CLI connects fixed-drive folder collection to flat/group compilation and independent scene/asset validation. An explicit export command emits the existing version 2 provenance envelope. The commands are for trusted local packages and run in the CLI process. Product processing of untrusted packages remains gated on restricted helper integration. See [Trusted package CLI](m3-manifest.md#trusted-package-cli).
+
+## 54. Trusted folder record verification
+
+The Windows developer CLI can regenerate and compare a version 2 record from the receiver's trusted local folder using binary stdin. This completes the trusted flat/group folder check, export and verification flow. See [Verify an exported record](m3-manifest.md#verify-an-exported-record).

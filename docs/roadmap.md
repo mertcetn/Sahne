@@ -100,14 +100,14 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 - [x] Add bounded package ingestion from open readers. Windows directory integration is recorded below.
 - [x] Verify the Windows handle-relative child-open primitive against parent replacement, junctions and hard links. Followed by the Windows collector below.
 - [x] Connect Windows fixed-drive root acquisition and handle-based enumeration to bounded in-memory package validation. Trusted CLI integration is recorded below.
-- [x] Validate and export trusted local Windows packages through the [developer CLI](m3-manifest.md#trusted-package-cli). Product/helper integration and archive collection remain open.
+- [x] Validate, export and verify records for trusted local Windows packages through the [developer CLI](m3-manifest.md#trusted-package-cli). Product/helper integration and archive collection remain open.
 - [ ] Parse the agreed HTML/CSS subset and report unsupported constructs with useful source locations.
 - [ ] Implement fixed-size absolute layout, agreed text-box behavior, colors/backgrounds, static images, and ID/class selection.
 - [ ] Define and implement supported stacking, transforms, clipping, and opacity semantics.
 - [ ] Add native translate/scale/opacity animation and explicit pause/resume timing.
 - [x] Establish [typed native animation admission, sampling and explicit pause/resume clock](m3-animation.md), with whole-run transform/opacity bounds and CPU regressions. Source/wire/renderer/FPS/platform integration remains open; this does not complete the parent animation task.
 - [x] Add [typed author binding, independent animation codec and fixed animated preview code](m3-animated-preview.md), including stable opacity targets, raster compatibility and capped pause-aware scheduling. Local GPU/window and recovery acceptance passed. CSS animation grammar remains open.
-- [ ] Produce static-scene and animated-shapes examples with expected visual references.
+- [ ] Record the animated-shapes visual reference. The static reference and observed animated window, pause and recovery checks are recorded. A retained image of the animated fixture at a known pose is still needed.
 - [ ] Validate unsupported-syntax cases, numeric bounds, parser error recovery, and resource budgets.
 
 ### Completion evidence — G3

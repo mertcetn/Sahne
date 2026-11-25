@@ -6,6 +6,7 @@ mod local_package;
 const LOCAL_PACKAGE_HELP: &str = "\
 --check-trusted-package <absolute-folder> <flat|groups> validates and compiles a local native package on Windows.
 --export-trusted-package <absolute-folder> <flat|groups> also writes its binary version 2 provenance record to stdout.
+--verify-trusted-package <absolute-folder> <flat|groups> checks a binary record from stdin against that folder.
 Use local packages you trust. These developer commands run in the CLI process.";
 
 fn main() -> ExitCode {
@@ -75,10 +76,16 @@ fn main() -> ExitCode {
         [arg, path, mode]
             if matches!(
                 arg.as_str(),
-                "--check-trusted-package" | "--export-trusted-package"
+                "--check-trusted-package" | "--export-trusted-package" | "--verify-trusted-package"
             ) =>
         {
-            local_package::run(path, mode, arg == "--export-trusted-package")
+            use local_package::Action;
+            let action = match arg.as_str() {
+                "--check-trusted-package" => Action::Check,
+                "--export-trusted-package" => Action::Export,
+                _ => Action::Verify,
+            };
+            local_package::run(path, mode, action)
         }
         _ => {
             eprintln!("Unsupported arguments. Run wallpaper-cli --help.");

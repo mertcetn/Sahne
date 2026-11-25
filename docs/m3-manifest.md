@@ -85,3 +85,13 @@ $folder = (Resolve-Path examples/static-image).Path
 The root must be an absolute fixed-drive folder with portable ASCII path components. Choose `flat` for the native v1 scene subset or `groups` for the explicit v2 group subset. Both use a fixed 1920×1080 canvas and background RGBA (12, 17, 22, 255). Collection, compilation and independent scene/asset validation all must succeed. Scripts are retained as source associations and are never executed. Export writes the version 2 provenance record to binary stdout. Use PowerShell 7.4 or later for byte-preserving redirection. Discard the file if the command fails. Exit codes are 0 for success, 1 for collection, compilation or output errors, and 2 for malformed arguments. [Provenance format](m3-compiled-provenance.md) · [PowerShell redirection](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_redirection)
 
 Local release tests checked the static, PNG and group examples from disk. Each exported record matched the corresponding embedded fixture's SHA-256. A relative root and unsupported HTML failed with exit 1, and an unsupported mode failed with exit 2. The invalid HTML export produced zero record bytes. Hosted CI adds trusted-folder smoke checks for the PNG and group examples.
+
+### Verify an exported record
+
+After exporting the example to `target/local-package.bin`, pass the file to binary stdin with the same folder and mode:
+
+```powershell
+cmd.exe /d /c "target\release\wallpaper-cli.exe --verify-trusted-package $folder flat < target\local-package.bin"
+```
+
+The CLI recollects the trusted source, regenerates the expected record, and uses exact comparison through EOF. It uses the same exit codes as export. Local flat PNG and grouped records passed. A trailing byte or a source file changed after export caused rejection in both modes.

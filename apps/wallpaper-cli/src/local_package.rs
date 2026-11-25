@@ -1,12 +1,18 @@
 use std::{io, process::ExitCode};
 use wallpaper_compiler::{
     Viewport,
-    provenance::{Mode, write_compiled},
+    provenance::{Mode, verify_compiled, write_compiled},
 };
 use wallpaper_platform::package_directory::collect;
 use wallpaper_scene::Color;
 
-pub fn run(path: &str, mode: &str, export: bool) -> ExitCode {
+pub enum Action {
+    Check,
+    Export,
+    Verify,
+}
+
+pub fn run(path: &str, mode: &str, action: Action) -> ExitCode {
     let mode = match mode {
         "flat" => Mode::Flat,
         "groups" => Mode::Groups,
@@ -22,11 +28,16 @@ pub fn run(path: &str, mode: &str, export: bool) -> ExitCode {
             height: 1080,
             background: Color([12, 17, 22, 255]),
         };
-        if export {
-            write_compiled(io::stdout().lock(), &package, viewport, mode)?;
-        } else {
-            write_compiled(io::sink(), &package, viewport, mode)?;
-            println!("Trusted package compiled and validated.");
+        match action {
+            Action::Check => {
+                write_compiled(io::sink(), &package, viewport, mode)?;
+                println!("Trusted package compiled and validated.");
+            }
+            Action::Export => write_compiled(io::stdout().lock(), &package, viewport, mode)?,
+            Action::Verify => {
+                verify_compiled(io::stdin().lock(), &package, viewport, mode)?;
+                println!("Compiled record matches the trusted package.");
+            }
         }
         Ok::<(), Box<dyn std::error::Error>>(())
     })();
