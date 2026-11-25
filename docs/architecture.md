@@ -563,3 +563,7 @@ The animated-shapes preview can freeze at the one-second midpoint using its stan
 ## 56. M4 host scene transactions
 
 A host-owned state machine stages bounded text and RGBA edits for an explicit writable set in a validated flat scene. It checks the session, sequence and base revision and validates the candidate before publishing a revision and typed acknowledgement. A rejected batch closes the session and retains the accepted scene. The host state machine currently has CPU coverage. Wire and worker integration follow. See [M4 host scene transactions](m4-scene-transactions.md).
+
+## 57. M4 scene batches over the Windows probe transport
+
+The control codec carries bounded scene batches and correlated revision acknowledgements. The AppContainer probe exercises a committed update and a terminal rejection through its existing owned reader and writer. Host comparison verifies that the accepted scene survives rejection. See [Wire format and Windows fixture](m4-scene-transactions.md#wire-format-and-windows-fixture).

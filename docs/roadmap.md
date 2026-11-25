@@ -122,6 +122,7 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 
 - [ ] Connect script-visible DOM mutations to host transactions, revisions, acknowledgements, and controlled rejection.
 - [x] Implement [bounded host-side flat-scene transactions](m4-scene-transactions.md) and test atomic rollback, revision checks and typed acknowledgements.
+- [x] Carry scene batches, revision acknowledgements and terminal rejection over the [fixed AppContainer transport fixture](m4-scene-transactions.md#wire-format-and-windows-fixture).
 - [ ] Add element lookup, text/style mutation, timers, pause/resume events, and the clock example.
 - [ ] Enforce callback and Promise/microtask budgets, bounded host callbacks, and bounded diagnostic output.
 - [ ] Preserve the last accepted scene or safe fallback after worker failure.

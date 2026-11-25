@@ -1,5 +1,7 @@
 //! One owned launch/channel lifetime, shared by individual fixtures and restart tests.
-use super::{Body, ProbeReply, Result, envelope, read_response, roundtrip, write_frame};
+use super::{
+    Body, Message, ProbeReply, Result, envelope, read_response, roundtrip, scene_ipc, write_frame,
+};
 use std::{
     fs,
     io::{self, Write},
@@ -89,9 +91,10 @@ impl ProbeAttempt {
         }
         let (send, receive) = mpsc::sync_channel(1);
         let (ready_send, ready_receive) = mpsc::sync_channel(1);
-        let (requests, request_receive) = mpsc::sync_channel::<(u64, u64)>(1);
-        let roundtrip_case = case.starts_with("ipc-roundtrip");
-        let requests = roundtrip_case.then_some(requests);
+        let (requests, request_receive) = mpsc::sync_channel::<Message>(1);
+        let scene_case = case == "scene-transaction";
+        let interactive = scene_case || case.starts_with("ipc-roundtrip");
+        let requests = interactive.then_some(requests);
         let handles_case = case == "handles";
         // Install ownership before starting either I/O thread. A later spawn failure
         // drops this owner, which stops the worker before joining an existing thread.
@@ -126,16 +129,12 @@ impl ProbeAttempt {
                             other => io::Error::other(other),
                         },
                     )?;
-                    if roundtrip_case {
+                    if interactive {
                         input.flush()?;
                         // Sole sender lives in the reader: EOF/protocol failure/Job
                         // stop drops it, releasing this thread even while idle.
-                        for (sequence, nonce) in request_receive {
-                            write_frame(
-                                &mut input,
-                                &envelope(session, sequence, Body::Ping { nonce }),
-                            )
-                            .map_err(|error| match error {
+                        for message in request_receive {
+                            write_frame(&mut input, &message).map_err(|error| match error {
                                 wallpaper_protocol::Error::Io(error) => error,
                                 other => io::Error::other(other),
                             })?;
@@ -160,7 +159,15 @@ impl ProbeAttempt {
             std::thread::Builder::new()
                 .name("probe-reader".into())
                 .spawn(move || {
-                    let response = if let Some(requests) = requests {
+                    let response = if scene_case {
+                        scene_ipc::read_response(
+                            &mut output,
+                            session,
+                            nonce,
+                            &ready_send,
+                            requests.expect("scene case owns writer sender"),
+                        )
+                    } else if let Some(requests) = requests {
                         roundtrip::read_response(
                             &mut output,
                             session,

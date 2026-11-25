@@ -5,10 +5,23 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const MAX_EDITS: usize = 64;
 pub const MAX_BATCH_TEXT_BYTES: usize = 48 * 1024;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Edit {
     Text { node: u32, value: String },
     Color { node: u32, value: Color },
+}
+
+impl std::fmt::Debug for Edit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text { node, value } => f
+                .debug_struct("Text")
+                .field("node", node)
+                .field("bytes", &value.len())
+                .finish(),
+            Self::Color { node, .. } => f.debug_struct("Color").field("node", node).finish(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

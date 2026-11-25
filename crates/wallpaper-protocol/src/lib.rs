@@ -3,6 +3,9 @@ use std::{
     fmt,
     io::{self, Read, Write},
 };
+mod scene;
+pub use scene::{SCENE_REJECT_CODE, accept_scene_batch};
+use wallpaper_scene::transaction::Edit;
 
 pub const PROTOCOL_VERSION: u16 = 1;
 pub const MAX_FRAME_BYTES: usize = 64 * 1024;
@@ -51,6 +54,8 @@ pub enum Body {
     Ping { nonce: u64 },
     Pong { nonce: u64 },
     Reject { code: u16, message: String },
+    SceneBatch { edits: Vec<Edit> },
+    SceneAck { revision: u64 },
 }
 impl Message {
     /// Check expected envelope state without advancing any host state.
@@ -107,6 +112,15 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
             data.extend_from_slice(&code.to_le_bytes());
             data.extend_from_slice(&(message.len() as u16).to_le_bytes());
             data.extend_from_slice(message.as_bytes());
+        }
+        Body::SceneBatch { edits } => {
+            data.push(6);
+            scene::encode_edits(&mut data, edits)?;
+        }
+        Body::SceneAck { revision } => {
+            scene::check_ack(message.base_revision, *revision)?;
+            data.push(7);
+            data.extend_from_slice(&revision.to_le_bytes());
         }
     }
     if data.len() > MAX_FRAME_BYTES {
@@ -176,6 +190,14 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         5 => Body::ProbeResult {
             denied: u32::from_le_bytes(data.array()?),
         },
+        6 => Body::SceneBatch {
+            edits: scene::decode_edits(&mut data)?,
+        },
+        7 => {
+            let revision = data.u64()?;
+            scene::check_ack(base_revision, revision)?;
+            Body::SceneAck { revision }
+        }
         _ => return Err(Error::Invalid("unknown message kind")),
     };
     if data.pos != bytes.len() {

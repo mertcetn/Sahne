@@ -11,7 +11,7 @@ pub fn read_response(
     session: u64,
     first_nonce: u64,
     ready: &mpsc::SyncSender<()>,
-    requests: mpsc::SyncSender<(u64, u64)>,
+    requests: mpsc::SyncSender<Message>,
     completed: &AtomicUsize,
 ) -> Result<ProbeReply> {
     let hello = read_frame(output)?.ok_or(MissingFrame("Hello"))?;
@@ -29,7 +29,9 @@ pub fn read_response(
             }
             nonce = next;
             // One outstanding Ping; next writer command follows a validated reply.
-            requests.try_send((round, nonce))?;
+            requests
+                .try_send(envelope(session, round, Body::Ping { nonce }))
+                .map_err(|_| "Roundtrip writer queue unavailable")?;
         }
         let pong = read_frame(output)?.ok_or(MissingFrame("roundtrip Pong"))?;
         pong.check_context(session, round + 1, 0)?;
@@ -120,7 +122,9 @@ mod tests {
         write_frame(&mut bytes, &envelope(17, 2, Body::Pong { nonce: 31 })).unwrap();
         let (ready, _ready_receive) = mpsc::sync_channel(1);
         let (requests, _request_receive) = mpsc::sync_channel(1);
-        requests.send((999, 999)).unwrap();
+        requests
+            .send(envelope(17, 999, Body::Ping { nonce: 999 }))
+            .unwrap();
         let completed = AtomicUsize::new(0);
         let error = read_response(
             &mut Cursor::new(bytes),
@@ -131,10 +135,7 @@ mod tests {
             &completed,
         )
         .unwrap_err();
-        assert!(matches!(
-            error.downcast_ref::<mpsc::TrySendError<(u64, u64)>>(),
-            Some(mpsc::TrySendError::Full(_))
-        ));
+        assert_eq!(error.to_string(), "Roundtrip writer queue unavailable");
         assert_eq!(completed.load(Ordering::SeqCst), 1);
     }
 }

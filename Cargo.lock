@@ -1849,6 +1849,9 @@ dependencies = [
 [[package]]
 name = "wallpaper-protocol"
 version = "0.1.0-dev"
+dependencies = [
+ "wallpaper-scene",
+]
 
 [[package]]
 name = "wallpaper-sandbox"
