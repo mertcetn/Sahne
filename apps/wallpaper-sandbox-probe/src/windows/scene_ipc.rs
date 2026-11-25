@@ -26,15 +26,17 @@ impl Mode {
             _ => None,
         }
     }
+
+    fn updates(self) -> u64 {
+        if self == Self::Timer { 3 } else { 1 }
+    }
 }
 
 fn format_minute(minute: u16) -> String {
     format!("{:02}:{:02}", minute / 60, minute % 60)
 }
 
-fn resumed_clock_tick() -> Result<u16> {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
+fn resumed_timer() -> Result<(Timers, wallpaper_scene::timer::TimerId)> {
     let start = Instant::now();
     let mut timers = Timers::new(start);
     let id = timers
@@ -68,8 +70,38 @@ fn resumed_clock_tick() -> Result<u16> {
     {
         return Err("Timer did not dispatch exactly once after resume".into());
     }
+    Ok((timers, id))
+}
+
+fn utc_minute() -> Result<u16> {
+    use std::time::{SystemTime, UNIX_EPOCH};
     let seconds = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     Ok(((seconds / 60) % 1440) as u16)
+}
+
+fn wait_for_next_tick(timers: &mut Timers, id: wallpaper_scene::timer::TimerId) -> Result<()> {
+    let deadline = timers.next_wake().ok_or("Missing next clock deadline")?;
+    let now = Instant::now();
+    if deadline > now {
+        std::thread::sleep(deadline.duration_since(now));
+    }
+    if timers
+        .take_due(Instant::now())
+        .map_err(|_| "Clock timer failed")?
+        != Some(id)
+    {
+        return Err("Clock timer did not become due".into());
+    }
+    Ok(())
+}
+
+fn update_message(session: u64, sequence: u64, body: Body) -> Message {
+    Message {
+        session,
+        sequence,
+        base_revision: sequence - 1,
+        body,
+    }
 }
 
 pub fn read_response(
@@ -89,15 +121,6 @@ pub fn read_response(
     if pong != envelope(session, 2, Body::Pong { nonce }) {
         return Err("Invalid scene Pong".into());
     }
-    let display_time = if mode == Mode::Timer {
-        let utc_minute = resumed_clock_tick()?;
-        requests
-            .try_send(envelope(session, 2, Body::ClockTick { utc_minute }))
-            .map_err(|_| "Clock tick writer queue unavailable")?;
-        format_minute(utc_minute)
-    } else {
-        "12:34".into()
-    };
     let scene = Scene {
         version: SCENE_VERSION,
         width: 100,
@@ -136,31 +159,56 @@ pub fn read_response(
     .validate()?;
     let mut host = HostScene::new(scene, session, &BTreeSet::from([1, 2]))
         .map_err(|_| "Could not initialize fixture host scene")?;
-    let accepted = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
-    let ack = accept_scene_batch(&mut host, accepted);
-    if ack != envelope(session, 1, Body::SceneAck { revision: 1 })
-        || !matches!(&host.scene().scene().nodes[0].content, Content::Text { text, .. } if text == &display_time)
-    {
-        return Err("Scene acknowledgement or committed text mismatch".into());
-    }
     let expected_color = if mode != Mode::Typed {
         Color([36, 179, 144, 255])
     } else {
         Color([255; 4])
     };
-    if host.scene().scene().nodes[1].content
-        != (Content::Rectangle {
-            color: expected_color,
-        })
-    {
-        return Err("Committed accent color mismatch".into());
+    let mut timer = if mode == Mode::Timer {
+        Some(resumed_timer()?)
+    } else {
+        None
+    };
+    let updates = mode.updates();
+    for sequence in 1..=updates {
+        let display_time = if let Some((timers, id)) = timer.as_mut() {
+            if sequence > 1 {
+                let received = read_frame(output)?.ok_or(MissingFrame("clock readiness"))?;
+                if received != update_message(session, sequence, Body::ClockReady) {
+                    return Err("Unexpected clock readiness".into());
+                }
+                wait_for_next_tick(timers, *id)?;
+            }
+            let utc_minute = utc_minute()?;
+            requests
+                .try_send(update_message(
+                    session,
+                    sequence,
+                    Body::ClockTick { utc_minute },
+                ))
+                .map_err(|_| "Clock tick writer queue unavailable")?;
+            format_minute(utc_minute)
+        } else {
+            "12:34".into()
+        };
+        let accepted = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
+        let ack = accept_scene_batch(&mut host, accepted);
+        if ack != update_message(session, sequence, Body::SceneAck { revision: sequence })
+            || !matches!(&host.scene().scene().nodes[0].content, Content::Text { text, .. } if text == &display_time)
+            || host.scene().scene().nodes[1].content
+                != (Content::Rectangle {
+                    color: expected_color,
+                })
+        {
+            return Err("Scene acknowledgement or committed content mismatch".into());
+        }
+        requests
+            .try_send(ack)
+            .map_err(|_| "Scene writer queue unavailable")?;
     }
-    requests
-        .try_send(ack)
-        .map_err(|_| "Scene writer queue unavailable")?;
     let committed = host.scene().encode();
     let invalid = read_frame(output)?.ok_or(MissingFrame("invalid scene batch"))?;
-    invalid.check_context(session, 2, 1)?;
+    invalid.check_context(session, updates + 1, updates)?;
     let rejection = accept_scene_batch(&mut host, invalid);
     if !matches!(
         rejection.body,
@@ -169,7 +217,7 @@ pub fn read_response(
             ..
         }
     ) || !host.is_closed()
-        || host.revision() != 1
+        || host.revision() != updates
         || host.scene().encode() != committed
     {
         return Err("Rejected scene transaction changed host state".into());
@@ -193,11 +241,11 @@ pub fn read_response(
     require_eof(output)?;
     if mode == Mode::Timer {
         println!(
-            "Clock timer verified: paused dispatch suppressed, one UTC tick acknowledged after resume."
+            "Clock timer verified: paused dispatch suppressed, {updates} sequential UTC ticks acknowledged after resume."
         );
     }
     println!(
-        "Scene IPC verified: revision 1 acknowledged, invalid batch rejected, accepted scene preserved."
+        "Scene IPC verified: revision {updates} acknowledged, invalid batch rejected, accepted scene preserved."
     );
     Ok(ProbeReply::Report(EXPECTED | RESULT_BIT))
 }
@@ -211,44 +259,47 @@ pub fn worker(
     mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
-    let display_time = if mode == Mode::Timer {
-        let tick = read_frame(input)?.ok_or(MissingFrame("clock tick"))?;
-        tick.check_context(session, 2, 0)?;
-        let Body::ClockTick { utc_minute } = tick.body else {
-            return Err("Expected host clock tick".into());
-        };
-        format_minute(utc_minute)
-    } else {
-        "12:34".into()
-    };
     let text = |value: &str| Edit::Text {
         node: 1,
         value: value.into(),
     };
-    send(
-        output,
-        envelope(
-            session,
-            1,
-            Body::SceneBatch {
-                edits: if mode != Mode::Typed {
-                    script::clock_edits(&display_time)?
-                } else {
-                    vec![text(&display_time)]
-                },
-            },
-        ),
-    )?;
-    let ack = read_frame(input)?.ok_or(MissingFrame("scene acknowledgement"))?;
-    if ack != envelope(session, 1, Body::SceneAck { revision: 1 }) {
-        return Err("Worker did not receive the expected scene acknowledgement".into());
+    let updates = mode.updates();
+    let mut previous = "initial".to_owned();
+    for sequence in 1..=updates {
+        let display_time = if mode == Mode::Timer {
+            if sequence > 1 {
+                send(output, update_message(session, sequence, Body::ClockReady))?;
+            }
+            let tick = read_frame(input)?.ok_or(MissingFrame("clock tick"))?;
+            tick.check_context(session, sequence, sequence - 1)?;
+            let Body::ClockTick { utc_minute } = tick.body else {
+                return Err("Expected host clock tick".into());
+            };
+            format_minute(utc_minute)
+        } else {
+            "12:34".into()
+        };
+        let edits = if mode != Mode::Typed {
+            script::clock_edits(&previous, &display_time)?
+        } else {
+            vec![text(&display_time)]
+        };
+        send(
+            output,
+            update_message(session, sequence, Body::SceneBatch { edits }),
+        )?;
+        let ack = read_frame(input)?.ok_or(MissingFrame("scene acknowledgement"))?;
+        if ack != update_message(session, sequence, Body::SceneAck { revision: sequence }) {
+            return Err("Worker did not receive the expected scene acknowledgement".into());
+        }
+        previous = display_time;
     }
     send(
         output,
         Message {
             session,
-            sequence: 2,
-            base_revision: 1,
+            sequence: updates + 1,
+            base_revision: updates,
             body: Body::SceneBatch {
                 edits: vec![
                     Edit::Color {
@@ -261,7 +312,7 @@ pub fn worker(
         },
     )?;
     let rejection = read_frame(input)?.ok_or(MissingFrame("scene rejection"))?;
-    rejection.check_context(session, 2, 1)?;
+    rejection.check_context(session, updates + 1, updates)?;
     if !matches!(
         rejection.body,
         Body::Reject {

@@ -583,3 +583,7 @@ The host can hold bounded one-shot and repeating deadlines. Pause suppresses tim
 ## 61. M4 host clock tick through AppContainer
 
 A fixed pause/resume fixture sends one host-sampled UTC minute in a bounded control message when the monotonic timer dispatches. The AppContainer worker updates its clock element through script and receives the host's revision acknowledgement. The fixture verifies both skipped overdue intervals and preservation of the accepted scene. See [Host-driven clock tick over IPC](m4-timers.md#host-driven-clock-tick-over-ipc).
+
+## 62. M4 sequential clock commits
+
+The bounded AppContainer clock fixture now delivers three ticks in one session. Worker readiness follows each correlated acknowledgement. The host waits for readiness and the monotonic deadline before each subsequent tick and preserves the third accepted revision on terminal rejection. See [Sequential clock updates](m4-timers.md#sequential-clock-updates-in-one-worker-session).

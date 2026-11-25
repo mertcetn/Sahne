@@ -144,13 +144,16 @@ fn run_case(
 }
 
 /// Rust resolves the adapter's local indices against the host fixture bindings.
-pub fn clock_edits(display_time: &str) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
+pub fn clock_edits(
+    previous: &str,
+    display_time: &str,
+) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
     if !wallpaper_sandbox::is_appcontainer()? {
         return Err("Clock fixture refuses non-AppContainer execution".into());
     }
     let (runtime, interrupted) = bounded_runtime()?;
     let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
-    let bindings = [("clock", 1, Some("initial")), ("accent", 2, None)];
+    let bindings = [("clock", 1, Some(previous)), ("accent", 2, None)];
     let edits = context.with(|ctx| {
         run_scene_callback(
             &ctx,

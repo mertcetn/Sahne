@@ -5,7 +5,7 @@
         document.getElementById("missing") !== null ||
         document.getElementById("__proto__") !== null ||
         clock !== document.getElementById("clock") ||
-        clock.textContent !== "initial") {
+        typeof clock.textContent !== "string") {
         throw new Error("Unexpected element binding");
     }
     clock.textContent = "staged";

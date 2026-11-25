@@ -127,6 +127,7 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Verify [multiple element bindings and staged text/RGBA edits](m4-scene-transactions.md#multiple-element-bindings) with the fixed script worker.
 - [x] Add [bounded monotonic timer scheduling](m4-timers.md) with pause/resume and no replay backlog.
 - [x] Verify a [host-driven clock tick after timer resume](m4-timers.md#host-driven-clock-tick-over-ipc) through AppContainer scene acknowledgement.
+- [x] Verify [three acknowledged UTC ticks in the same AppContainer session](m4-timers.md#sequential-clock-updates-in-one-worker-session), with one outstanding update and terminal rollback.
 - [ ] Connect script timer registration and lifecycle callbacks to the worker. Add continuous clock updates and connect the adapter to the production script-visible DOM.
 - [ ] Enforce callback and Promise/microtask budgets, bounded host callbacks, and bounded diagnostic output.
 - [ ] Preserve the last accepted scene or safe fallback after worker failure.

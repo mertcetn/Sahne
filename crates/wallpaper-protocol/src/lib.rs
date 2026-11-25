@@ -57,6 +57,7 @@ pub enum Body {
     SceneBatch { edits: Vec<Edit> },
     SceneAck { revision: u64 },
     ClockTick { utc_minute: u16 },
+    ClockReady,
 }
 impl Message {
     /// Check expected envelope state without advancing any host state.
@@ -128,6 +129,7 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
             data.push(8);
             data.extend_from_slice(&utc_minute.to_le_bytes());
         }
+        Body::ClockReady => data.push(9),
     }
     if data.len() > MAX_FRAME_BYTES {
         return Err(Error::Invalid("frame too long"));
@@ -209,6 +211,7 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
             check_utc_minute(utc_minute)?;
             Body::ClockTick { utc_minute }
         }
+        9 => Body::ClockReady,
         _ => return Err(Error::Invalid("unknown message kind")),
     };
     if data.pos != bytes.len() {
