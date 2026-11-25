@@ -1,8 +1,8 @@
 # M3 compiled preview
 
-The opt-in `--test-pixels` developer mode requires `--example groups-effects`, window mode and `--seconds 1..30`, without other test flags. It checks 18 fixed native-root samples and exits; GPU runtime validation is pending. See [Pixel-check command and acceptance](m3-pixel-check.md).
+The opt-in `--test-pixels` developer mode requires `--example groups-effects`, window mode and `--seconds 1..30`, without other test flags. It checks 18 fixed native-root samples and exits; the fixed comparison passed locally on Windows D3D12. See [Pixel-check command and acceptance](m3-pixel-check.md).
 
-Updated: November 25, 2026. Status: original static, PNG, group and additional effect examples rendered in local Windows D3D12 windows. [Group evidence](m3-group-preview.md) and the later [effect visual/resize and seven lifecycle checks](m3-effect-fixtures.md) have limited local records. Exact fractional GPU comparison and full M3/G3 remain incomplete.
+Updated: November 25, 2026. Status: original static, PNG, group and additional effect examples rendered in local Windows D3D12 windows. [Group evidence](m3-group-preview.md) and the later [effect visual/resize and seven lifecycle checks](m3-effect-fixtures.md) have limited local records. The fixed GPU comparison subsequently passed locally; full M3/G3 remains incomplete.
 
 ## Run
 
@@ -42,7 +42,7 @@ Primary documentation consulted November 14, 2026: [wgpu 30.0.1 bind group layou
 
 ## Resume point
 
-Image and original group visual/lifecycle checks passed locally on November 24; see [image evidence](m3-images.md) and [group evidence](m3-group-preview.md). The [additional effect fixture](m3-effect-fixtures.md) has a November 25 visual/runtime record for nested opacity, nonuniform scale and empty clipping; exact fractional GPU pixel comparison is still open. Native animation/pause, compiled provenance/hashes, display/platform checks, I1 mappings and full G3 remain open. The v1 compiler still rejects unsupported effects/media rather than silently approximating them.
+Image and original group visual/lifecycle checks passed locally on November 24; see [image evidence](m3-images.md) and [group evidence](m3-group-preview.md). The [additional effect fixture](m3-effect-fixtures.md) has a November 25 visual/runtime record for nested opacity, nonuniform scale and empty clipping; the subsequent fixed GPU pixel comparison also passed locally; see [sample results](m3-pixel-check.md). Native animation/pause, compiled provenance/hashes, display/platform checks, I1 mappings and full G3 remain open. The v1 compiler still rejects unsupported effects/media rather than silently approximating them.
 
 ## Controlled lifecycle checks — November 15, 2026
 

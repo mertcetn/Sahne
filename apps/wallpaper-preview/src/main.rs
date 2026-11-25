@@ -37,7 +37,7 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. GPU runtime validation is pending."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels."
                 );
                 return Ok(());
             }

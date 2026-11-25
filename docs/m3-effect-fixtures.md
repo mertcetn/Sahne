@@ -1,8 +1,8 @@
 # M3 additional effect fixture and local visual evidence
 
-The subsequent [fixed GPU readback test](m3-pixel-check.md) is implemented with CPU checks; actual GPU execution is pending. Earlier visual/lifecycle observations below do not establish pixel comparison success.
+The subsequent [fixed GPU readback test](m3-pixel-check.md) passed all 18 native-root samples locally on Windows D3D12. This quantitative result is separate from the earlier visual/lifecycle observations below.
 
-Updated: November 25, 2026. Status: original source fixture, independent scene/asset checks and CPU references, plus local Windows D3D12 visual/resize evidence for `groups-effects`. The nested-opacity, nonuniform-scale and empty-clip cases agree visually with the specified fixture. Exact fractional GPU pixel/color agreement remains unverified; the scaled JPEG reference does not provide that measurement. Existing [group-preview evidence](m3-group-preview.md) remains scoped to its earlier fixture. Full G3 is not complete.
+Updated: November 25, 2026. Status: original source fixture, independent scene/asset checks and CPU references, plus local Windows D3D12 visual/resize evidence for `groups-effects`. The nested-opacity, nonuniform-scale and empty-clip cases agree visually with the specified fixture. The subsequent fixed GPU comparison passed locally; the scaled JPEG reference itself does not provide that measurement. Existing [group-preview evidence](m3-group-preview.md) remains scoped to its earlier fixture. Full G3 is not complete.
 
 ## Scope and entry point
 
@@ -20,7 +20,7 @@ The following opens the original effect fixture in a window:
 cargo run --release -p wallpaper-preview --locked -- --example groups-effects --seconds 10
 ```
 
-The existing resize/lifecycle/device-loss code is shared. The user authorized the local checks recorded below after the earlier screen-access checkpoint. The mode does not expand accepted CSS or change rendering algorithms, limits, blending, shaders or sandbox policy. Desktop attachment, additional DPI/driver/GPU targets and quantitative fractional GPU comparison remain unverified.
+The existing resize/lifecycle/device-loss code is shared. The user authorized the local checks recorded below after the earlier screen-access checkpoint. The mode does not expand accepted CSS or change rendering algorithms, limits, blending, shaders or sandbox policy. Desktop attachment and additional DPI/driver/GPU targets remain unverified. The later quantitative fractional GPU comparison is recorded separately.
 
 ## Case A: nested opacity and inner clipping
 
@@ -72,7 +72,7 @@ Three added tests independently compile/decode the fixture and validate immutabl
 
 Primary references consulted November 24, 2026: [W3C compositing groups](https://www.w3.org/TR/compositing-1/#groupcompositing) and [wgpu 30.0.1 scissors](https://docs.rs/wgpu/30.0.1/wgpu/struct.RenderPass.html#method.set_scissor_rect), alongside the existing native transform/clip and renderer contracts. The implementation still uses the project's deliberately restricted semantics, not browser conformance.
 
-The authorized local observation/reference and maximize/restore checks are recorded below, along with controlled lifecycle results. Fractional-pixel GPU accuracy remains unverified until a suitable quantitative GPU comparison is performed. Broader G3 acceptance, native animation/pause, hashes/I1 and production integration remain open.
+The authorized local observation/reference and maximize/restore checks are recorded below, along with controlled lifecycle results. The subsequent fixed fractional-pixel GPU samples passed; see [quantitative evidence](m3-pixel-check.md). Broader G3 acceptance, native animation/pause, hashes/I1 and production integration remain open.
 
 ## Local nonvisual evidence — November 24, 2026
 
@@ -106,4 +106,4 @@ Seven sequential owned processes passed under a 25-second outer deadline each. R
 | Image idle | 4 s | 1 | 1 | Existing v1 image path |
 | M1 baseline | 4 s | 1 | 1 | Original renderer path |
 
-The device-loss result still requires the actual callback and a later-generation frame, not any redraw. This is requested device destruction, not forced driver/hardware failure. Old-mode checks here are timed runtime regressions, not new screenshot or recreation/loss evidence for those modes. The short idle observation is not a long-duration performance/soak result. The subsequent source change only removes the stale pending-validation help sentence; algorithms, shaders, limits and dependencies are unchanged. The release preview was rebuilt and help checked afterward. Quantitative GPU clip/color comparison, additional configurations and full G3 remain open.
+The device-loss result still requires the actual callback and a later-generation frame, not any redraw. This is requested device destruction, not forced driver/hardware failure. Old-mode checks here are timed runtime regressions, not new screenshot or recreation/loss evidence for those modes. The short idle observation is not a long-duration performance/soak result. The subsequent source change only removes the stale pending-validation help sentence; algorithms, shaders, limits and dependencies are unchanged. The release preview was rebuilt and help checked afterward. The later fixed GPU clip/color comparison passed locally; additional configurations and full G3 remain open.

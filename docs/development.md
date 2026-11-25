@@ -1,6 +1,6 @@
 # Development and Release Guide
 
-For the effects-only `--test-pixels` preview flag, see [Fixed GPU pixel check](m3-pixel-check.md). It opens a window and requires a guarded run; GPU runtime validation is still pending.
+For the effects-only `--test-pixels` preview flag, see [Fixed GPU pixel check](m3-pixel-check.md). It opens a window and requires a guarded run; the fixed comparison has passed locally on Windows D3D12.
 
 ## Local setup
 
@@ -51,7 +51,7 @@ Run `cargo run --release -p wallpaper-cli --locked -- --compile-groups-check` fo
 
 `cargo run --release -p wallpaper-preview --locked -- --example groups --seconds 10` opens the original group/clipping window. Local visual/resize/lifecycle evidence is recorded within its limited scope. CPU plan/shader checks run through `cargo test -p wallpaper-preview --locked` without a device/window. See [Group rendering limits, reference and remaining checks](m3-group-preview.md). A successful build or CPU reference result alone does not establish GPU acceptance.
 
-The `--example groups-effects` literal selects a separate nested-opacity, anisotropic-scale and fractional/empty-clip fixture. Its CPU checks are part of the preview test command, and limited local Windows visual/resize/lifecycle evidence is recorded. Exact fractional GPU pixel/color comparison remains open. See [Effect cases, expected CPU samples and local observations](m3-effect-fixtures.md). Existing compiler CLI checks still select their original fixtures.
+The `--example groups-effects` literal selects a separate nested-opacity, anisotropic-scale and fractional/empty-clip fixture. Its CPU checks are part of the preview test command, and limited local Windows visual/resize/lifecycle evidence is recorded. The fixed fractional GPU pixel/color comparison subsequently passed locally; see [sample results](m3-pixel-check.md). See [Effect cases, expected CPU samples and local observations](m3-effect-fixtures.md). Existing compiler CLI checks still select their original fixtures.
 
 Run `cargo run --release -p wallpaper-preview --locked -- --example static --seconds 30` for the original compiled HTML/CSS window. It accepts only the fixed embedded example, with no external paths or JS. See [Visual reference, fit/text rules and remaining lifecycle validation](m3-preview.md). The original M1 fixture remains the default without `--example`.
 
