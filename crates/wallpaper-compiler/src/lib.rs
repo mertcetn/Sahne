@@ -7,7 +7,6 @@ pub mod css;
 #[cfg(any(test, feature = "fixtures"))]
 pub mod fixtures;
 pub mod html;
-#[cfg(feature = "fixtures")]
 pub mod provenance;
 pub use compile::{Compiled, CompiledGroups, Viewport, compile, compile_animated, compile_groups};
 

@@ -523,3 +523,7 @@ An opt-in compiler API binds bounded author names to v2 group symbols and valida
 ## 46. M3 compiled provenance fixture
 
 The developer CLI streams a versioned record for the embedded v2 group fixture after independent scene and image validation. The record captures retained source bytes, scene bytes, author symbols, deferred script association and decoded RGBA. An external SHA-256 tool hashes the exact record bytes. General export and verification remain open. See [Record format and reproduction](m3-compiled-provenance.md).
+
+## 47. M3 typed compiled provenance export
+
+The compiler can produce a version 2 provenance record directly from a validated retained package and viewport. The record distinguishes flat, grouped and animated scene data and preserves the ordered ID list for each author symbol. The developer CLI exposes four built-in examples alongside the original version 1 group command. Export validation independently decodes each scene payload and checks its RGBA assets before writing. Receiver verification and disk package collection remain open. See [Compiled provenance](m3-compiled-provenance.md).
