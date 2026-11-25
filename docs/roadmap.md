@@ -94,6 +94,7 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 - [x] Implement the fixed group preview's bounded multi-pass code, text rasters and CPU plan/compositing/shader checks; [local window/lifecycle evidence](m3-group-preview.md). The original overlap/clip example passed Windows visual/resize checks and ten group/static/image/M1 lifecycle cases on November 24. Broader effect/configuration and full G3 acceptance remain open.
 - [x] Prepare separate nested-opacity, anisotropic-scale and fractional/empty-clip sources with independent scene/assets and CPU reference samples; [effect evidence and scope](m3-effect-fixtures.md). On November 25, local window/maximize/restore and seven lifecycle/runtime cases passed. Exact fractional GPU pixel/color comparison remains open.
 - [ ] Prepare I1 metadata/resource/diagnostic mappings and original synthetic import fixtures; imported semantics do not override the supported native subset.
+- [ ] Run the [fixed 18-sample GPU check](m3-pixel-check.md) for fractional clipping, nested opacity and PNG colors. Implementation/CPU checks are ready; GPU runtime evidence is pending.
 - [ ] Implement manifest/source loading, resource references, and versioned initial scene output.
 - [ ] Parse the agreed HTML/CSS subset and report unsupported constructs with useful source locations.
 - [ ] Implement fixed-size absolute layout, agreed text-box behavior, colors/backgrounds, static images, and ID/class selection.
@@ -170,7 +171,7 @@ At delivery, summarize changes, completed checks, untested cases, and useful rev
 
 ## 12. Next task
 
-The [fixed group](m3-group-preview.md) and [additional effect](m3-effect-fixtures.md) window/lifecycle checkpoints passed locally. Add a suitable quantitative GPU comparison for the specified native-canvas fractional clip/color samples to finish that effect evidence, then continue native animation/pause, compiled hashes and I1 mappings. Full G3 and broader visual/platform checks remain open. Keep parsing/decoding boundaries and budgets explicit before accepting untrusted input. M4 must integrate production transport/callbacks and complete G2 through that path. Extended M1 hardware coverage and later platform/product gates remain open.
+The [fixed group](m3-group-preview.md) and [additional effect](m3-effect-fixtures.md) window/lifecycle checkpoints passed locally. The [quantitative GPU comparison](m3-pixel-check.md) is implemented with CPU checks, but its window/device execution awaits user availability. Run it and record actual native-canvas samples before closing that effect evidence, then continue native animation/pause, compiled hashes and I1 mappings. Full G3 and broader visual/platform checks remain open. Keep parsing/decoding boundaries and budgets explicit before accepting untrusted input. M4 must integrate production transport/callbacks and complete G2 through that path. Extended M1 hardware coverage and later platform/product gates remain open.
 
 Sections below are historical progress records; their earlier pending/uncommitted statements describe that stage, not the current status above.
 

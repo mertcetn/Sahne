@@ -1,6 +1,7 @@
 mod compiled;
 mod groups;
 mod lifecycle;
+mod pixels;
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
     TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
@@ -29,13 +30,14 @@ struct DeviceLost {
 fn main() -> Result<()> {
     let (mut seconds, mut desktop_mode, mut recreate) = (None, false, 0u32);
     let mut test_device_loss = false;
+    let mut test_pixels = false;
     let mut compiled_example = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. Escape closes window mode. Test recreation does not restart Explorer."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. GPU runtime validation is pending."
                 );
                 return Ok(());
             }
@@ -54,6 +56,7 @@ fn main() -> Result<()> {
                     });
             }
             "--test-device-loss" => test_device_loss = true,
+            "--test-pixels" => test_pixels = true,
             "--seconds" => {
                 let n = args.next().ok_or("Missing seconds")?.parse::<u64>()?;
                 if !(1..=3600).contains(&n) {
@@ -73,6 +76,14 @@ fn main() -> Result<()> {
     if test_device_loss && recreate > 0 {
         return Err("Choose one test mode per run".into());
     }
+    validate_pixel_mode(
+        test_pixels,
+        compiled_example,
+        desktop_mode,
+        recreate,
+        test_device_loss,
+        seconds,
+    )?;
     let events = EventLoop::<DeviceLost>::with_user_event().build()?;
     events.set_control_flow(ControlFlow::Wait);
     let mut app = App {
@@ -80,6 +91,8 @@ fn main() -> Result<()> {
         desktop: None,
         desktop_mode,
         compiled_example,
+        test_pixels,
+        pixels_passed: false,
         next_probe: Instant::now() + Duration::from_secs(2),
         next_retry: None,
         budget: Default::default(),
@@ -99,6 +112,12 @@ fn main() -> Result<()> {
         app.frames, app.generation, app.recreate_remaining
     );
     eprintln!("Device loss test: {:?}", app.loss_test);
+    if app.test_pixels && !app.pixels_passed {
+        return Err(app
+            .error
+            .unwrap_or_else(|| "GPU pixel test interrupted before successful comparison".into())
+            .into());
+    }
     if !app.loss_test.complete() {
         return Err("Device loss test did not observe callback and restored frame".into());
     }
@@ -110,11 +129,32 @@ fn main() -> Result<()> {
     }
     Ok(())
 }
+fn validate_pixel_mode(
+    enabled: bool,
+    example: Option<compiled::Example>,
+    desktop: bool,
+    recreate: u32,
+    loss: bool,
+    seconds: Option<u64>,
+) -> Result<()> {
+    if enabled
+        && (example != Some(compiled::Example::GroupEffects)
+            || desktop
+            || recreate != 0
+            || loss
+            || !matches!(seconds, Some(1..=30)))
+    {
+        return Err("Pixel test requires --example groups-effects --seconds 1..30, window mode and no other test mode".into());
+    }
+    Ok(())
+}
 struct App {
     state: Option<State>,
     desktop: Option<wallpaper_platform::Desktop>,
     desktop_mode: bool,
     compiled_example: Option<compiled::Example>,
+    test_pixels: bool,
+    pixels_passed: bool,
     next_probe: Instant,
     next_retry: Option<Instant>,
     budget: lifecycle::RecoveryBudget,
@@ -136,6 +176,10 @@ impl App {
         events.exit();
     }
     fn recover(&mut self, events: &ActiveEventLoop, reason: &str) {
+        if self.test_pixels {
+            self.fail(events, reason);
+            return;
+        }
         match self.budget.consume() {
             Ok(attempt) => {
                 eprintln!("Recovery {attempt}/10: {reason}");
@@ -182,6 +226,7 @@ impl App {
                 self.generation,
                 !self.loss_test.complete(),
                 self.compiled_example,
+                self.test_pixels,
             ))
         })();
         match result {
@@ -332,6 +377,10 @@ impl ApplicationHandler<DeviceLost> for App {
             }
             WindowEvent::RedrawRequested => state.draw().map(|presented| {
                 if presented {
+                    if self.test_pixels {
+                        self.pixels_passed = true;
+                        events.exit();
+                    }
                     self.loss_test.frame(self.generation);
                     if self.loss_test.needs_request() && self.next_device_test.is_none() {
                         self.next_device_test = Some(Instant::now() + Duration::from_secs(1));
@@ -358,6 +407,7 @@ impl ApplicationHandler<DeviceLost> for App {
     }
 }
 struct State {
+    pixel_pending: bool,
     surface_retries: u8,
     surface: wgpu::Surface<'static>,
     instance: wgpu::Instance,
@@ -384,6 +434,7 @@ impl State {
         generation: u64,
         report_destroyed: bool,
         compiled_example: Option<compiled::Example>,
+        test_pixels: bool,
     ) -> Result<Self> {
         let mut desc = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
             events.owned_display_handle(),
@@ -531,23 +582,29 @@ impl State {
         let mut atlas = TextAtlas::new(&device, &queue, &cache, config.format);
         let text_renderer =
             TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
-        let groups = if let Some(fixture) =
-            compiled_example.and_then(compiled::Example::group_fixture)
-        {
-            let memory_scope = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-            let validation_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-            let result = groups::Renderer::new(&device, &queue, config.format, &mut fonts, fixture);
-            let validation = validation_scope.pop();
-            let memory = memory_scope.pop();
-            let validation = validation.await;
-            let memory = memory.await;
-            if let Some(error) = validation.or(memory) {
-                return Err(format!("Group GPU initialization failed: {error}").into());
-            }
-            Some(result?)
-        } else {
-            None
-        };
+        let groups =
+            if let Some(fixture) = compiled_example.and_then(compiled::Example::group_fixture) {
+                let memory_scope = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+                let validation_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+                let result = groups::Renderer::new(
+                    &device,
+                    &queue,
+                    config.format,
+                    &mut fonts,
+                    fixture,
+                    test_pixels,
+                );
+                let validation = validation_scope.pop();
+                let memory = memory_scope.pop();
+                let validation = validation.await;
+                let memory = memory.await;
+                if let Some(error) = validation.or(memory) {
+                    return Err(format!("Group GPU initialization failed: {error}").into());
+                }
+                Some(result?)
+            } else {
+                None
+            };
         let compiled =
             if let Some(example) = compiled_example.filter(|v| v.group_fixture().is_none()) {
                 Some(compiled::Renderer::new(
@@ -562,6 +619,7 @@ impl State {
                 None
             };
         Ok(Self {
+            pixel_pending: test_pixels,
             surface_retries: 0,
             surface,
             instance,
@@ -711,9 +769,50 @@ impl State {
             }
         }
         self.window.pre_present_notify();
-        self.queue.submit([encoder.finish()]);
+        let readback = if self.pixel_pending {
+            Some(pixels::Readback::encode(
+                &self.device,
+                &mut encoder,
+                self.groups
+                    .as_ref()
+                    .ok_or("Missing pixel-test renderer")?
+                    .pixel_source()?,
+            )?)
+        } else {
+            None
+        };
+        let submission = self.queue.submit([encoder.finish()]);
+        if let Some(readback) = readback {
+            readback.verify(&self.device, submission)?;
+            self.pixel_pending = false;
+        }
         self.queue.present(frame);
         self.atlas.trim();
         Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod argument_tests {
+    use super::*;
+    #[test]
+    fn pixel_mode_rejects_other_sources_and_unbounded_or_combined_runs() {
+        let valid = Some(compiled::Example::GroupEffects);
+        assert!(validate_pixel_mode(true, valid, false, 0, false, Some(6)).is_ok());
+        for example in [
+            None,
+            Some(compiled::Example::Static),
+            Some(compiled::Example::Image),
+            Some(compiled::Example::Groups),
+        ] {
+            assert!(validate_pixel_mode(true, example, false, 0, false, Some(6)).is_err());
+        }
+        for seconds in [None, Some(0), Some(31), Some(3600)] {
+            assert!(validate_pixel_mode(true, valid, false, 0, false, seconds).is_err());
+        }
+        assert!(validate_pixel_mode(true, valid, true, 0, false, Some(6)).is_err());
+        assert!(validate_pixel_mode(true, valid, false, 1, false, Some(6)).is_err());
+        assert!(validate_pixel_mode(true, valid, false, 0, true, Some(6)).is_err());
+        assert!(validate_pixel_mode(false, None, true, 1, false, None).is_ok());
     }
 }

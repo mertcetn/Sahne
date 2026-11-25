@@ -1,5 +1,7 @@
 # M3 additional effect fixture and local visual evidence
 
+The subsequent [fixed GPU readback test](m3-pixel-check.md) is implemented with CPU checks; actual GPU execution is pending. Earlier visual/lifecycle observations below do not establish pixel comparison success.
+
 Updated: November 25, 2026. Status: original source fixture, independent scene/asset checks and CPU references, plus local Windows D3D12 visual/resize evidence for `groups-effects`. The nested-opacity, nonuniform-scale and empty-clip cases agree visually with the specified fixture. Exact fractional GPU pixel/color agreement remains unverified; the scaled JPEG reference does not provide that measurement. Existing [group-preview evidence](m3-group-preview.md) remains scoped to its earlier fixture. Full G3 is not complete.
 
 ## Scope and entry point

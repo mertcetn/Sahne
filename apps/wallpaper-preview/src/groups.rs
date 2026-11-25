@@ -13,6 +13,7 @@ pub enum Fixture {
     Effects,
 }
 struct Surface {
+    texture: Option<wgpu::Texture>,
     view: wgpu::TextureView,
     bindings: wgpu::BindGroup,
 }
@@ -45,9 +46,13 @@ impl Renderer {
         format: wgpu::TextureFormat,
         fonts: &mut FontSystem,
         fixture: Fixture,
+        test_pixels: bool,
     ) -> Result<Self> {
         if !format.is_srgb() {
             return Err("Group preview requires an sRGB surface".into());
+        }
+        if test_pixels && !matches!(fixture, Fixture::Effects) {
+            return Err("Pixel readback is restricted to the fixed effects fixture".into());
         }
         let package = match fixture {
             Fixture::Original => wallpaper_compiler::fixtures::preview_groups_package()?,
@@ -182,7 +187,16 @@ impl Renderer {
             ..Default::default()
         });
         let targets = (0..plan.targets)
-            .map(|_| surface(device, &texture_layout, &sampler, plan.width, plan.height))
+            .map(|i| {
+                surface(
+                    device,
+                    &texture_layout,
+                    &sampler,
+                    plan.width,
+                    plan.height,
+                    test_pixels && i == 0,
+                )
+            })
             .collect();
         let mut images = BTreeMap::new();
         for (&id, image) in compiled.images() {
@@ -259,6 +273,7 @@ impl Renderer {
                     &sampler,
                     text.pixels[0],
                     text.pixels[1],
+                    false,
                 ),
                 buffer,
                 renderer: TextRenderer::new(
@@ -365,6 +380,13 @@ impl Renderer {
         );
         Ok(())
     }
+    pub fn pixel_source(&self) -> Result<&wgpu::Texture> {
+        self.targets[0]
+            .texture
+            .as_ref()
+            .ok_or_else(|| "Pixel readback was not enabled".into())
+    }
+
     pub fn encode(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
@@ -510,6 +532,7 @@ fn surface(
     sampler: &wgpu::Sampler,
     width: u32,
     height: u32,
+    copy_source: bool,
 ) -> Surface {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("Bounded group render surface"),
@@ -522,15 +545,23 @@ fn surface(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | if copy_source {
+                wgpu::TextureUsages::COPY_SRC
+            } else {
+                wgpu::TextureUsages::empty()
+            },
         view_formats: &[],
     });
-    bind_surface(
+    let mut result = bind_surface(
         device,
         layout,
         sampler,
         texture.create_view(&Default::default()),
-    )
+    );
+    result.texture = copy_source.then_some(texture);
+    result
 }
 fn bind_surface(
     device: &wgpu::Device,
@@ -552,7 +583,11 @@ fn bind_surface(
             },
         ],
     });
-    Surface { view, bindings }
+    Surface {
+        view,
+        bindings,
+        texture: None,
+    }
 }
 fn pass<'a>(
     encoder: &'a mut wgpu::CommandEncoder,

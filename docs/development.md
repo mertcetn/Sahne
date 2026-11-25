@@ -1,5 +1,7 @@
 # Development and Release Guide
 
+For the effects-only `--test-pixels` preview flag, see [Fixed GPU pixel check](m3-pixel-check.md). It opens a window and requires a guarded run; GPU runtime validation is still pending.
+
 ## Local setup
 
 Use Rust 1.99.1 (pinned in rust-toolchain.toml). Windows development requires MSVC x64 build tools and the Windows SDK. The workspace contains the development CLI, trusted renderer preview, control codec and trusted Windows sandbox probe. It does not execute wallpaper packages.
