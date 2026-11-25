@@ -180,7 +180,7 @@ At delivery, summarize changes, completed checks, untested cases, and useful rev
 
 ## 12. Next task
 
-The fixed-fixture [group](m3-group-preview.md), [effect](m3-effect-fixtures.md) and [18-sample GPU](m3-pixel-check.md) checkpoints passed locally. The animation foundation and [typed binding/codec/fixed playback integration](m3-animated-preview.md) have CPU checks; local animated GPU/window validation passed. Movement, scale, group opacity, Space pause/resume, resize, reconstruction, device loss and static/effects regressions passed on the recorded setup. CSS animation source grammar, general animated text scale, production provenance integration and the I2 importer still need work. Full G3 and broader visual/platform checks remain open. Keep parsing/decoding boundaries and budgets explicit before accepting untrusted input. M4 must integrate production transport/callbacks and complete G2 through that path. Extended M1 hardware coverage and later platform/product gates remain open.
+The [M3 acceptance record](m3-acceptance.md) closes the trusted Windows prototype scope. Start M4 with bounded host mutation transactions, revision checks and acknowledgements. Production source handling and integrated G2 validation remain part of M4. Extended M1 hardware coverage and later platform gates remain open.
 
 Sections below are historical progress records; their earlier pending/uncommitted statements describe that stage, not the current status above.
 
