@@ -603,3 +603,7 @@ The fixed AppContainer clock probe exports only its last accepted UTC display te
 ## 66. M4 live worker clock bridge
 
 The Windows preview hosts the existing AppContainer clock fixture directly over inherited pipes. It validates and acknowledges bounded updates, transfers only changed snapshots through a single-slot mailbox and retains the accepted display after terminal rejection or worker failure. A headless test exercises the same bridge. See [Live AppContainer window bridge](m4-clock-preview.md#live-appcontainer-window-bridge).
+
+## 67. M4 continuous UTC worker preview
+
+The opt-in Windows development preview can keep one AppContainer worker running across real UTC minute changes. The host schedules each wake on a monotonic clock, samples UTC at dispatch and allows one outstanding tick. The response watchdog covers startup and each scheduled tick. Changed snapshots wake the window through its event queue. Matching content receives an acknowledgement without publishing a snapshot. Closing the preview stops the Job, joins the pipe thread and cleans up the profile. See [Continuous UTC worker](m4-clock-preview.md#continuous-utc-worker).

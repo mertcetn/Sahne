@@ -19,11 +19,31 @@ use wallpaper_scene::{
     transaction::{Edit, HostScene, Snapshot},
 };
 
-pub const POLL_INTERVAL: Duration = Duration::from_millis(25);
+const POLL_INTERVAL: Duration = Duration::from_millis(25);
 const RESPONSE_LIMIT: Duration = Duration::from_secs(8);
 const TICK_GAP: Duration = Duration::from_millis(1400);
 const MINUTES: [u16; 3] = [1439, 0, 0];
 type WorkerResult<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Fixture,
+    Utc,
+}
+
+enum Signal {
+    Deadline(Instant),
+    Finished(WorkerResult<()>),
+    Cancel,
+}
+
+struct ChannelState {
+    update: Mutex<Update>,
+    cancel: AtomicBool,
+    notify: Box<dyn Fn() + Send + Sync>,
+    signal: mpsc::SyncSender<Signal>,
+    mode: Mode,
+}
 
 #[derive(Default)]
 pub struct Update {
@@ -32,35 +52,49 @@ pub struct Update {
 }
 
 pub struct Bridge {
-    update: Arc<Mutex<Update>>,
-    cancel: Arc<AtomicBool>,
+    state: Arc<ChannelState>,
     supervisor: Option<JoinHandle<()>>,
 }
 
 impl Bridge {
-    pub fn start() -> Result<Self> {
-        let update = Arc::new(Mutex::new(Update::default()));
-        let cancel = Arc::new(AtomicBool::new(false));
-        let shared = Arc::clone(&update);
-        let stopped = Arc::clone(&cancel);
+    pub fn start(mode: Mode, notify: impl Fn() + Send + Sync + 'static) -> Result<Self> {
+        let (signal, receiver) = mpsc::sync_channel(2);
+        let state = Arc::new(ChannelState {
+            update: Mutex::new(Update::default()),
+            cancel: AtomicBool::new(false),
+            notify: Box::new(notify),
+            signal,
+            mode,
+        });
+        let shared = Arc::clone(&state);
         let supervisor = thread::Builder::new()
             .name("clock-supervisor".into())
             .spawn(move || {
-                let result = supervise(&shared, &stopped).map_err(|error| error.to_string());
-                if let Ok(mut pending) = shared.lock() {
+                let result = supervise(&shared, receiver).map_err(|error| error.to_string());
+                if let Ok(mut pending) = shared.update.lock() {
                     pending.terminal = Some(result);
                 }
+                (shared.notify)();
             })?;
         Ok(Self {
-            update,
-            cancel,
+            state,
             supervisor: Some(supervisor),
         })
+    }
+
+    pub fn shutdown(&mut self) -> Result<()> {
+        self.state.cancel.store(true, Ordering::Release);
+        let _ = self.state.signal.try_send(Signal::Cancel);
+        if let Some(supervisor) = self.supervisor.take() {
+            supervisor.join().map_err(|_| "Clock supervisor panicked")?;
+        }
+        Ok(())
     }
 
     pub fn poll(&self) -> Result<Update> {
         Ok(std::mem::take(
             &mut *self
+                .state
                 .update
                 .lock()
                 .map_err(|_| "Clock mailbox unavailable")?,
@@ -70,14 +104,11 @@ impl Bridge {
 
 impl Drop for Bridge {
     fn drop(&mut self) {
-        self.cancel.store(true, Ordering::Release);
-        if let Some(supervisor) = self.supervisor.take() {
-            let _ = supervisor.join();
-        }
+        let _ = self.shutdown();
     }
 }
 
-fn supervise(update: &Arc<Mutex<Update>>, cancel: &Arc<AtomicBool>) -> WorkerResult<()> {
+fn supervise(state: &Arc<ChannelState>, receiver: mpsc::Receiver<Signal>) -> WorkerResult<()> {
     let exe = std::env::current_exe()?.with_file_name("wallpaper-sandbox-probe.exe");
     if !exe.metadata()?.is_file() {
         return Err("Missing sibling sandbox probe executable".into());
@@ -94,19 +125,21 @@ fn supervise(update: &Arc<Mutex<Update>>, cancel: &Arc<AtomicBool>) -> WorkerRes
     let base = std::env::current_dir()?.join("target/sandbox-runs");
     fs::create_dir_all(&base)?;
     let root = base.join(format!("preview-{}-{session:016x}", std::process::id()));
+    let case = match state.mode {
+        Mode::Fixture => "scene-timer",
+        Mode::Utc => "preview-clock-utc",
+    };
     let wallpaper_sandbox::Channel {
         mut sandbox,
         input,
         output,
-    } = wallpaper_sandbox::spawn_probe(&exe, &root, session, "scene-timer", 0, None)?;
-    let shared = Arc::clone(update);
-    let stopped = Arc::clone(cancel);
-    let (sender, receiver) = mpsc::sync_channel(1);
+    } = wallpaper_sandbox::spawn_probe(&exe, &root, session, case, 0, None)?;
+    let shared = Arc::clone(state);
     let io_thread = thread::Builder::new()
         .name("clock-channel".into())
         .spawn(move || {
-            let result = exchange(input, output, session, nonce, scene, &shared, &stopped);
-            let _ = sender.send(result);
+            let result = exchange(input, output, session, nonce, scene, &shared);
+            let _ = shared.signal.try_send(Signal::Finished(result));
         });
     let io_thread = match io_thread {
         Ok(thread) => thread,
@@ -115,30 +148,44 @@ fn supervise(update: &Arc<Mutex<Update>>, cancel: &Arc<AtomicBool>) -> WorkerRes
             return Err(error.into());
         }
     };
-    let start = Instant::now();
+    let mut deadline = Instant::now() + RESPONSE_LIMIT;
     let response = loop {
-        if cancel.load(Ordering::Acquire) || start.elapsed() >= RESPONSE_LIMIT {
-            break Err("Clock worker stopped or timed out".into());
+        if state.cancel.load(Ordering::Acquire) {
+            break None;
         }
-        match receiver.recv_timeout(POLL_INTERVAL) {
-            Ok(result) => break result,
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        match receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(Signal::Deadline(next)) => deadline = next,
+            Ok(Signal::Finished(result)) => break Some(result),
+            Ok(Signal::Cancel) => break None,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                break Some(Err("Clock worker timed out".into()));
+            }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                break Err("Clock worker channel disappeared".into());
+                break Some(Err("Clock worker channel disappeared".into()));
             }
         }
     };
-    let exit = if response.is_ok() {
+    let exit = if matches!(response, Some(Ok(()))) {
         sandbox.wait(1000)
     } else {
         Ok(None)
     };
-    sandbox.stop()?;
+    state.cancel.store(true, Ordering::Release);
+    io_thread.thread().unpark();
+    let stopped = sandbox.stop();
+    if let Err(error) = stopped {
+        drop(sandbox);
+        let _ = io_thread.join();
+        return Err(error.into());
+    }
     let joined = io_thread
         .join()
         .map_err(|_| "Clock channel thread panicked");
     sandbox.cleanup_profile()?;
     joined?;
+    let Some(response) = response else {
+        return Ok(());
+    };
     response?;
     if exit? != Some(0) {
         return Err("Clock worker did not exit cleanly".into());
@@ -167,8 +214,7 @@ fn exchange(
     session: u64,
     nonce: u64,
     mut host: HostScene,
-    update: &Mutex<Update>,
-    cancel: &AtomicBool,
+    state: &ChannelState,
 ) -> WorkerResult<()> {
     let mut key = host
         .snapshot_after(None)
@@ -182,21 +228,38 @@ fn exchange(
     if read_frame(&mut output)? != Some(frame(session, 2, 0, Body::Pong { nonce })) {
         return Err("Invalid clock worker pong".into());
     }
-    for (index, minute) in MINUTES.into_iter().enumerate() {
-        let base = index as u64;
-        let sequence = base + 1;
-        if index != 0 {
+    let mut sequence = 1u64;
+    let mut wake = Instant::now();
+    loop {
+        let base = sequence - 1;
+        let fixture_minute = MINUTES.get(base as usize).copied();
+        if state.mode == Mode::Fixture && fixture_minute.is_none() {
+            break;
+        }
+        if base != 0 {
             if read_frame(&mut output)? != Some(frame(session, sequence, base, Body::ClockReady)) {
                 return Err("Invalid clock worker readiness".into());
             }
-            let start = Instant::now();
-            while start.elapsed() < TICK_GAP {
-                if cancel.load(Ordering::Acquire) {
+            while let Some(delay) = wake.checked_duration_since(Instant::now()) {
+                if state.cancel.load(Ordering::Acquire) {
                     return Err("Clock update cancelled".into());
                 }
-                thread::sleep(POLL_INTERVAL);
+                thread::park_timeout(delay);
             }
         }
+        let minute = match state.mode {
+            Mode::Fixture => {
+                wake = Instant::now() + TICK_GAP;
+                fixture_minute.ok_or("Missing clock fixture minute")?
+            }
+            Mode::Utc => {
+                let sampled_at = Instant::now();
+                let elapsed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
+                let (minute, delay) = clock::utc_sample(elapsed);
+                wake = sampled_at + delay;
+                minute
+            }
+        };
         send(
             &mut input,
             frame(
@@ -238,12 +301,20 @@ fn exchange(
         }
         if let Some(snapshot) = host.snapshot_after(Some(key)) {
             key = snapshot.key;
-            update
+            state
+                .update
                 .lock()
                 .map_err(|_| "Clock mailbox unavailable")?
                 .snapshot = Some(snapshot);
+            (state.notify)();
         }
         send(&mut input, ack)?;
+        if state.mode == Mode::Utc {
+            state
+                .signal
+                .try_send(Signal::Deadline(wake + RESPONSE_LIMIT))?;
+        }
+        sequence = sequence.checked_add(1).ok_or("Clock sequence exhausted")?;
     }
     let invalid = read_frame(&mut output)?.ok_or("Missing terminal scene batch")?;
     let sequence = MINUTES.len() as u64 + 1;
@@ -296,12 +367,16 @@ fn exchange(
     Ok(())
 }
 
-pub fn check() -> Result<()> {
+pub fn check(mode: Mode) -> Result<()> {
     let mut current = clock::Clock::live_fallback(Instant::now())?;
-    let bridge = Bridge::start()?;
+    let mut bridge = Bridge::start(mode, || {})?;
     let mut seen = Vec::new();
     let start = Instant::now();
-    while start.elapsed() < RESPONSE_LIMIT + Duration::from_secs(3) {
+    let limit = match mode {
+        Mode::Fixture => Duration::from_secs(11),
+        Mode::Utc => Duration::from_secs(77),
+    };
+    while start.elapsed() < limit {
         let update = bridge.poll()?;
         if let Some(snapshot) = update.snapshot {
             current.accept_worker(snapshot);
@@ -309,11 +384,26 @@ pub fn check() -> Result<()> {
         }
         if let Some(result) = update.terminal {
             result?;
-            if seen != ["23:59", "00:00"] || current.text() != "00:00" {
+            if mode != Mode::Fixture || seen != ["23:59", "00:00"] || current.text() != "00:00" {
                 return Err("Clock publication sequence mismatch".into());
             }
             println!(
                 "Live worker clock verified: 23:59 -> 00:00 UTC; terminal rejection preserved 00:00."
+            );
+            return Ok(());
+        }
+        if mode == Mode::Utc && seen.len() == 2 {
+            bridge.shutdown()?;
+            bridge
+                .poll()?
+                .terminal
+                .ok_or("Missing UTC worker shutdown result")??;
+            if seen[0] == seen[1] {
+                return Err("UTC worker repeated a clock snapshot".into());
+            }
+            println!(
+                "Continuous worker clock verified: {} -> {} UTC; worker cleaned up.",
+                seen[0], seen[1]
             );
             return Ok(());
         }

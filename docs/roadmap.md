@@ -128,7 +128,7 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Add [bounded monotonic timer scheduling](m4-timers.md) with pause/resume and no replay backlog.
 - [x] Verify a [host-driven clock tick after timer resume](m4-timers.md#host-driven-clock-tick-over-ipc) through AppContainer scene acknowledgement.
 - [x] Verify [three acknowledged UTC ticks in the same AppContainer session](m4-timers.md#sequential-clock-updates-in-one-worker-session), with one outstanding update and terminal rollback.
-- [ ] Connect script timer registration and lifecycle callbacks to the worker. Add continuous clock updates and connect the adapter to the production script-visible DOM.
+- [ ] Connect script timer registration and lifecycle callbacks to the worker and integrate the adapter with the production script-visible DOM.
 - [ ] Enforce callback and Promise/microtask budgets, bounded host callbacks, and bounded diagnostic output.
 - [x] Verify [immutable accepted snapshots and suppression of unchanged clock content](m4-scene-transactions.md#content-snapshots-for-presentation).
 - [x] Add the [host-driven UTC clock renderer path](m4-clock-preview.md) and deterministic rollover mode with CPU checks.
@@ -137,6 +137,8 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Verify the [retained worker clock in a D3D12 window](m4-clock-preview.md#retained-value-visual-result).
 - [x] Connect live worker snapshots to the renderer and verify accepted-state preservation through the [headless AppContainer bridge](m4-clock-preview.md#live-appcontainer-window-bridge).
 - [x] Visually verify the [live worker rollover and retained display](m4-clock-preview.md#live-bridge-visual-result) after terminal rejection.
+- [x] Verify [continuous host-scheduled UTC updates](m4-clock-preview.md#continuous-utc-worker) over AppContainer IPC without a window.
+- [ ] Visually verify a real UTC minute change in the continuous AppContainer preview.
 - [ ] Integrate package/resource validation and restricted helper processing for untrusted parsing/media/font operations before accepting those inputs.
 - [ ] Re-run the complete sandbox failure suite through the integrated content path.
 

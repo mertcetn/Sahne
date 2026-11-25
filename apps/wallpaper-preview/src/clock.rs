@@ -195,7 +195,7 @@ fn worker_text(folder: &str) -> Result<String> {
     Ok(String::from_utf8(bytes.to_vec())?)
 }
 
-fn utc_sample(elapsed: Duration) -> (u16, Duration) {
+pub fn utc_sample(elapsed: Duration) -> (u16, Duration) {
     let seconds = elapsed.as_secs();
     let minute = ((seconds / 60) % 1440) as u16;
     let until_next = Duration::from_secs(60 - seconds % 60)

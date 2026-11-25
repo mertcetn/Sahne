@@ -245,6 +245,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "scene-transaction"
         | "scene-script"
         | "scene-timer"
+        | "preview-clock-utc"
         | "ipc-write-drain"
         | "filesystem"
         | "registry"

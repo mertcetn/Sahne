@@ -15,6 +15,7 @@ pub enum Mode {
     Typed,
     Script,
     Timer,
+    Utc,
 }
 
 impl Mode {
@@ -23,6 +24,7 @@ impl Mode {
             "scene-transaction" => Some(Self::Typed),
             "scene-script" => Some(Self::Script),
             "scene-timer" => Some(Self::Timer),
+            "preview-clock-utc" => Some(Self::Utc),
             _ => None,
         }
     }
@@ -296,8 +298,9 @@ pub fn worker(
     };
     let updates = mode.updates();
     let mut previous = "initial".to_owned();
-    for sequence in 1..=updates {
-        let display_time = if mode == Mode::Timer {
+    let mut sequence = 1u64;
+    while mode == Mode::Utc || sequence <= updates {
+        let display_time = if matches!(mode, Mode::Timer | Mode::Utc) {
             if sequence > 1 {
                 send(output, update_message(session, sequence, Body::ClockReady))?;
             }
@@ -324,6 +327,7 @@ pub fn worker(
             return Err("Worker did not receive the expected scene acknowledgement".into());
         }
         previous = display_time;
+        sequence = sequence.checked_add(1).ok_or("Clock sequence exhausted")?;
     }
     send(
         output,

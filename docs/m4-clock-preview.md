@@ -58,10 +58,25 @@ target/release/wallpaper-preview.exe --example clock --clock-worker-live --secon
 
 This fixture sends three UTC samples, 23:59, 00:00 and a repeated 00:00, through inherited pipes. These are deterministic test values. The host verifies the exact fixture edit allowlist, session, sequence and base revision. It acknowledges each accepted batch. The latest changed snapshot replaces the previous mailbox value. The window consumes that immutable snapshot and requests redraw only for new content. The worker sends a final invalid batch to test terminal rejection. The preview retains the last snapshot after worker exit or failure.
 
-The supervisor owns the Job, response deadline and cancellation. The channel thread owns synchronous pipe I/O, and the window polls the single-slot mailbox while the fixture is active. There is one outstanding tick at a time. Channel completion requires a clean worker exit, joined I/O thread and profile cleanup. The preview keeps a fixed 00:00 fallback until a snapshot arrives. The live window command requires 8–30 seconds and rejects desktop mode and other test flags. The headless command requires two content changes and retained 00:00 after rejection, so it fails even when the window path would keep its last value.
+The supervisor owns the Job, response deadline and cancellation. The channel thread owns synchronous pipe I/O, and the window reads the single-slot mailbox when it receives a worker event. There is one outstanding tick at a time. Fixture completion requires a clean worker exit, joined I/O thread and profile cleanup. The preview keeps a fixed 00:00 fallback until a snapshot arrives. The live window command requires 8–30 seconds and rejects desktop mode and other test flags. The headless command requires two content changes and retained 00:00 after rejection, so it fails even when the window path would keep its last value.
 
-The headless release test passed over an actual AppContainer connection. All 163 workspace tests and Clippy passed. Local window validation passed. This fixture uses a finite sample sequence and the development probe. Continuous calendar scheduling, product worker packaging and desktop attachment remain open.
+The headless release test passed over an actual AppContainer connection. All 163 workspace tests and Clippy passed. Local window validation passed. This fixture uses a finite sample sequence and the development probe.
 
 ### Live bridge visual result
 
 On November 25, 2026, source `1f5fd4b` ran on the local RTX 3050 Laptop D3D12 configuration with a 960×600 client at DPI scale 1. The preview first displayed its fallback frame, then presented the worker's [23:59](images/m4-live-clock-2359.jpg) and [00:00](images/m4-live-clock-retained.jpg) snapshots. The UTC label changed to the worker's accent color. The final capture was taken after the host logged worker completion following terminal rejection. It still showed 00:00 UTC. The duplicate tick produced no additional presentation. Escape exited 0 after three frames in one GPU generation. Local log: `target/m4-live-clock-visual/33f83c57f61b4416af4e0c255a1e62d2/stderr.log`. These results cover the deterministic fixture and its intentional terminal rejection.
+
+## Continuous UTC worker
+
+Build the two development binaries as above. The headless check waits for two different clock values from one AppContainer session and verifies shutdown and profile cleanup. It can take slightly over a minute. Window mode runs until Escape or until the optional duration elapses.
+
+```powershell
+target/release/wallpaper-preview.exe --check-clock-worker-utc
+target/release/wallpaper-preview.exe --example clock --clock-worker-utc --seconds 90
+```
+
+The host samples UTC on startup and schedules each next sample with a monotonic wait derived from the next minute boundary. On wake it reads the current time, so missed minutes are skipped. The worker computes the clock text in its fixed, bounded script callback and waits for acknowledgement before accepting another tick. The supervisor allows eight seconds for startup and for each scheduled update. The window receives an event when content changes or the worker stops. Closing the preview stops the Job and cleans up the AppContainer profile. If the worker fails, the window keeps its last accepted snapshot. [Rust interruptible wait](https://doc.rust-lang.org/std/thread/fn.park_timeout.html) · [winit event proxy](https://docs.rs/winit/0.30.13/winit/event_loop/struct.EventLoopProxy.html)
+
+On November 25, 2026, the headless release check observed 20:09 → 20:10 UTC in one AppContainer session and verified cleanup after cancellation. The deterministic rollover and the `scene-timer`, `scene-script` and `ipc-roundtrip` probes also passed.
+
+The continuous mode uses a fixed development script. Visual validation of this mode, product worker packaging and desktop attachment remain open.

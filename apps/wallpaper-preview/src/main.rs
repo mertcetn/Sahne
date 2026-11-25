@@ -30,6 +30,11 @@ struct DeviceLost {
     explicitly_destroyed: bool,
 }
 
+enum AppEvent {
+    DeviceLost(DeviceLost),
+    ClockUpdate,
+}
+
 fn main() -> Result<()> {
     let (mut seconds, mut desktop_mode, mut recreate) = (None, false, 0u32);
     let mut test_device_loss = false;
@@ -38,7 +43,7 @@ fn main() -> Result<()> {
     let mut test_clock_rollover = false;
     let mut worker_snapshot = None;
     let mut check_worker_snapshot = false;
-    let mut worker_live = false;
+    let mut worker_live = None;
     let mut check_worker_live = false;
     let mut compiled_example = None;
     let mut args = std::env::args().skip(1);
@@ -46,7 +51,7 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes|clock] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap. --reference-pose freezes animated-shapes at exactly 1 s for visual reference; use it in window mode without other test flags. clock shows host-provided UTC time in window mode. --test-clock-rollover requires clock and --seconds 5..30; it demonstrates 23:59 to 00:00. --clock-worker-snapshot <run-folder> displays a retained worker value with --example clock. --check-clock-worker-snapshot <run-folder> verifies that value without opening a window. --clock-worker-live requires --example clock --seconds 8..30 and the sibling sandbox probe. --check-clock-worker-live runs the same bridge without a window."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes|clock] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap. --reference-pose freezes animated-shapes at exactly 1 s for visual reference; use it in window mode without other test flags. clock shows host-provided UTC time in window mode. --test-clock-rollover requires clock and --seconds 5..30; it demonstrates 23:59 to 00:00. --clock-worker-snapshot <run-folder> displays a retained worker value with --example clock. --check-clock-worker-snapshot <run-folder> verifies that value without opening a window. --clock-worker-live requires --example clock --seconds 8..30 and the sibling sandbox probe. --check-clock-worker-live runs the same bridge without a window. --clock-worker-utc uses current UTC minutes with --example clock. --check-clock-worker-utc verifies two live UTC updates without opening a window."
                 );
                 return Ok(());
             }
@@ -70,8 +75,20 @@ fn main() -> Result<()> {
             "--test-pixels" => test_pixels = true,
             "--reference-pose" => reference_pose = true,
             "--test-clock-rollover" => test_clock_rollover = true,
-            "--clock-worker-live" => worker_live = true,
-            "--check-clock-worker-live" => check_worker_live = true,
+            "--clock-worker-live"
+            | "--check-clock-worker-live"
+            | "--clock-worker-utc"
+            | "--check-clock-worker-utc" => {
+                if worker_live.is_some() {
+                    return Err("Select only one clock worker mode".into());
+                }
+                worker_live = Some(if arg.ends_with("-utc") {
+                    live_clock::Mode::Utc
+                } else {
+                    live_clock::Mode::Fixture
+                });
+                check_worker_live = arg.starts_with("--check-");
+            }
             "--clock-worker-snapshot" | "--check-clock-worker-snapshot" => {
                 if worker_snapshot.is_some() {
                     return Err("Choose one clock snapshot input".into());
@@ -138,7 +155,7 @@ fn main() -> Result<()> {
                 .into(),
         );
     }
-    if worker_live || check_worker_live {
+    if let Some(mode) = worker_live {
         if worker_snapshot.is_some()
             || test_clock_rollover
             || recreate != 0
@@ -146,14 +163,15 @@ fn main() -> Result<()> {
             || test_pixels
             || reference_pose
             || desktop_mode
-            || (check_worker_live
-                && (worker_live || compiled_example.is_some() || seconds.is_some()))
-            || (worker_live && (!clock_mode || !matches!(seconds, Some(8..=30))))
+            || (check_worker_live && (compiled_example.is_some() || seconds.is_some()))
+            || (!check_worker_live
+                && (!clock_mode
+                    || (mode == live_clock::Mode::Fixture && !matches!(seconds, Some(8..=30)))))
         {
-            return Err("Live clock requires its own test mode and, for a window, --example clock --seconds 8..30".into());
+            return Err("Clock worker requires its own mode. Window modes require --example clock. The fixed fixture also requires --seconds 8..30.".into());
         }
         if check_worker_live {
-            return live_clock::check();
+            return live_clock::check(mode);
         }
     }
     let clock = if let Some(folder) = worker_snapshot.as_deref() {
@@ -178,7 +196,7 @@ fn main() -> Result<()> {
             return Err("Worker snapshot requires --example clock".into());
         }
         Some(clock::Clock::from_worker(Instant::now(), folder)?)
-    } else if worker_live {
+    } else if worker_live.is_some() {
         Some(clock::Clock::live_fallback(Instant::now())?)
     } else if clock_mode {
         Some(clock::Clock::new(Instant::now(), test_clock_rollover)?)
@@ -194,7 +212,7 @@ fn main() -> Result<()> {
     } else {
         None
     };
-    let events = EventLoop::<DeviceLost>::with_user_event().build()?;
+    let events = EventLoop::<AppEvent>::with_user_event().build()?;
     events.set_control_flow(ControlFlow::Wait);
     let mut app = App {
         motion,
@@ -266,7 +284,7 @@ struct App {
     motion: Option<motion::Playback>,
     clock: Option<clock::Clock>,
     live_clock: Option<live_clock::Bridge>,
-    start_live_clock: bool,
+    start_live_clock: Option<live_clock::Mode>,
     state: Option<State>,
     desktop: Option<wallpaper_platform::Desktop>,
     desktop_mode: bool,
@@ -277,7 +295,7 @@ struct App {
     next_retry: Option<Instant>,
     budget: lifecycle::RecoveryBudget,
     generation: u64,
-    proxy: EventLoopProxy<DeviceLost>,
+    proxy: EventLoopProxy<AppEvent>,
     deadline: Option<Instant>,
     error: Option<String>,
     frames: u64,
@@ -287,6 +305,38 @@ struct App {
     next_device_test: Option<Instant>,
 }
 impl App {
+    fn apply_live_update(&mut self) {
+        if let (Some(bridge), Some(clock)) = (self.live_clock.as_ref(), self.clock.as_mut()) {
+            match bridge.poll() {
+                Ok(update) => {
+                    if let Some(snapshot) = update.snapshot {
+                        clock.accept_worker(snapshot);
+                        eprintln!("Accepted worker clock: {} UTC", clock.text());
+                        if let Some(state) = self.state.as_ref() {
+                            state.window.request_redraw();
+                        }
+                    }
+                    if let Some(terminal) = update.terminal {
+                        self.live_clock = None;
+                        match terminal {
+                            Ok(()) => {
+                                eprintln!("Clock worker completed; retained {} UTC", clock.text())
+                            }
+                            Err(error) => eprintln!(
+                                "Clock worker stopped: {error}; retained {} UTC",
+                                clock.text()
+                            ),
+                        }
+                    }
+                }
+                Err(error) => {
+                    eprintln!("Clock worker updates unavailable: {error}");
+                    self.live_clock = None;
+                }
+            }
+        }
+    }
+
     fn motion_reason(&mut self, events: &ActiveEventLoop, reason: u8, enabled: bool) -> bool {
         if let Some(motion) = self.motion.as_mut()
             && let Err(error) = motion.reason(Instant::now(), reason, enabled)
@@ -398,7 +448,7 @@ impl App {
         }
     }
 }
-impl ApplicationHandler<DeviceLost> for App {
+impl ApplicationHandler<AppEvent> for App {
     fn resumed(&mut self, events: &ActiveEventLoop) {
         if self.next_retry.is_none() {
             self.create(events);
@@ -412,7 +462,11 @@ impl ApplicationHandler<DeviceLost> for App {
         self.desktop = None;
         self.next_recreate = None;
     }
-    fn user_event(&mut self, events: &ActiveEventLoop, loss: DeviceLost) {
+    fn user_event(&mut self, events: &ActiveEventLoop, event: AppEvent) {
+        let AppEvent::DeviceLost(loss) = event else {
+            self.apply_live_update();
+            return;
+        };
         if loss.generation == self.generation && self.state.is_some() {
             self.loss_test
                 .callback(loss.generation, loss.explicitly_destroyed);
@@ -485,39 +539,7 @@ impl ApplicationHandler<DeviceLost> for App {
                 }
             }
         }
-        if let (Some(bridge), Some(clock)) = (self.live_clock.as_ref(), self.clock.as_mut()) {
-            match bridge.poll() {
-                Ok(update) => {
-                    if let Some(snapshot) = update.snapshot {
-                        clock.accept_worker(snapshot);
-                        eprintln!("Accepted worker clock: {} UTC", clock.text());
-                        if let Some(state) = self.state.as_ref() {
-                            state.window.request_redraw();
-                        }
-                    }
-                    if let Some(terminal) = update.terminal {
-                        self.live_clock = None;
-                        match terminal {
-                            Ok(()) => {
-                                eprintln!("Clock worker completed; retained {} UTC", clock.text())
-                            }
-                            Err(error) => eprintln!(
-                                "Clock worker stopped: {error}; retained {} UTC",
-                                clock.text()
-                            ),
-                        }
-                    }
-                }
-                Err(error) => {
-                    eprintln!("Clock worker updates unavailable: {error}");
-                    self.live_clock = None;
-                }
-            }
-        }
         let wake = [
-            self.live_clock
-                .as_ref()
-                .and_then(|_| Instant::now().checked_add(live_clock::POLL_INTERVAL)),
             self.state
                 .as_ref()
                 .and(self.clock.as_ref())
@@ -630,9 +652,11 @@ impl ApplicationHandler<DeviceLost> for App {
                         if self.loss_test.needs_request() && self.next_device_test.is_none() {
                             self.next_device_test = Some(Instant::now() + Duration::from_secs(1));
                         }
-                        if self.start_live_clock {
-                            self.start_live_clock = false;
-                            match live_clock::Bridge::start() {
+                        if let Some(mode) = self.start_live_clock.take() {
+                            let proxy = self.proxy.clone();
+                            match live_clock::Bridge::start(mode, move || {
+                                let _ = proxy.send_event(AppEvent::ClockUpdate);
+                            }) {
                                 Ok(bridge) => self.live_clock = Some(bridge),
                                 Err(error) => eprintln!("Clock worker could not start: {error}"),
                             }
@@ -689,7 +713,7 @@ impl State {
     async fn new(
         window: Arc<Window>,
         events: &ActiveEventLoop,
-        proxy: EventLoopProxy<DeviceLost>,
+        proxy: EventLoopProxy<AppEvent>,
         generation: u64,
         report_destroyed: bool,
         compiled_example: Option<compiled::Example>,
@@ -717,11 +741,11 @@ impl State {
             .await?;
         device.set_device_lost_callback(move |reason, message| {
             if reason != wgpu::DeviceLostReason::Destroyed || report_destroyed {
-                let _ = proxy.send_event(DeviceLost {
+                let _ = proxy.send_event(AppEvent::DeviceLost(DeviceLost {
                     generation,
                     reason: format!("Device lost: {reason:?}: {message}"),
                     explicitly_destroyed: reason == wgpu::DeviceLostReason::Destroyed,
-                });
+                }));
             }
         });
         let size = window.inner_size();
