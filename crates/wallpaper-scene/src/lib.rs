@@ -4,6 +4,7 @@ mod codec;
 pub use codec::decode;
 pub mod animation;
 pub mod hierarchy;
+pub mod timer;
 pub mod transaction;
 
 pub const SCENE_VERSION: u16 = 1;

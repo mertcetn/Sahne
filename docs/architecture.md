@@ -575,3 +575,7 @@ The AppContainer probe runs a fixed clock callback in bounded QuickJS. It return
 ## 59. M4 worker element bindings
 
 The fixed-script worker can bind multiple author IDs to text and rectangle nodes. Its callback adapter stages text and RGBA changes, coalesces writes per property and maps local indices to the worker's selected scene IDs. The host applies the resulting batch atomically. See [Multiple element bindings](m4-scene-transactions.md#multiple-element-bindings).
+
+## 60. M4 monotonic callback timer queue
+
+The host can hold bounded one-shot and repeating deadlines. Pause suppresses timer wakes and resumption makes overdue timers eligible while retaining bounded dispatch cadence. A repeat schedules from actual dispatch time, so a missed interval produces no replay backlog. See [Timer contract and tests](m4-timers.md).
