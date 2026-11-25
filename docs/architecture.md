@@ -531,3 +531,7 @@ The compiler can produce a version 2 provenance record directly from a validated
 ## 48. M3 compiled record receiver verification
 
 The receiver regenerates the canonical record from its own retained package, viewport and compilation mode. It compares incoming bytes with a fixed 8 KiB buffer and requires EOF. A remote record cannot drive allocation sizes or supply the expected source snapshot. The fixture CLI verifies binary stdin for legacy and named exports. See [Receiver verification](m3-compiled-provenance.md#receiver-verification).
+
+## 49. I1 web import mapping contract
+
+The proposed web adapter maps retained HTML, CSS and PNG through native validation. I1 specifies metadata conversion, report bounds and verdicts, settings snapshots and deltas, host FPS limits and native pause semantics. Synthetic cases define expected I2 outcomes. The adapter remains gated on M4. See [I1 web import mapping](i1-web-mapping.md).

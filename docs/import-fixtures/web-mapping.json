@@ -1,0 +1,37 @@
+{
+  "fixtureVersion": 1,
+  "cases": [
+    {
+      "id": "static-panel",
+      "project": {"type": "web", "file": "index.html", "title": "Mint panel"},
+      "files": {"index.html": "<div style=\"width:40px;height:20px;background-color:#24b390\"></div>"},
+      "expect": {"verdict": "convertible", "code": null}
+    },
+    {
+      "id": "missing-entry",
+      "project": {"type": "web", "file": "missing.html", "title": "Missing entry"},
+      "files": {},
+      "expect": {"verdict": "unsupported", "code": "missing-resource"}
+    },
+    {
+      "id": "parent-reference",
+      "project": {"type": "web", "file": "../index.html", "title": "Unsafe path"},
+      "files": {},
+      "expect": {"verdict": "unsupported", "code": "unsafe-resource"}
+    },
+    {
+      "id": "unsupported-element",
+      "project": {"type": "web", "file": "index.html", "title": "Canvas fixture"},
+      "files": {"index.html": "<canvas></canvas>"},
+      "expect": {"verdict": "unsupported", "code": "unsupported-feature"}
+    }
+  ],
+  "settingsSequence": {
+    "defaults": {"visible": true, "speed": 5},
+    "effectiveFps": {"host": 30, "user": 60, "preferred": 45, "expected": 30},
+    "pausedUpdates": [{"speed": 6}, {"speed": 8}],
+    "expectedInitialSnapshot": {"visible": true, "speed": 5},
+    "expectedResumeDelta": {"speed": 8},
+    "expectedMissedFramesReplayed": 0
+  }
+}

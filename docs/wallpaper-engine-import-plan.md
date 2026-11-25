@@ -14,7 +14,7 @@ Plan compatibility alongside native engine development; implement it after the c
 | I3 — Scene assets | Later, separately scoped after I2 evaluation | Bounded PKG inventory/extraction and selected texture conversion investigation | Validate versions, ranges, archive paths and budgets; asset extraction is labeled separately from playback |
 | I4 — Broader playback | Future scope decision only | Optional scene behavior or browser backend assessment | Independent renderer/security/performance evidence; no implied full compatibility |
 
-I0's two local examples have an initial static assessment in [Sample assessment](wallpaper-engine-samples.md). Neither has been runtime-tested or converted. I1's M2 capability/inspection boundary is specified in [Adapter boundary](import-adapter-boundary.md); its M3 mappings and callback semantics remain pending, so I1 as a whole is incomplete. I2 is gated on M4 and does not block the first native Windows product or Linux platform work unless a later release scope explicitly requires it. Android remains deferred.
+I0's two local examples have an initial static assessment in [Sample assessment](wallpaper-engine-samples.md). Neither has been runtime-tested or converted. I1's M2 capability/inspection boundary is specified in [Adapter boundary](import-adapter-boundary.md); the [M3 mapping contract](i1-web-mapping.md) now defines candidate metadata, resources, diagnostics and callback delivery, with synthetic acceptance cases. I2 is gated on M4 and does not block the first native Windows product or Linux platform work unless a later release scope explicitly requires it. Android remains deferred.
 
 ## Proposed boundary
 

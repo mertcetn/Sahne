@@ -1,6 +1,6 @@
 # Import Adapter Capability Boundary
 
-Status: I1 M2 security/inspection boundary specified; no importer, report parser or compatibility runtime is implemented. M3 still owns metadata/resource mappings, the capability catalog and callback semantics. I2 implementation remains after M4. This is not an expansion of supported native content or Wallpaper Engine compatibility.
+Status: I1 M2 security/inspection boundary specified; no importer, report parser or compatibility runtime is implemented. The subsequent [M3 mapping contract](i1-web-mapping.md) specifies metadata, resources, capabilities and callback semantics. I2 implementation remains after M4. This is not an expansion of supported native content or Wallpaper Engine compatibility.
 
 ## Authority
 
