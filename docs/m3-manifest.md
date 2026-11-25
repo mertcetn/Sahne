@@ -48,3 +48,9 @@ The two actual-process fixtures demonstrate this library under the unchanged Win
 The [JSON dependency/security review](m3-json-dependencies.md) records the exact active graph, advisories, provenance, build scripts, licenses and unresolved risks. Complete G2 and G3 remain open. Hosted CI and non-Windows runtime validation have not been performed.
 
 Local validation passed all 47 workspace Rust tests and the full 37-case native corpus with 43 profile cleanups and one registry cleanup in report `bf43adbb42234baa9b356a8d03c3cc8e`. After replacing literal version checks with public version constants, the final release build and both package cases passed again in `7e7d51f7a50343ca86401c3ae2cebff7`. Formatting, Clippy and the unchanged scene CLI check passed. An initial concurrent release build encountered Windows' running-EXE lock; the sequential rerun succeeded. Existing Cargo incremental-cache notices remain.
+
+## Bounded snapshot from open readers
+
+`Package::from_readers` accepts entries supplied by an already authorized collector. It validates each relative path before reading. It counts bytes during reads and enforces the 16 KiB manifest, 16 MiB per-file, 64 MiB aggregate and 1,024-entry limits. One extra byte detects overflow at the exact limit. The completed snapshot goes through the existing manifest, reference and collision validation. Collector and read errors identify the entry index and I/O kind without carrying filesystem paths.
+
+Callers establish regular-file and containment guarantees before passing readers and supply operational deadlines if needed. The Windows directory collector still needs handle-relative opens and reparse rejection. Path checks followed by a fresh open by name leave a window for directory replacement. The reader interface gives that future collector a single bounded ingestion path. [Windows file opening semantics](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)

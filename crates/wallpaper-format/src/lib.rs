@@ -2,8 +2,10 @@
 use std::{collections::BTreeMap, fmt};
 mod manifest;
 mod path;
+mod snapshot;
 pub use manifest::Manifest;
 pub use path::RelativePath;
+pub use snapshot::SnapshotError;
 
 pub const MAX_MANIFEST_BYTES: usize = 16 * 1024;
 pub const MAX_ENTRIES: usize = 1024;

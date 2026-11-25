@@ -535,3 +535,7 @@ The receiver regenerates the canonical record from its own retained package, vie
 ## 49. I1 web import mapping contract
 
 The proposed web adapter maps retained HTML, CSS and PNG through native validation. I1 specifies metadata conversion, report bounds and verdicts, settings snapshots and deltas, host FPS limits and native pause semantics. Synthetic cases define expected I2 outcomes. The adapter remains gated on M4. See [I1 web import mapping](i1-web-mapping.md).
+
+## 50. Bounded package ingestion from open readers
+
+The package format library can retain a bounded snapshot from caller-supplied readers and run native package validation on the resulting bytes. The platform layer still owns safe file opening and containment, and callers own operational deadlines. See [Bounded snapshot from open readers](m3-manifest.md#bounded-snapshot-from-open-readers).
