@@ -10,6 +10,7 @@ pub enum Example {
     Groups,
     GroupEffects,
     Animated,
+    Clock,
 }
 impl Example {
     pub fn group_fixture(self) -> Option<groups::Fixture> {
@@ -33,7 +34,8 @@ enum Item {
     Image { offset: u32, resource: u32 },
 }
 pub struct Renderer {
-    scene: ValidatedScene,
+    scene: Arc<ValidatedScene>,
+    snapshot_key: Option<wallpaper_scene::transaction::SnapshotKey>,
     items: Vec<Item>,
     pipeline: wgpu::RenderPipeline,
     image_pipeline: wgpu::RenderPipeline,
@@ -54,25 +56,38 @@ impl Renderer {
         if !format.is_srgb() {
             return Err("Compiled preview requires an sRGB surface".into());
         }
-        let package = match example {
-            Example::Static => wallpaper_compiler::fixtures::static_package()?,
-            Example::Image => wallpaper_compiler::fixtures::image_package()?,
+        let compiled = match example {
+            Example::Clock => None,
+            Example::Static | Example::Image => {
+                let package = if example == Example::Static {
+                    wallpaper_compiler::fixtures::static_package()?
+                } else {
+                    wallpaper_compiler::fixtures::image_package()?
+                };
+                Some(wallpaper_compiler::compile(
+                    &package,
+                    wallpaper_compiler::Viewport {
+                        width: 1920,
+                        height: 1080,
+                        background: wallpaper_scene::Color([12, 17, 22, 255]),
+                    },
+                )?)
+            }
             Example::Groups | Example::GroupEffects | Example::Animated => {
                 return Err("Group example requires the version-2 renderer".into());
             }
         };
-        let compiled = wallpaper_compiler::compile(
-            &package,
-            wallpaper_compiler::Viewport {
-                width: 1920,
-                height: 1080,
-                background: wallpaper_scene::Color([12, 17, 22, 255]),
-            },
-        )?;
-        // Treat compiler output as data: independently decode and validate before GPU work.
-        let scene = wallpaper_scene::decode(&compiled.scene().encode())?;
-        wallpaper_media::validate_assets(&scene, compiled.images())?;
-        for image in compiled.images().values() {
+        let empty = std::collections::BTreeMap::new();
+        let (scene, assets) = if let Some(compiled) = &compiled {
+            (
+                wallpaper_scene::decode(&compiled.scene().encode())?,
+                compiled.images(),
+            )
+        } else {
+            (clock::initial_scene()?, &empty)
+        };
+        wallpaper_media::validate_assets(&scene, assets)?;
+        for image in assets.values() {
             if image.width() > device.limits().max_texture_dimension_2d
                 || image.height() > device.limits().max_texture_dimension_2d
             {
@@ -191,7 +206,7 @@ impl Renderer {
             ..Default::default()
         });
         let mut images = std::collections::BTreeMap::new();
-        for (&id, image) in compiled.images() {
+        for (&id, image) in assets {
             let size = wgpu::Extent3d {
                 width: image.width(),
                 height: image.height(),
@@ -310,7 +325,8 @@ impl Renderer {
             scene.scene().height
         );
         Ok(Self {
-            scene,
+            scene: Arc::new(scene),
+            snapshot_key: None,
             items,
             pipeline,
             image_pipeline,
@@ -328,6 +344,35 @@ impl Renderer {
             b: rgba[2] as f64,
             a: rgba[3] as f64,
         }
+    }
+
+    pub fn sync_clock(&mut self, clock: &clock::Clock, fonts: &mut FontSystem) -> Result<()> {
+        let Some(snapshot) = clock.snapshot_after(self.snapshot_key) else {
+            return Ok(());
+        };
+        let before = self.scene.scene();
+        let next = snapshot.scene.scene();
+        if !same_topology(before, next) {
+            return Err("Clock snapshot changed renderer topology".into());
+        }
+        for item in &mut self.items {
+            if let Item::Text(item) = item
+                && let Content::Text { text: old, .. } = &before.nodes[item.index].content
+                && let Content::Text { text: new, .. } = &next.nodes[item.index].content
+                && old != new
+            {
+                item.buffer.set_text(
+                    new,
+                    &Attrs::new().family(Family::Name("Noto Sans")),
+                    Shaping::Advanced,
+                    None,
+                );
+                item.buffer.shape_until_scroll(fonts, false);
+            }
+        }
+        self.scene = snapshot.scene;
+        self.snapshot_key = Some(snapshot.key);
+        Ok(())
     }
     pub fn prepare(&mut self, state: &mut Prepare<'_>) -> Result<()> {
         let width = state.width as f32;
@@ -427,6 +472,50 @@ impl Renderer {
             }
         }
         Ok(())
+    }
+}
+
+fn same_topology(before: &wallpaper_scene::Scene, after: &wallpaper_scene::Scene) -> bool {
+    before.version == after.version
+        && before.width == after.width
+        && before.height == after.height
+        && before.resources == after.resources
+        && before.nodes.len() == after.nodes.len()
+        && before.nodes.iter().zip(&after.nodes).all(|(left, right)| {
+            left.id == right.id
+                && left.bounds == right.bounds
+                && match (&left.content, &right.content) {
+                    (Content::Rectangle { .. }, Content::Rectangle { .. }) => true,
+                    (Content::Text { font_size: a, .. }, Content::Text { font_size: b, .. }) => {
+                        a == b
+                    }
+                    (Content::Image { resource: a }, Content::Image { resource: b }) => a == b,
+                    _ => false,
+                }
+        })
+}
+
+#[cfg(test)]
+mod clock_tests {
+    use super::*;
+
+    #[test]
+    fn clock_snapshot_accepts_text_changes_but_rejects_new_geometry_or_font() {
+        let scene = clock::initial_scene().unwrap();
+        let mut updated = scene.scene().clone();
+        let Content::Text { text, .. } = &mut updated.nodes[1].content else {
+            panic!()
+        };
+        *text = "23:59".into();
+        assert!(same_topology(scene.scene(), &updated));
+        let mut resized = updated.clone();
+        resized.nodes[1].bounds.width -= 1.0;
+        assert!(!same_topology(scene.scene(), &resized));
+        let Content::Text { font_size, .. } = &mut updated.nodes[1].content else {
+            panic!()
+        };
+        *font_size += 1.0;
+        assert!(!same_topology(scene.scene(), &updated));
     }
 }
 pub struct Prepare<'a> {

@@ -591,3 +591,7 @@ The bounded AppContainer clock fixture now delivers three ticks in one session. 
 ## 63. M4 immutable scene snapshots
 
 The host exposes the latest validated scene with a session-scoped content key. Unchanged transactions still receive acknowledgements while consumers see no new snapshot. Changed transactions replace the snapshot atomically and terminal rejection preserves it. The AppContainer clock fixture verifies this behavior at its host consumer. See [Content snapshots](m4-scene-transactions.md#content-snapshots-for-presentation).
+
+## 64. M4 clock snapshot renderer path
+
+A fixed UTC window consumes validated host clock snapshots and uses a monotonic wake derived from the next UTC minute. Same-content ticks schedule no redraw. The renderer checks topology and reshapes changed text. A deterministic rollover option supplies two known poses for visual acceptance. See [UTC clock preview](m4-clock-preview.md).

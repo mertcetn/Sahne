@@ -1,3 +1,4 @@
+mod clock;
 mod compiled;
 mod groups;
 mod lifecycle;
@@ -33,13 +34,14 @@ fn main() -> Result<()> {
     let mut test_device_loss = false;
     let mut test_pixels = false;
     let mut reference_pose = false;
+    let mut test_clock_rollover = false;
     let mut compiled_example = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap. --reference-pose freezes animated-shapes at exactly 1 s for visual reference; use it in window mode without other test flags."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes|clock] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap. --reference-pose freezes animated-shapes at exactly 1 s for visual reference; use it in window mode without other test flags. clock shows host-provided UTC time in window mode. --test-clock-rollover requires clock and --seconds 5..30; it demonstrates 23:59 to 00:00."
                 );
                 return Ok(());
             }
@@ -52,8 +54,9 @@ fn main() -> Result<()> {
                         Some("groups") => compiled::Example::Groups,
                         Some("groups-effects") => compiled::Example::GroupEffects,
                         Some("animated-shapes") => compiled::Example::Animated,
+                        Some("clock") => compiled::Example::Clock,
                         _ => return Err(
-                            "Choose an original static, image, groups, groups-effects or animated-shapes example"
+                            "Choose an original static, image, groups, groups-effects, animated-shapes or clock example"
                                 .into(),
                         ),
                     });
@@ -61,6 +64,7 @@ fn main() -> Result<()> {
             "--test-device-loss" => test_device_loss = true,
             "--test-pixels" => test_pixels = true,
             "--reference-pose" => reference_pose = true,
+            "--test-clock-rollover" => test_clock_rollover = true,
             "--seconds" => {
                 let n = args.next().ok_or("Missing seconds")?.parse::<u64>()?;
                 if !(1..=3600).contains(&n) {
@@ -103,6 +107,28 @@ fn main() -> Result<()> {
                 .into(),
         );
     }
+    let clock_mode = compiled_example == Some(compiled::Example::Clock);
+    if clock_mode && desktop_mode {
+        return Err("clock currently requires window mode".into());
+    }
+    if test_clock_rollover
+        && (!clock_mode
+            || !matches!(seconds, Some(5..=30))
+            || recreate != 0
+            || test_device_loss
+            || test_pixels
+            || reference_pose)
+    {
+        return Err(
+            "Clock rollover requires --example clock --seconds 5..30 without other test flags"
+                .into(),
+        );
+    }
+    let clock = if clock_mode {
+        Some(clock::Clock::new(Instant::now(), test_clock_rollover)?)
+    } else {
+        None
+    };
     let motion = if compiled_example == Some(compiled::Example::Animated) {
         let mut playback = motion::Playback::new(Instant::now())?;
         if reference_pose {
@@ -116,6 +142,7 @@ fn main() -> Result<()> {
     events.set_control_flow(ControlFlow::Wait);
     let mut app = App {
         motion,
+        clock,
         state: None,
         desktop: None,
         desktop_mode,
@@ -179,6 +206,7 @@ fn validate_pixel_mode(
 }
 struct App {
     motion: Option<motion::Playback>,
+    clock: Option<clock::Clock>,
     state: Option<State>,
     desktop: Option<wallpaper_platform::Desktop>,
     desktop_mode: bool,
@@ -252,6 +280,7 @@ impl App {
                     Some(compiled::Example::Groups) => "Sahne — M3 compiled groups example",
                     Some(compiled::Example::GroupEffects) => "Sahne — M3 group effects example",
                     Some(compiled::Example::Animated) => "Sahne — M3 native animated shapes",
+                    Some(compiled::Example::Clock) => "Sahne — M4 UTC clock",
                     None => "Sahne — M1 trusted scene",
                 })
                 .with_inner_size(LogicalSize::new(960.0, 600.0));
@@ -386,7 +415,21 @@ impl ApplicationHandler<DeviceLost> for App {
             state.window.request_redraw();
             motion.queued();
         }
+        if let (Some(clock), Some(state)) = (self.clock.as_mut(), self.state.as_ref()) {
+            match clock.tick(Instant::now()) {
+                Ok(true) => state.window.request_redraw(),
+                Ok(false) => {}
+                Err(error) => {
+                    self.fail(events, error);
+                    return;
+                }
+            }
+        }
         let wake = [
+            self.state
+                .as_ref()
+                .and(self.clock.as_ref())
+                .map(clock::Clock::wake),
             self.motion.as_ref().and_then(motion::Playback::wake),
             self.deadline,
             self.next_retry,
@@ -473,6 +516,14 @@ impl ApplicationHandler<DeviceLost> for App {
                             .as_mut()
                             .ok_or("Missing animated group renderer")?
                             .update_motion(&sample.scene, &state.device, &state.queue)?;
+                    }
+                    if let Some(clock) = self.clock.as_mut() {
+                        clock.tick(Instant::now())?;
+                        state
+                            .compiled
+                            .as_mut()
+                            .ok_or("Missing clock renderer")?
+                            .sync_clock(clock, &mut state.fonts)?;
                     }
                     let presented = state.draw()?;
                     if let Some(motion) = self.motion.as_mut() {
