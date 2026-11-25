@@ -69,4 +69,19 @@ The existing pinned windows-sys 0.61.2 bindings expose the native APIs through a
 
 Enumeration uses the current directory handle and a fixed 8 KiB buffer. Each component is validated, and the 1,024-entry limit counts directories as well as files. Case collisions and reparse entries fail collection. Files are opened relative to their parent handle and validated again on that handle, including the hard-link check. Open file handles feed the bounded snapshot reader and native manifest validation. A concurrently edited tree can cause failure or a mixed-time snapshot of valid files. Directory enumeration provides no atomic filesystem snapshot. The caller owns operational deadlines.
 
-The Windows integration test collected a nested 102-file package across multiple directory batches, rejected parent traversal and rejected an actual junction both as a descendant and as a root path. The API is available to host library callers. CLI or product integration and archive collection remain open. [Handle-based enumeration](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfileinformationbyhandleex)
+The Windows integration test collected a nested 102-file package across multiple directory batches, rejected parent traversal and rejected an actual junction both as a descendant and as a root path. The API is available to host library callers and the trusted developer CLI below. Product integration and archive collection remain open. [Handle-based enumeration](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfileinformationbyhandleex)
+
+## Trusted package CLI
+
+Use these Windows developer commands with native package folders you trust. The CLI collects and compiles the package in its own process. Untrusted package processing in a restricted helper remains a production integration task.
+
+```powershell
+cargo build --release -p wallpaper-cli --locked
+$folder = (Resolve-Path examples/static-image).Path
+./target/release/wallpaper-cli.exe --check-trusted-package $folder flat
+./target/release/wallpaper-cli.exe --export-trusted-package $folder flat > target/local-package.bin
+```
+
+The root must be an absolute fixed-drive folder with portable ASCII path components. Choose `flat` for the native v1 scene subset or `groups` for the explicit v2 group subset. Both use a fixed 1920×1080 canvas and background RGBA (12, 17, 22, 255). Collection, compilation and independent scene/asset validation all must succeed. Scripts are retained as source associations and are never executed. Export writes the version 2 provenance record to binary stdout. Use PowerShell 7.4 or later for byte-preserving redirection. Discard the file if the command fails. Exit codes are 0 for success, 1 for collection, compilation or output errors, and 2 for malformed arguments. [Provenance format](m3-compiled-provenance.md) · [PowerShell redirection](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_redirection)
+
+Local release tests checked the static, PNG and group examples from disk. Each exported record matched the corresponding embedded fixture's SHA-256. A relative root and unsupported HTML failed with exit 1, and an unsupported mode failed with exit 2. The invalid HTML export produced zero record bytes. Hosted CI adds trusted-folder smoke checks for the PNG and group examples.

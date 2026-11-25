@@ -24,6 +24,8 @@ jobs:
       - run: ./target/release/wallpaper-cli.exe --compile-groups-check
       - run: ./target/release/wallpaper-cli.exe --compile-check
       - run: ./target/release/wallpaper-cli.exe --compile-image-check
+      - run: ./target/release/wallpaper-cli.exe --check-trusted-package (Resolve-Path examples/static-image).Path flat
+      - run: ./target/release/wallpaper-cli.exe --check-trusted-package (Resolve-Path examples/static-groups).Path groups
       - run: ./target/release/wallpaper-preview.exe --help
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/release'

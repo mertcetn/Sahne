@@ -10,5 +10,8 @@ wallpaper-compiler = { path = "../../crates/wallpaper-compiler", features = ["fi
 wallpaper-scene = { path = "../../crates/wallpaper-scene", features = ["fixtures"] }
 wallpaper-media = { path = "../../crates/wallpaper-media" }
 
+[target.'cfg(windows)'.dependencies]
+wallpaper-platform = { path = "../../crates/wallpaper-platform" }
+
 [lints]
 workspace = true

@@ -547,3 +547,7 @@ The host platform opens individual portable path components relative to a direct
 ## 52. Windows native directory collection
 
 The host platform verifies a fixed-drive root, opens descendant components relative to live directory handles and enumerates directories through those handles. A fixed buffer and entry/path budgets constrain the walk. Returned regular-file handles feed the bounded in-memory package reader and its manifest validation. The first collector is library-only. Archive collection and CLI or product integration remain open. See [Windows directory collection](m3-manifest.md#windows-directory-collection).
+
+## 53. Trusted Windows package CLI
+
+The developer CLI connects fixed-drive folder collection to flat/group compilation and independent scene/asset validation. An explicit export command emits the existing version 2 provenance envelope. The commands are for trusted local packages and run in the CLI process. Product processing of untrusted packages remains gated on restricted helper integration. See [Trusted package CLI](m3-manifest.md#trusted-package-cli).

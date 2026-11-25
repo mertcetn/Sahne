@@ -21,7 +21,7 @@ cargo run -p wallpaper-cli -- --help
 cargo run -p wallpaper-cli -- --version
 ```
 
-The CLI prints help with no arguments, accepts --help/-h and --version/-V, and rejects other arguments with exit code 2. It does not accept package paths. Workspace tests include protocol-boundary and preview-lifecycle regressions; real AppContainer tests are explicit manual commands, not ordinary unit tests.
+Use --help/-h to list commands and --version/-V to print the version. Invalid arguments exit 2. Windows has two opt-in [trusted folder commands](m3-manifest.md#trusted-package-cli). Workspace tests include protocol-boundary and preview-lifecycle regressions; real AppContainer tests are explicit manual commands, not ordinary unit tests.
 
 ## Branches and publication
 

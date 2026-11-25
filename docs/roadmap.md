@@ -99,7 +99,8 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 - [ ] Implement manifest/source loading, resource references, and versioned initial scene output.
 - [x] Add bounded package ingestion from open readers. Windows directory integration is recorded below.
 - [x] Verify the Windows handle-relative child-open primitive against parent replacement, junctions and hard links. Followed by the Windows collector below.
-- [x] Connect Windows fixed-drive root acquisition and handle-based enumeration to bounded in-memory package validation. CLI/product integration and archive collection remain open.
+- [x] Connect Windows fixed-drive root acquisition and handle-based enumeration to bounded in-memory package validation. Trusted CLI integration is recorded below.
+- [x] Validate and export trusted local Windows packages through the [developer CLI](m3-manifest.md#trusted-package-cli). Product/helper integration and archive collection remain open.
 - [ ] Parse the agreed HTML/CSS subset and report unsupported constructs with useful source locations.
 - [ ] Implement fixed-size absolute layout, agreed text-box behavior, colors/backgrounds, static images, and ID/class selection.
 - [ ] Define and implement supported stacking, transforms, clipping, and opacity semantics.

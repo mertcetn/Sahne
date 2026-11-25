@@ -1793,6 +1793,7 @@ version = "0.1.0-dev"
 dependencies = [
  "wallpaper-compiler",
  "wallpaper-media",
+ "wallpaper-platform",
  "wallpaper-scene",
 ]
 

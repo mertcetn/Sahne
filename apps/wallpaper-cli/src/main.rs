@@ -1,18 +1,32 @@
-use std::process::ExitCode;
+use std::{ffi::OsString, process::ExitCode};
+
+#[cfg(windows)]
+mod local_package;
+
+const LOCAL_PACKAGE_HELP: &str = "\
+--check-trusted-package <absolute-folder> <flat|groups> validates and compiles a local native package on Windows.
+--export-trusted-package <absolute-folder> <flat|groups> also writes its binary version 2 provenance record to stdout.
+Use local packages you trust. These developer commands run in the CLI process.";
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Result<Vec<String>, OsString> = std::env::args_os()
+        .skip(1)
+        .map(OsString::into_string)
+        .collect();
+    let Ok(args) = args else {
+        eprintln!("Arguments must be valid UTF-8");
+        return ExitCode::from(2);
+    };
     match args.as_slice() {
         [] => {
-            println!(
-                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check | --compiled-provenance-fixture [static|image|groups|animated-shapes]]\nExternal package loading and wallpaper execution are not implemented."
-            );
+            println!("Sahne development CLI\nRun wallpaper-cli --help for available commands.");
             ExitCode::SUCCESS
         }
         [arg] if arg == "--help" || arg == "-h" => {
             println!(
                 "Usage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check | --compiled-provenance-fixture [static|image|groups|animated-shapes]]\n--scene-check validates and roundtrips a fixed built-in flat scene.\n--hierarchy-check validates and roundtrips an original version-2 group fixture; no group rendering.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\n--compile-image-check also decodes an original fixed PNG and validates its pixel assets against the scene.\n--compile-groups-check compiles original HTML/CSS/PNG into version-2 groups and independently checks scene/assets.\n--compiled-provenance-fixture writes a binary provenance record to stdout. An omitted name selects the legacy groups record.\n--verify-compiled-provenance-fixture [static|image|groups|animated-shapes] checks binary stdin against the selected embedded fixture.\nThese checks perform no rendering or script execution."
             );
+            println!("{LOCAL_PACKAGE_HELP}");
             ExitCode::SUCCESS
         }
         [arg] if arg == "--version" || arg == "-V" => {
@@ -56,6 +70,15 @@ fn main() -> ExitCode {
         [arg] if arg == "--compiled-provenance-fixture" => provenance_fixture(None, false),
         [arg, name] if arg == "--compiled-provenance-fixture" => {
             provenance_fixture(Some(name), false)
+        }
+        #[cfg(windows)]
+        [arg, path, mode]
+            if matches!(
+                arg.as_str(),
+                "--check-trusted-package" | "--export-trusted-package"
+            ) =>
+        {
+            local_package::run(path, mode, arg == "--export-trusted-package")
         }
         _ => {
             eprintln!("Unsupported arguments. Run wallpaper-cli --help.");
