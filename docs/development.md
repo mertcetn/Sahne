@@ -1,5 +1,7 @@
 # Development and Release Guide
 
+For the CPU-only native animation/clock foundation, run `cargo test -p wallpaper-scene --locked animation::tests`; see [Contract and remaining integration](m3-animation.md). This does not open a window or enable CSS animation in the preview.
+
 For the effects-only `--test-pixels` preview flag, see [Fixed GPU pixel check](m3-pixel-check.md). It opens a window and requires a guarded run; the fixed comparison has passed locally on Windows D3D12.
 
 ## Local setup

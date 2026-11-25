@@ -2,6 +2,7 @@
 use std::{collections::BTreeSet, fmt};
 mod codec;
 pub use codec::decode;
+pub mod animation;
 pub mod hierarchy;
 
 pub const SCENE_VERSION: u16 = 1;
