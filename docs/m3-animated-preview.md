@@ -76,3 +76,13 @@ On November 25, 2026, source `ce1364512c3582d8cd305931aa753a509b38aee3` ran on W
 - The initial five-second double recreation run exited 1 with one recreation pending. A 12-second run completed both recreations, exited 0 and presented 175 frames across three generations. Both recoveries retained their active elapsed values exactly. Logs: `target/m3-motion-runtime/recreate-12s-8fcd7a1d2f4349f6922041f47d356045/`.
 
 This validation covers manual pause and controlled recovery in the recorded window configuration. OS lock, display-off, other drivers, and quantitative animation cadence remain open.
+
+## Fixed midpoint reference mode
+
+Use this window-only command to reproduce the reference pose:
+
+```powershell
+target/release/wallpaper-preview.exe --example animated-shapes --reference-pose --seconds 30
+```
+
+The preview samples the existing scene at exactly 1 second on every redraw. It schedules no animation wakeups, and Space leaves the fixed pose in place. Resize and Escape behave as in the normal window. The flag requires the animated fixture and rejects desktop mode and other test flags. At this pose the green box is at native bounds (260, 370, 120, 100), the gold box at (720, 280, 180, 125), and the overlapping red/blue group has opacity 0.5. The retained reference image and fixed-pose GPU run await window validation.

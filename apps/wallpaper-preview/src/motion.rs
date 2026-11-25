@@ -30,6 +30,7 @@ pub struct Playback {
     active: bool,
     next: Option<Instant>,
     period: Duration,
+    reference_pose: bool,
 }
 impl Playback {
     pub fn new(now: Instant) -> Result<Self> {
@@ -49,7 +50,12 @@ impl Playback {
             active: true,
             next: None,
             period: Duration::from_nanos(1_000_000_000u64.div_ceil(u64::from(fps))),
+            reference_pose: false,
         })
+    }
+    pub fn freeze_at_reference_pose(&mut self) {
+        self.reference_pose = true;
+        self.next = None;
     }
     pub fn reason(&mut self, now: Instant, reason: u8, enabled: bool) -> Result<()> {
         let reasons = if enabled {
@@ -63,7 +69,7 @@ impl Playback {
                 "Animation pause state: reasons={reasons}, active elapsed ns={}",
                 self.clock.elapsed().as_nanos()
             );
-            self.next = if reasons == 0 && self.active {
+            self.next = if reasons == 0 && self.active && !self.reference_pose {
                 Some(now)
             } else {
                 None
@@ -73,6 +79,9 @@ impl Playback {
         Ok(())
     }
     pub fn toggle(&mut self, now: Instant) -> Result<()> {
+        if self.reference_pose {
+            return Ok(());
+        }
         self.reason(now, MANUAL, self.reasons & MANUAL == 0)
     }
     pub fn wake(&self) -> Option<Instant> {
@@ -82,12 +91,17 @@ impl Playback {
         self.next = None;
     }
     pub fn sample(&mut self, now: Instant) -> Result<Sample> {
-        let sample = self.program.sample(self.clock.advance(now)?)?;
+        let elapsed = if self.reference_pose {
+            Duration::from_secs(1)
+        } else {
+            self.clock.advance(now)?
+        };
+        let sample = self.program.sample(elapsed)?;
         self.active = sample.active;
         Ok(sample)
     }
     pub fn rendered(&mut self, now: Instant) -> Result<()> {
-        self.next = if self.reasons == 0 && self.active {
+        self.next = if self.reasons == 0 && self.active && !self.reference_pose {
             Some(
                 now.checked_add(self.period)
                     .ok_or("Animation deadline overflow")?,
@@ -102,6 +116,19 @@ impl Playback {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reference_pose_stays_at_exact_midpoint_without_queued_animation() {
+        let now = Instant::now();
+        let mut playback = Playback::new(now).unwrap();
+        let expected = playback.program.sample(Duration::from_secs(1)).unwrap();
+        playback.freeze_at_reference_pose();
+        playback.reason(now, RECOVERY, false).unwrap();
+        playback.toggle(now + Duration::from_secs(2)).unwrap();
+        let later = now + Duration::from_secs(5);
+        assert_eq!(playback.sample(later).unwrap().scene, expected.scene);
+        playback.rendered(later).unwrap();
+        assert!(playback.wake().is_none());
+    }
     #[test]
     fn independent_pause_reasons_preserve_pose_and_do_not_schedule_backlogs() {
         let start = Instant::now();

@@ -555,3 +555,7 @@ The developer CLI connects fixed-drive folder collection to flat/group compilati
 ## 54. Trusted folder record verification
 
 The Windows developer CLI can regenerate and compare a version 2 record from the receiver's trusted local folder using binary stdin. This completes the trusted flat/group folder check, export and verification flow. See [Verify an exported record](m3-manifest.md#verify-an-exported-record).
+
+## 55. Animated reference pose
+
+The animated-shapes preview can freeze at the one-second midpoint using its standard scene sampler and renderer. This mode contributes no animation wakeups and supplies a reproducible pose for the visual reference. The local CPU checks cover the fixed sample and scheduling. See [Fixed midpoint reference mode](m3-animated-preview.md#fixed-midpoint-reference-mode).

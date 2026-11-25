@@ -32,13 +32,14 @@ fn main() -> Result<()> {
     let (mut seconds, mut desktop_mode, mut recreate) = (None, false, 0u32);
     let mut test_device_loss = false;
     let mut test_pixels = false;
+    let mut reference_pose = false;
     let mut compiled_example = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap. --reference-pose freezes animated-shapes at exactly 1 s for visual reference; use it in window mode without other test flags."
                 );
                 return Ok(());
             }
@@ -59,6 +60,7 @@ fn main() -> Result<()> {
             }
             "--test-device-loss" => test_device_loss = true,
             "--test-pixels" => test_pixels = true,
+            "--reference-pose" => reference_pose = true,
             "--seconds" => {
                 let n = args.next().ok_or("Missing seconds")?.parse::<u64>()?;
                 if !(1..=3600).contains(&n) {
@@ -89,8 +91,24 @@ fn main() -> Result<()> {
     if desktop_mode && compiled_example == Some(compiled::Example::Animated) {
         return Err("animated-shapes currently requires window mode".into());
     }
+    if reference_pose
+        && (compiled_example != Some(compiled::Example::Animated)
+            || desktop_mode
+            || recreate != 0
+            || test_device_loss
+            || test_pixels)
+    {
+        return Err(
+            "Reference pose requires animated-shapes in window mode without other test flags"
+                .into(),
+        );
+    }
     let motion = if compiled_example == Some(compiled::Example::Animated) {
-        Some(motion::Playback::new(Instant::now())?)
+        let mut playback = motion::Playback::new(Instant::now())?;
+        if reference_pose {
+            playback.freeze_at_reference_pose();
+        }
+        Some(playback)
     } else {
         None
     };
