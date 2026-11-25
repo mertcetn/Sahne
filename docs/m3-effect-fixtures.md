@@ -1,6 +1,6 @@
-# M3 additional effect fixture — GPU validation pending
+# M3 additional effect fixture and local visual evidence
 
-Updated: November 24, 2026. Status: original source fixture, independent scene/asset checks and CPU reference tests are implemented. The new `groups-effects` mode is wired to the existing group renderer, but has not opened a GPU/device/window or produced a visual reference. Existing [group-preview evidence](m3-group-preview.md) covers its earlier, simpler fixture only. These cases do not close G3 until the appropriate runtime/visual checks pass.
+Updated: November 25, 2026. Status: original source fixture, independent scene/asset checks and CPU references, plus local Windows D3D12 visual/resize evidence for `groups-effects`. The nested-opacity, nonuniform-scale and empty-clip cases agree visually with the specified fixture. Exact fractional GPU pixel/color agreement remains unverified; the scaled JPEG reference does not provide that measurement. Existing [group-preview evidence](m3-group-preview.md) remains scoped to its earlier fixture. Full G3 is not complete.
 
 ## Scope and entry point
 
@@ -12,13 +12,13 @@ Nonvisual validation:
 cargo test -p wallpaper-preview --locked
 ```
 
-The following opens a window and is deferred until the user is ready for screen/window access:
+The following opens the original effect fixture in a window:
 
 ```powershell
 cargo run --release -p wallpaper-preview --locked -- --example groups-effects --seconds 10
 ```
 
-The existing resize/lifecycle/device-loss code is shared, but these combinations have not run for this new fixture. Help explicitly marks its GPU/window/visual validation as pending. The new mode does not expand accepted CSS or change rendering algorithms, limits, blending, shaders or sandbox policy.
+The existing resize/lifecycle/device-loss code is shared. The user authorized the local checks recorded below after the earlier screen-access checkpoint. The mode does not expand accepted CSS or change rendering algorithms, limits, blending, shaders or sandbox policy. Desktop attachment, additional DPI/driver/GPU targets and quantitative fractional GPU comparison remain unverified.
 
 ## Case A: nested opacity and inner clipping
 
@@ -45,7 +45,7 @@ The middle panel starts at `(620,160)`. Its child at local `(20,20)` scales X by
 | Transformed PNG | `(640,225)`, 240x90 |
 | Untransformed text control | `(640,370)`, 400x40 |
 
-The transformed text raster is 270x60 at raster scale 1.5, mapped to the 270x30 world quad; the control raster is 400x40 at scale 1. The PNG keeps all 256 original decoded bytes, including straight half-alpha pixels. The CPU tests check these dimensions/bytes and independent v2 asset matching. Actual stretched glyph appearance, multi-text atlas behavior and image compositing still need GPU/window observation.
+The transformed text raster is 270x60 at raster scale 1.5, mapped to the 270x30 world quad; the control raster is 400x40 at scale 1. The PNG keeps all 256 original decoded bytes, including straight half-alpha pixels. The CPU tests check these dimensions/bytes and independent v2 asset matching. The local window reference below additionally observes stretched glyphs, all seven text surfaces and image compositing in this original fixture; it does not establish arbitrary text/font coverage.
 
 ## Case C: fractional clips and empty clipping
 
@@ -70,10 +70,38 @@ Three added tests independently compile/decode the fixture and validate immutabl
 
 Primary references consulted November 24, 2026: [W3C compositing groups](https://www.w3.org/TR/compositing-1/#groupcompositing) and [wgpu 30.0.1 scissors](https://docs.rs/wgpu/30.0.1/wgpu/struct.RenderPass.html#method.set_scissor_rect), alongside the existing native transform/clip and renderer contracts. The implementation still uses the project's deliberately restricted semantics, not browser conformance.
 
-Next, with user authorization for screen/window access: observe all three regions, retain a limited visual reference, maximize/restore and run quiet-idle/recreate/device-loss checks for the new literal mode. Record fractional-pixel GPU accuracy as unverified unless a suitable quantitative GPU comparison is performed. Broader G3 acceptance, native animation/pause, hashes/I1 and production integration remain open.
+The authorized local observation/reference and maximize/restore checks are recorded below, along with controlled lifecycle results. Fractional-pixel GPU accuracy remains unverified until a suitable quantitative GPU comparison is performed. Broader G3 acceptance, native animation/pause, hashes/I1 and production integration remain open.
 
 ## Local nonvisual evidence — November 24, 2026
 
 All 109 workspace Rust tests passed, including the preview's sixteen tests and the three added effect-fixture checks. Workspace release build, Clippy with warnings denied and formatting passed. Base revision during validation: 7406452 with this continuation uncommitted. The original compiler/preview fixtures remain separate; no previously recorded visual reference was overwritten. Existing Cargo cache hardlink/copy notices remain.
 
-Cargo.lock/external dependencies and native sandbox policy/code are unchanged; the native corpus was not repeated for this fixture/selection-only continuation. No window, adapter/device, screen capture or UI interaction occurred. Hosted CI, non-Windows builds and this new fixture's GPU/window/visual/lifecycle checks were not run. Work stops at the user's screen-access checkpoint; CPU samples alone do not satisfy G3 visual acceptance.
+Cargo.lock/external dependencies and native sandbox policy/code were unchanged; the native corpus was not repeated for that fixture/selection-only continuation. At that initial checkpoint, no window, adapter/device, screen capture or UI interaction had occurred. Hosted CI, non-Windows builds and the fixture's GPU/window/visual/lifecycle checks had not run. Work paused at the user's screen-access checkpoint, before the separately authorized observations below. CPU samples alone do not satisfy G3 visual acceptance.
+
+## Authorized visual reference — November 25, 2026
+
+Release source 9005152, NVIDIA GeForce RTX 3050 Laptop GPU, driver 32.0.16.1062, D3D12, scale 1. This run reported two active 1920x1080 displays at 120 Hz, at desktop positions `(-1920,0)` and `(0,0)`. The window checks did not exercise hotplug, mixed DPI or movement between displays; the topology observation alone does not close that matrix.
+
+![Original additional effect fixture at a 960x600 client area](images/m3-effects-reference.jpg)
+
+This is an unchanged actual-window JPEG, including chrome. Nested red/blue content is visibly dimmer than the one-level white badge; later blue occludes red without an extra red mixture, and its bottom ends at the inner clip. This agrees visually with the two opacity boundaries and their CPU reference, without measuring an exact linear color value from the image.
+
+The middle region shows visibly wider/shorter transformed text above the normal control, and the PNG in its authored nonuniform world rectangle. All seven text surfaces/labels appeared without missing glyphs, atlas corruption or unintended clipping in this original case. The right region shows the two bounded white fills and no third fill in the zero-width clip area. Scaled appearance agrees with the intended layout/empty clipping; it does not prove the `.25` versus `.75` GPU sample decisions numerically.
+
+Maximizing changed the client from 960x600 to 1920x1009; the fixed-canvas fit, three regions and text/image appearance remained consistent. Restoring returned to the same 960x600 result. Escape exited 0 after three presentations, one generation and zero pending recreations. Initialization logged 44 layers, 66 commands, three canvas targets, seven text surfaces and 25,643,936 known texture bytes, with no initialization/rendering error in the log. Logs: ignored target/m3-effects-visual/737cac5f34ab4c379d8547e89ac634e7/.
+
+## Controlled lifecycle checks — November 25, 2026
+
+Seven sequential owned processes passed under a 25-second outer deadline each. Report: ignored target/m3-effects-lifecycle/55f61643afe24c09a503f111851cb475/summary.json, source 9005152, with exact binary SHA256 and per-case arguments/results. All cases exited 0 with zero pending recreations. These timed cases used no UI automation.
+
+| Case | Duration | Frames | Generations | Evidence |
+| --- | --- | --- | --- | --- |
+| Effects quiet idle | 6 s | 1 | 1 | No continuous redraw |
+| Effects recreate twice | 8 s | 3 | 3 | Full fixture rebuilt per generation |
+| Effects device loss | 8 s | 2 | 2 | Requested-generation callback seen, restored frame confirmed |
+| Original groups idle | 4 s | 1 | 1 | Existing fixture still initializes/draws |
+| Static idle | 4 s | 1 | 1 | Existing v1 path |
+| Image idle | 4 s | 1 | 1 | Existing v1 image path |
+| M1 baseline | 4 s | 1 | 1 | Original renderer path |
+
+The device-loss result still requires the actual callback and a later-generation frame, not any redraw. This is requested device destruction, not forced driver/hardware failure. Old-mode checks here are timed runtime regressions, not new screenshot or recreation/loss evidence for those modes. The short idle observation is not a long-duration performance/soak result. The subsequent source change only removes the stale pending-validation help sentence; algorithms, shaders, limits and dependencies are unchanged. The release preview was rebuilt and help checked afterward. Quantitative GPU clip/color comparison, additional configurations and full G3 remain open.

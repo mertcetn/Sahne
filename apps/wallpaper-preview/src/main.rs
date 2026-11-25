@@ -35,7 +35,7 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. groups-effects awaits GPU/window/visual validation. Escape closes window mode. Test recreation does not restart Explorer."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss]\nTrusted Windows D3D12 scenes only. --example compiles original embedded HTML/CSS/PNG; no external file path. Escape closes window mode. Test recreation does not restart Explorer."
                 );
                 return Ok(());
             }

@@ -1,6 +1,6 @@
 # M3 compiled preview
 
-Updated: November 24, 2026. Status: original static, PNG and group examples rendered in local Windows D3D12 windows. [Group visual/resize, ten lifecycle/regression cases and exact scope](m3-group-preview.md) now have local evidence. M3/G3 remain incomplete.
+Updated: November 25, 2026. Status: original static, PNG, group and additional effect examples rendered in local Windows D3D12 windows. [Group evidence](m3-group-preview.md) and the later [effect visual/resize and seven lifecycle checks](m3-effect-fixtures.md) have limited local records. Exact fractional GPU comparison and full M3/G3 remain incomplete.
 
 ## Run
 
@@ -8,7 +8,7 @@ Updated: November 24, 2026. Status: original static, PNG and group examples rend
 cargo run --release -p wallpaper-preview --locked -- --example static --seconds 30
 ```
 
-Escape closes window mode. Literal example names `static`, `image`, `groups` and `groups-effects` are accepted; a path, URL, unknown example or missing example value fails. `image` selects the separately documented fixed PNG fixture. `groups` selects the [v2 fixed group/clipping fixture with limited local visual evidence](m3-group-preview.md). `groups-effects` selects the [additional effect fixture awaiting GPU/window validation](m3-effect-fixtures.md). The existing default M1 fixture remains available without `--example`. The CLI's compile-check commands are nonvisual.
+Escape closes window mode. Literal example names `static`, `image`, `groups` and `groups-effects` are accepted; a path, URL, unknown example or missing example value fails. `image` selects the separately documented fixed PNG fixture. `groups` selects the [v2 fixed group/clipping fixture](m3-group-preview.md), and `groups-effects` selects the [additional effect fixture](m3-effect-fixtures.md), each with its own limited local evidence. The existing default M1 fixture remains available without `--example`. The CLI's compile-check commands are nonvisual.
 
 Static mode embeds examples/static-scene at build time, validates the in-memory package, compiles the restricted HTML/CSS and independently decodes/validates its scene before allocating drawing resources. It opens no source path and executes no JS. This example still has the unchanged panel, title and accent rectangle. Image mode separately embeds examples/static-image and validates decoded pixels against scene resources before upload; arbitrary package loading remains disabled.
 
@@ -40,7 +40,7 @@ Primary documentation consulted November 14, 2026: [wgpu 30.0.1 bind group layou
 
 ## Resume point
 
-Image upload/blending/window behavior and static-mode idle/recovery regression passed locally on November 24; see [image evidence](m3-images.md). The later [group reference and lifecycle regression](m3-group-preview.md) also passed locally. Broader effect fixtures (including nested opacity, nonuniform scale and fractional clips), native animation/pause, compiled provenance/hashes, display/platform checks, I1 mappings and full G3 remain open. The v1 compiler still rejects unsupported effects/media rather than silently approximating them.
+Image and original group visual/lifecycle checks passed locally on November 24; see [image evidence](m3-images.md) and [group evidence](m3-group-preview.md). The [additional effect fixture](m3-effect-fixtures.md) has a November 25 visual/runtime record for nested opacity, nonuniform scale and empty clipping; exact fractional GPU pixel comparison is still open. Native animation/pause, compiled provenance/hashes, display/platform checks, I1 mappings and full G3 remain open. The v1 compiler still rejects unsupported effects/media rather than silently approximating them.
 
 ## Controlled lifecycle checks — November 15, 2026
 
