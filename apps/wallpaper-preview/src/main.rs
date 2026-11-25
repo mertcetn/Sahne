@@ -38,7 +38,7 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap. Animated GPU/runtime validation is pending."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap."
                 );
                 return Ok(());
             }

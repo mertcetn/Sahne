@@ -1,6 +1,6 @@
 # M3 native animation integration and fixed preview
 
-Updated: November 25, 2026. Status: bounded animation wire format, typed author-ID binding and fixed animated preview code with CPU checks. **The animated GPU/window mode has not been run.** No rendered animation or platform pause support is claimed yet; full M3/G3 remains open.
+Updated: November 25, 2026. Status: bounded animation wire format, typed author-ID binding and fixed animated preview code with CPU checks. Local Windows D3D12 visual, pause/resume and GPU recovery checks passed. Full M3/G3 remains open.
 
 ## Commands and original fixture
 
@@ -10,7 +10,7 @@ Build with `cargo build --release -p wallpaper-preview --locked`. When window te
 target/release/wallpaper-preview.exe --example animated-shapes --seconds 30
 ```
 
-Space toggles manual pause/resume; key repeat does not toggle repeatedly. Escape closes the window. This literal currently rejects `--desktop` before event-loop creation. It cannot use the effects-only `--test-pixels` flag. Existing `--test-recreate` and `--test-device-loss` flags select the existing explicit reconstruction tests; these animation combinations still need actual runtime evidence. No arbitrary source/package/animation path is accepted.
+Space toggles manual pause/resume; key repeat does not toggle repeatedly. Escape closes the window. This literal currently rejects `--desktop` before event-loop creation. It cannot use the effects-only `--test-pixels` flag. Existing `--test-recreate` and `--test-device-loss` flags select the existing explicit reconstruction tests; both combinations passed in the local runs below. No arbitrary source/package/animation path is accepted.
 
 The original `examples/animated-shapes/` package contains a manifest and static HTML/CSS for three clipped panels. Its fixed native program lives in `wallpaper_compiler::fixtures::animated_shapes_spec`; CSS `@keyframes`/`animation-*` remain unsupported. It has five linear tracks over two seconds, alternating forever (four seconds per full out-and-back cycle):
 
@@ -49,20 +49,30 @@ Animated text translation/opacity can reuse a raster when its specifications sta
 
 ## Scheduling and pause ownership
 
-Playback belongs to the application, across GPU generations. The initial clock is paused during initialization. Explicit pause reasons are independent bits: manual, occluded, zero client size, application suspension and renderer recovery. Clearing one reason cannot resume while another remains. Successful reconstruction clears transient recovery/suspension/visibility state for the newly created window while preserving manual pause and active elapsed time. This logical behavior has CPU tests; actual window notifications/recovery interactions remain unverified.
+Playback belongs to the application, across GPU generations. The initial clock is paused during initialization. Explicit pause reasons are independent bits: manual, occluded, zero client size, application suspension and renderer recovery. Clearing one reason cannot resume while another remains. Successful reconstruction clears transient recovery/suspension/visibility state for the newly created window while preserving manual pause and active elapsed time. This logical behavior has CPU tests; local manual pause and controlled recovery observations are recorded below.
 
 The event loop uses `WaitUntil` for the next animation deadline, queues one redraw and schedules the next interval after a draw attempt. It skips missed frames using absolute active elapsed time; there is no catch-up loop or polling thread. Paused or finitely completed playback contributes no animation wake deadline. Static examples have no playback instance and retain their existing event-driven path. Surface resize/expose events may request extra presentations outside the animation-driven FPS cadence; this is not an absolute cap on every presentation during interaction. Existing duration/recovery deadlines still operate.
 
 The clock excludes paused intervals. Manual pause requests one final redraw at the frozen pose; paused resize/expose redraws use that same pose. Clearing the final reason schedules an immediate current-pose redraw and resumes the capped cadence. OS lock, display-off, fullscreen detection, suspend notification reliability and user pause-policy settings are not implemented/certified by this change. It does not infer those policies from monotonic time or claim sleep behavior across platforms.
 
-## Validation and pending window work
+## Validation and reproduction
 
 CPU tests cover wire roundtrip/every truncation/trailing data/hostile fields/mutations, author target binding and asset retention, invalid names/duplicates/keys, fixed plan topology through full transparency/opacity and alternate boundaries, independent midpoint group compositing, retained hidden draws, text-raster reallocation rejection, multiple overlapping pause reasons, recovery clock preservation, finite completion, FPS bounds and a single future deadline after a large stall. They create no GPU/window. Existing static scene/group/effect tests remain part of the workspace checks.
 
-Local checkpoint: all 139 workspace tests, formatting, Clippy and the release workspace build passed. Logs: `target/m3-motion-{tests,clippy,build}.log`. Three guarded release-process checks passed without adapter/window initialization: help exited 0; animated desktop and animated pixel-test combinations exited 1 with their expected diagnostic. Report: `target/m3-motion-arguments/b7fc11884d454b19a6d55988148373d1/summary.json`. Dependencies/lockfile and native sandbox policy are unchanged; the sandbox runtime corpus was not rerun. The user requested a pause at this checkpoint to switch models. Resume with the authorized window/GPU validation checkpoint below; do not infer authorization for screen access from a generic continuation.
+Local checkpoint: all 139 workspace tests, formatting, Clippy and the release workspace build passed. Logs: `target/m3-motion-{tests,clippy,build}.log`. Three guarded release-process checks passed without adapter/window initialization: help exited 0; animated desktop and animated pixel-test combinations exited 1 with their expected diagnostic. Report: `target/m3-motion-arguments/b7fc11884d454b19a6d55988148373d1/summary.json`. Dependencies/lockfile and native sandbox policy are unchanged; the sandbox runtime corpus was not rerun. The subsequent local validation is recorded below.
 
-Before accepting the rendered checkpoint, run the command under `Invoke-SahneGuardedProcess` with bounded duration, a 45-second outer timeout and 1 MiB logs. Observe all three properties, Space freeze/resume, resize/maximize/restore, and Escape exit; correlate pause logs/frame cadence. Then run bounded animation recreation/device-loss cases and static/groups/effects/pixel regressions. Record actual adapter/driver/display data and exact binary/source provenance; do not infer success from CPU tests. No screenshot or runtime evidence for this mode exists yet.
+Before accepting the rendered checkpoint, run the command under `Invoke-SahneGuardedProcess` with bounded duration, a 45-second outer timeout and 1 MiB logs. Observe all three properties, Space freeze/resume, resize/maximize/restore, and Escape exit; correlate pause logs/frame cadence. Then run bounded animation recreation/device-loss cases and static/groups/effects/pixel regressions. Record actual adapter/driver/display data and exact binary/source provenance; do not infer success from CPU tests. See the local runtime evidence below.
 
 ## Primary references
 
 Consulted November 25, 2026: winit 0.30.13 [`WaitUntil`](https://docs.rs/winit/0.30.13/winit/event_loop/enum.ControlFlow.html), [`request_redraw`](https://docs.rs/winit/0.30.13/winit/window/struct.Window.html#method.request_redraw) and [`KeyEvent::repeat`](https://docs.rs/winit/0.30.13/winit/event/struct.KeyEvent.html#structfield.repeat); wgpu 30.0.1 [`Queue::write_buffer`](https://docs.rs/wgpu/30.0.1/wgpu/struct.Queue.html#method.write_buffer). Existing pinned dependencies are unchanged.
+
+## Local runtime evidence
+
+On November 25, 2026, source `ce1364512c3582d8cd305931aa753a509b38aee3` ran on Windows D3D12 with an NVIDIA GeForce RTX 3050 Laptop GPU, driver 32.0.16.1062 and DPI scale 1. The release binary SHA256 was `A255421223D7D8E973C79A19E8DEF12296E86A73AA1163001E2F216C6DD47497`.
+
+- Visual inspection confirmed translation, X/Y scaling and changing group opacity. Space froze the pose across separate observations and a 960×600 → 1920×1009 → 960×600 resize. Pause and resume logged the same active elapsed value (19,262,758,100 ns). Motion resumed and Escape exited 0 with 736 frames in one generation. Logs: `target/m3-motion-visual/a96ff395210644e695492035dda80fa2/`.
+- Requested device loss produced the callback and a restored frame in generation 2, with exit 0. Static, groups and effects each remained at one frame during the timed checks. All 18 effects GPU pixel samples passed. Report: `target/m3-motion-runtime/d0f2f40b81234b2d84f1e602dcda0874/summary.json`.
+- The initial five-second double recreation run exited 1 with one recreation pending. A 12-second run completed both recreations, exited 0 and presented 175 frames across three generations. Both recoveries retained their active elapsed values exactly. Logs: `target/m3-motion-runtime/recreate-12s-8fcd7a1d2f4349f6922041f47d356045/`.
+
+This validation covers manual pause and controlled recovery in the recorded window configuration. OS lock, display-off, other drivers, and quantitative animation cadence remain open.

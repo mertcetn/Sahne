@@ -1,6 +1,6 @@
 # M3 compiled preview
 
-The later `--example animated-shapes` literal adds a fixed native program with Space pause/resume in window mode. Its GPU/window execution is pending; see [Command, scope and validation plan](m3-animated-preview.md). Existing static/effect evidence below does not validate this animated mode.
+The later `--example animated-shapes` literal adds a fixed native program with Space pause/resume in window mode. Local GPU/window validation passed; see [Command, scope and validation plan](m3-animated-preview.md). Existing static/effect evidence below does not validate this animated mode.
 
 The opt-in `--test-pixels` developer mode requires `--example groups-effects`, window mode and `--seconds 1..30`, without other test flags. It checks 18 fixed native-root samples and exits; the fixed comparison passed locally on Windows D3D12. See [Pixel-check command and acceptance](m3-pixel-check.md).
 
