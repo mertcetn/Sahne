@@ -96,21 +96,23 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 - [x] Produce a [versioned compiled provenance record](m3-compiled-provenance.md) and verify repeatable SHA-256 for the fixed v2 group fixture. Version 2 adds typed in-memory export for flat, grouped and animated compilation. Receiver-side exact comparison is implemented against separately supplied source and build inputs. Disk package collection and production integration remain open.
 - [x] Specify [I1 web metadata, resource and diagnostic mappings](i1-web-mapping.md) with original synthetic cases. Runtime delivery remains gated on M4.
 - [x] Run the [fixed 18-sample GPU check](m3-pixel-check.md) for fractional clipping, nested opacity and PNG colors. All samples passed locally on November 25; normal/maximize/restore window checks also passed. Broader configurations/full G3 remain open.
-- [ ] Implement manifest/source loading, resource references, and versioned initial scene output.
+- [x] Load trusted native Windows folders and validate resource references and versioned scene output. Product helper integration and archive collection are tracked separately.
 - [x] Add bounded package ingestion from open readers. Windows directory integration is recorded below.
 - [x] Verify the Windows handle-relative child-open primitive against parent replacement, junctions and hard links. Followed by the Windows collector below.
 - [x] Connect Windows fixed-drive root acquisition and handle-based enumeration to bounded in-memory package validation. Trusted CLI integration is recorded below.
 - [x] Validate, export and verify records for trusted local Windows packages through the [developer CLI](m3-manifest.md#trusted-package-cli). Product/helper integration and archive collection remain open.
-- [ ] Parse the agreed HTML/CSS subset and report unsupported constructs with useful source locations.
-- [ ] Implement fixed-size absolute layout, agreed text-box behavior, colors/backgrounds, static images, and ID/class selection.
-- [ ] Define and implement supported stacking, transforms, clipping, and opacity semantics.
-- [ ] Add native translate/scale/opacity animation and explicit pause/resume timing.
+- [x] Parse the [agreed strict HTML/CSS subset](m3-compiler.md) and report unsupported constructs at their source locations.
+- [x] Implement fixed-size absolute layout, bounded text boxes, colors/backgrounds, PNG images, and ID/class selection.
+- [x] Define and implement [group paint order, transforms, clipping and opacity](m3-group-preview.md).
+- [x] Add [typed native translate/scale/opacity animation and pause timing](m3-animated-preview.md) for the fixed animated example.
 - [x] Establish [typed native animation admission, sampling and explicit pause/resume clock](m3-animation.md), with whole-run transform/opacity bounds and CPU regressions. Source/wire/renderer/FPS/platform integration remains open; this does not complete the parent animation task.
 - [x] Add [typed author binding, independent animation codec and fixed animated preview code](m3-animated-preview.md), including stable opacity targets, raster compatibility and capped pause-aware scheduling. Local GPU/window and recovery acceptance passed. CSS animation grammar remains open.
 - [x] Retain visual references for the [static](m3-preview.md) and [animated midpoint](m3-animated-preview.md#fixed-midpoint-reference-mode) fixtures. Local animated window, pause and recovery checks are also recorded.
-- [ ] Validate unsupported-syntax cases, numeric bounds, parser error recovery, and resource budgets.
+- [x] Validate unsupported syntax, numeric bounds, strict malformed-source rejection and resource budgets. The parser rejects malformed input rather than applying browser recovery.
 
 ### Completion evidence — G3
+
+See the [M3 acceptance record](m3-acceptance.md) for the local trusted Windows scope, evidence and M4 handoff.
 
 The content contract agrees with accepted/rejected input and visual behavior. Supported examples render as specified, unsupported features fail clearly, and static scenes remain idle. Keep Flexbox and richer product features out of this prototype unless the documented scope is deliberately revised.
 
