@@ -45,3 +45,19 @@ The local AppContainer test accepted three clock revisions, rejected the termina
 ### Retained value visual result
 
 On November 25, 2026, source `b2a39c8` displayed the worker run's retained 19:57 UTC value in the 960×600 D3D12 client. The observed digits and UTC label matched the five-byte artifact and the headless check. Escape exited 0. Logs recorded one presentation in one generation. The [worker snapshot reference](images/m4-worker-clock-reference.jpg) is a 962×632 capture including window chrome. Local log: `target/m4-worker-clock-visual/6d083b252f7e4d71a6f07eb254733108/stderr.log`.
+
+## Live AppContainer window bridge
+
+Build both development binaries from the same checkout in a trusted directory. The preview stages the sibling `wallpaper-sandbox-probe.exe` through the existing zero-capability AppContainer launcher. This opt-in fixture requires both binaries.
+
+```powershell
+cargo build --release -p wallpaper-preview -p wallpaper-sandbox-probe --locked
+target/release/wallpaper-preview.exe --check-clock-worker-live
+target/release/wallpaper-preview.exe --example clock --clock-worker-live --seconds 15
+```
+
+This fixture sends three UTC samples, 23:59, 00:00 and a repeated 00:00, through inherited pipes. These are deterministic test values. The host verifies the exact fixture edit allowlist, session, sequence and base revision. It acknowledges each accepted batch. The latest changed snapshot replaces the previous mailbox value. The window consumes that immutable snapshot and requests redraw only for new content. The worker sends a final invalid batch to test terminal rejection. The preview retains the last snapshot after worker exit or failure.
+
+The supervisor owns the Job, response deadline and cancellation. The channel thread owns synchronous pipe I/O, and the window polls the single-slot mailbox while the fixture is active. There is one outstanding tick at a time. Channel completion requires a clean worker exit, joined I/O thread and profile cleanup. The preview keeps a fixed 00:00 fallback until a snapshot arrives. The live window command requires 8–30 seconds and rejects desktop mode and other test flags. The headless command requires two content changes and retained 00:00 after rejection, so it fails even when the window path would keep its last value.
+
+The headless release test passed over an actual AppContainer connection. All 163 workspace tests and Clippy passed. Window validation is pending. This fixture uses a finite sample sequence and the development probe. Continuous calendar scheduling, product worker packaging and desktop attachment remain open.

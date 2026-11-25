@@ -599,3 +599,7 @@ A fixed UTC window consumes validated host clock snapshots and uses a monotonic 
 ## 65. M4 retained worker clock handoff
 
 The fixed AppContainer clock probe exports only its last accepted UTC display text after normal exit and cleanup. The preview can validate the retained artifact with a headless command and project it into its fixed clock scene. This file-based checkpoint keeps the AppContainer fixture and preview lifetimes separate. Live publication remains open. See [Retained AppContainer clock snapshot](m4-clock-preview.md#retained-appcontainer-clock-snapshot).
+
+## 66. M4 live worker clock bridge
+
+The Windows preview hosts the existing AppContainer clock fixture directly over inherited pipes. It validates and acknowledges bounded updates, transfers only changed snapshots through a single-slot mailbox and retains the accepted display after terminal rejection or worker failure. A headless test exercises the same bridge. See [Live AppContainer window bridge](m4-clock-preview.md#live-appcontainer-window-bridge).

@@ -1841,6 +1841,8 @@ dependencies = [
  "wallpaper-compiler",
  "wallpaper-media",
  "wallpaper-platform",
+ "wallpaper-protocol",
+ "wallpaper-sandbox",
  "wallpaper-scene",
  "wgpu",
  "winit",

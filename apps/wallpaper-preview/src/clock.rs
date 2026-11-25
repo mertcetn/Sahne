@@ -9,7 +9,8 @@ use wallpaper_scene::{
     transaction::{Batch, Edit, HostScene, Snapshot, SnapshotKey},
 };
 
-const CLOCK_ID: u32 = 2;
+pub const CLOCK_ID: u32 = 1;
+pub const ACCENT_ID: u32 = 2;
 const SESSION: u64 = 1;
 
 pub fn initial_scene() -> Result<ValidatedScene> {
@@ -21,7 +22,7 @@ pub fn initial_scene() -> Result<ValidatedScene> {
         resources: vec![],
         nodes: vec![
             Node {
-                id: 1,
+                id: 3,
                 bounds: Rect {
                     x: 400.0,
                     y: 300.0,
@@ -47,7 +48,7 @@ pub fn initial_scene() -> Result<ValidatedScene> {
                 },
             },
             Node {
-                id: 3,
+                id: ACCENT_ID,
                 bounds: Rect {
                     x: 528.0,
                     y: 650.0,
@@ -69,6 +70,7 @@ pub struct Clock {
     host: HostScene,
     wake: Option<Instant>,
     rollover: Option<u16>,
+    worker: Option<Snapshot>,
 }
 
 impl Clock {
@@ -79,6 +81,7 @@ impl Clock {
             host,
             wake: Some(now),
             rollover: test_rollover.then_some(1439),
+            worker: None,
         })
     }
 
@@ -94,15 +97,36 @@ impl Clock {
         self.wake
     }
 
+    pub fn live_fallback(now: Instant) -> Result<Self> {
+        let mut clock = Self::new(now, false)?;
+        clock.wake = None;
+        Ok(clock)
+    }
+
+    pub fn accept_worker(&mut self, snapshot: Snapshot) {
+        self.worker = Some(snapshot);
+    }
+
     pub fn text(&self) -> &str {
-        let Content::Text { text, .. } = &self.host.scene().scene().nodes[1].content else {
+        let scene = self
+            .worker
+            .as_ref()
+            .map_or(self.host.scene(), |snapshot| snapshot.scene.as_ref());
+        let Content::Text { text, .. } = &scene.scene().nodes[1].content else {
             unreachable!("fixed clock text node")
         };
         text
     }
 
     pub fn snapshot_after(&self, key: Option<SnapshotKey>) -> Option<Snapshot> {
-        self.host.snapshot_after(key)
+        if let Some(snapshot) = &self.worker {
+            (Some(snapshot.key) != key).then(|| Snapshot {
+                key: snapshot.key,
+                scene: Arc::clone(&snapshot.scene),
+            })
+        } else {
+            self.host.snapshot_after(key)
+        }
     }
 
     pub fn tick(&mut self, now: Instant) -> Result<bool> {

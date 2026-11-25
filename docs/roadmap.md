@@ -135,7 +135,8 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Verify the [clock rollover and GPU recovery](m4-clock-preview.md#local-windows-verification) in a local D3D12 window.
 - [x] Verify the [retained AppContainer clock handoff](m4-clock-preview.md#retained-appcontainer-clock-snapshot) through the preview headless entry point.
 - [x] Verify the [retained worker clock in a D3D12 window](m4-clock-preview.md#retained-value-visual-result).
-- [ ] Connect live worker snapshots to the renderer and preserve the last accepted rendering after worker failure.
+- [x] Connect live worker snapshots to the renderer and verify accepted-state preservation through the [headless AppContainer bridge](m4-clock-preview.md#live-appcontainer-window-bridge).
+- [ ] Visually verify the live worker rollover and retained display after terminal rejection.
 - [ ] Integrate package/resource validation and restricted helper processing for untrusted parsing/media/font operations before accepting those inputs.
 - [ ] Re-run the complete sandbox failure suite through the integrated content path.
 

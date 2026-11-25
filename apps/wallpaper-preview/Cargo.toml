@@ -10,6 +10,8 @@ wallpaper-compiler = { path = "../../crates/wallpaper-compiler", features = ["fi
 wallpaper-scene = { path = "../../crates/wallpaper-scene" }
 wallpaper-media = { path = "../../crates/wallpaper-media" }
 wallpaper-platform = { path = "../../crates/wallpaper-platform" }
+wallpaper-protocol = { path = "../../crates/wallpaper-protocol" }
+wallpaper-sandbox = { path = "../../crates/wallpaper-sandbox" }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "dx12", "wgsl"] }
 winit = { version = "=0.30.13", default-features = false, features = ["rwh_06"] }
 glyphon = "=0.12.0"
