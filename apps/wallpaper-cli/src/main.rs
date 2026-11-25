@@ -5,13 +5,13 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [] => {
             println!(
-                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check]\nExternal package loading and wallpaper execution are not implemented."
+                "Sahne development CLI\nUsage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check | --compiled-provenance-fixture]\nExternal package loading and wallpaper execution are not implemented."
             );
             ExitCode::SUCCESS
         }
         [arg] if arg == "--help" || arg == "-h" => {
             println!(
-                "Usage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check]\n--scene-check validates and roundtrips a fixed built-in flat scene.\n--hierarchy-check validates and roundtrips an original version-2 group fixture; no group rendering.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\n--compile-image-check also decodes an original fixed PNG and validates its pixel assets against the scene.\n--compile-groups-check compiles original HTML/CSS/PNG into version-2 groups and independently checks scene/assets.\nNo external files, rendering or script execution in these checks."
+                "Usage: wallpaper-cli [--help | --version | --scene-check | --hierarchy-check | --compile-check | --compile-image-check | --compile-groups-check | --compiled-provenance-fixture]\n--scene-check validates and roundtrips a fixed built-in flat scene.\n--hierarchy-check validates and roundtrips an original version-2 group fixture; no group rendering.\n--compile-check compiles original built-in HTML/CSS and independently validates the scene.\n--compile-image-check also decodes an original fixed PNG and validates its pixel assets against the scene.\n--compile-groups-check compiles original HTML/CSS/PNG into version-2 groups and independently checks scene/assets.\n--compiled-provenance-fixture writes a binary provenance record for the embedded group fixture to stdout.\nNo external files, rendering or script execution in these checks."
             );
             ExitCode::SUCCESS
         }
@@ -45,6 +45,15 @@ fn main() -> ExitCode {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("Compiler self-check failed: {error}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        [arg] if arg == "--compiled-provenance-fixture" => {
+            match wallpaper_compiler::provenance::write_fixture(std::io::stdout().lock()) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("Compiled provenance fixture failed: {error}");
                     ExitCode::from(1)
                 }
             }
