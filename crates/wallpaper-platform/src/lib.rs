@@ -1,6 +1,8 @@
 //! Narrow Windows host FFI boundary; never used by untrusted workers.
 #![deny(unsafe_op_in_unsafe_fn)]
 #[cfg(windows)]
+pub mod package_directory;
+#[cfg(windows)]
 pub mod package_open;
 #[cfg(windows)]
 mod desktop {

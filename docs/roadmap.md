@@ -97,8 +97,9 @@ Completion reviewed November 14, 2026: thirty-five fixed cases and forty-one pro
 - [x] Specify [I1 web metadata, resource and diagnostic mappings](i1-web-mapping.md) with original synthetic cases. Runtime delivery remains gated on M4.
 - [x] Run the [fixed 18-sample GPU check](m3-pixel-check.md) for fractional clipping, nested opacity and PNG colors. All samples passed locally on November 25; normal/maximize/restore window checks also passed. Broader configurations/full G3 remain open.
 - [ ] Implement manifest/source loading, resource references, and versioned initial scene output.
-- [x] Add bounded package ingestion from open readers. Windows directory integration remains open.
-- [x] Verify the Windows handle-relative child-open primitive against parent replacement, junctions and hard links. Root acquisition and enumeration remain open.
+- [x] Add bounded package ingestion from open readers. Windows directory integration is recorded below.
+- [x] Verify the Windows handle-relative child-open primitive against parent replacement, junctions and hard links. Followed by the Windows collector below.
+- [x] Connect Windows fixed-drive root acquisition and handle-based enumeration to bounded in-memory package validation. CLI/product integration and archive collection remain open.
 - [ ] Parse the agreed HTML/CSS subset and report unsupported constructs with useful source locations.
 - [ ] Implement fixed-size absolute layout, agreed text-box behavior, colors/backgrounds, static images, and ID/class selection.
 - [ ] Define and implement supported stacking, transforms, clipping, and opacity semantics.

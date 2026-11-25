@@ -543,3 +543,7 @@ The package format library can retain a bounded snapshot from caller-supplied re
 ## 51. Windows relative package open primitive
 
 The host platform opens individual portable path components relative to a directory handle with reparse traversal disabled. It validates the returned disk object's type and rejects multiply linked files. The platform regression covers parent replacement and junction rejection. Root acquisition, handle-based enumeration and package snapshot integration remain open. See [Windows handle-relative opening](m3-manifest.md#windows-handle-relative-opening).
+
+## 52. Windows native directory collection
+
+The host platform verifies a fixed-drive root, opens descendant components relative to live directory handles and enumerates directories through those handles. A fixed buffer and entry/path budgets constrain the walk. Returned regular-file handles feed the bounded in-memory package reader and its manifest validation. The first collector is library-only. Archive collection and CLI or product integration remain open. See [Windows directory collection](m3-manifest.md#windows-directory-collection).
