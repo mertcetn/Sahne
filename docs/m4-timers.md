@@ -123,6 +123,8 @@ The live preview requires a trusted package with the same `pause()`, `resume()` 
 
 The preview uses the existing Windows session, display and power notifications and the window's minimized state. It sends pause and resume between acknowledged updates. Acknowledged pause stops new ticks. After resume, the host waits for a new interval before dispatching the next tick. If the worker fails, the preview retains the last accepted scene. Windows session messages are documented by [Microsoft Learn](https://learn.microsoft.com/en-us/windows/win32/termserv/wm-wtssession-change).
 
+The live preview logs the first eight presented frames, accepted snapshots and lifecycle acknowledgements in each category. The exit summary reports the totals observed by the preview, and terminal worker failures still appear in the log. Snapshot and acknowledgement totals count events received by the preview from the worker bridge's latest-value mailbox.
+
 The headless live check used a synthetic pause and resume, observed two changed scenes after resuming and verified worker profile cleanup. All 28 cases passed in the November 26, 2026 run. Local report: `target/script-preview-validation/d886cfc265924667abbc1c02b10eeded/summary.json`.
 
 A second headless run verified a live package that staged an edit and threw during its second tick. The bridge verified that revision 1 and its accepted snapshot were preserved before tearing down the worker. The process omitted the private exception text and verified profile cleanup. All 29 cases passed. Local report: `target/script-preview-validation/5e0fe340182c4c659d49ebe446b9b3b0/summary.json`.

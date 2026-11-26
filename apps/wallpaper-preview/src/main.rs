@@ -379,6 +379,7 @@ fn main() -> Result<()> {
         deadline: seconds.map(|s| Instant::now() + Duration::from_secs(s)),
         error: None,
         frames: 0,
+        live_package_diagnostics: live_script_lifecycle.then(LivePackageDiagnostics::default),
         recreate_remaining: recreate,
         next_recreate: None,
         loss_test: lifecycle::DeviceLossTest::new(test_device_loss),
@@ -389,6 +390,12 @@ fn main() -> Result<()> {
         "Preview stopped; presented frames={}; generations={}; pending recreations={}",
         app.frames, app.generation, app.recreate_remaining
     );
+    if let Some(diagnostics) = app.live_package_diagnostics {
+        eprintln!(
+            "Live package summary: accepted snapshots={}; lifecycle acknowledgements={}",
+            diagnostics.snapshots, diagnostics.lifecycle_acks
+        );
+    }
     eprintln!("Device loss test: {:?}", app.loss_test);
     if app.test_pixels && !app.pixels_passed {
         return Err(app
@@ -426,6 +433,19 @@ fn validate_pixel_mode(
     }
     Ok(())
 }
+const LIVE_PACKAGE_LOG_SAMPLES: u64 = 8;
+
+#[derive(Default)]
+struct LivePackageDiagnostics {
+    snapshots: u64,
+    lifecycle_acks: u64,
+}
+
+fn sample_live_package_event(count: &mut u64) -> bool {
+    *count = count.saturating_add(1);
+    *count <= LIVE_PACKAGE_LOG_SAMPLES
+}
+
 struct App {
     motion: Option<motion::Playback>,
     clock: Option<clock::Clock>,
@@ -450,6 +470,7 @@ struct App {
     deadline: Option<Instant>,
     error: Option<String>,
     frames: u64,
+    live_package_diagnostics: Option<LivePackageDiagnostics>,
     recreate_remaining: u32,
     next_recreate: Option<Instant>,
     loss_test: lifecycle::DeviceLossTest,
@@ -468,7 +489,14 @@ impl App {
                 return;
             }
         };
-        if let Some(paused) = update.paused {
+        if let Some(paused) = update.paused
+            && self
+                .live_package_diagnostics
+                .as_mut()
+                .is_none_or(|diagnostics| {
+                    sample_live_package_event(&mut diagnostics.lifecycle_acks)
+                })
+        {
             eprintln!(
                 "Package worker lifecycle acknowledged: {}",
                 if paused { "pause" } else { "resume" }
@@ -489,7 +517,13 @@ impl App {
                 state.window.request_redraw();
             }
             self.retained_scene = Some(scene);
-            eprintln!("Accepted worker package snapshot");
+            if self
+                .live_package_diagnostics
+                .as_mut()
+                .is_none_or(|diagnostics| sample_live_package_event(&mut diagnostics.snapshots))
+            {
+                eprintln!("Accepted worker package snapshot");
+            }
         }
         if let Some(terminal) = update.terminal {
             self.live_clock = None;
@@ -735,7 +769,9 @@ impl ApplicationHandler<AppEvent> for App {
                 if let Some(bridge) = &self.live_clock {
                     bridge.set_paused(self.clock_pause.paused());
                 }
-                eprintln!("Windows clock lifecycle: {event:?}");
+                if self.live_package_diagnostics.is_none() {
+                    eprintln!("Windows clock lifecycle: {event:?}");
+                }
             }
             AppEvent::DeviceLost(loss)
                 if loss.generation == self.generation && self.state.is_some() =>
@@ -958,10 +994,14 @@ impl ApplicationHandler<AppEvent> for App {
                             }
                         }
                         self.frames += 1;
-                        eprintln!(
-                            "Presented frame {} generation={}",
-                            self.frames, self.generation
-                        );
+                        if self.live_package_diagnostics.is_none()
+                            || self.frames <= LIVE_PACKAGE_LOG_SAMPLES
+                        {
+                            eprintln!(
+                                "Presented frame {} generation={}",
+                                self.frames, self.generation
+                            );
+                        }
                         if self.recreate_remaining > 0 && self.next_recreate.is_none() {
                             self.next_recreate = Some(Instant::now() + Duration::from_secs(1));
                         }
@@ -1401,5 +1441,23 @@ mod argument_tests {
         assert!(validate_pixel_mode(true, valid, false, 1, false, Some(6)).is_err());
         assert!(validate_pixel_mode(true, valid, false, 0, true, Some(6)).is_err());
         assert!(validate_pixel_mode(false, None, true, 1, false, None).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod diagnostics_tests {
+    use super::*;
+
+    #[test]
+    fn live_package_samples_have_a_fixed_limit_and_preserve_totals() {
+        let mut count = 0;
+        let samples = (0..100)
+            .filter(|_| sample_live_package_event(&mut count))
+            .count();
+        assert_eq!(samples as u64, LIVE_PACKAGE_LOG_SAMPLES);
+        assert_eq!(count, 100);
+        count = u64::MAX;
+        assert!(!sample_live_package_event(&mut count));
+        assert_eq!(count, u64::MAX);
     }
 }
