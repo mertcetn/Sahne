@@ -65,6 +65,14 @@ The host independently checks each transaction against its writable targets. The
 
 The scripted, typed, timer and roundtrip probes passed with four verified profile cleanups. The live clock bridge also passed its headless rollover check. Local report at `target/sandbox-validation/082f9fb1e4154ef58d8b378f78debf92/`.
 
+### Named binding table
+
+Message kind 11 (`SceneBindings`) replaces the development-only kind 10. Build host and worker from the same checkout. The new frame carries a u8 entry count from 1 to 64. Each entry contains a u8 name length, an ASCII author ID of up to 64 bytes, and a little-endian u32 node ID. Names begin with a letter or underscore and may then include letters, digits, underscores and hyphens. The decoder rejects duplicate names, duplicate or zero node IDs, malformed payloads and nonzero base revisions.
+
+The worker still requires exactly `clock` and `accent` for this embedded fixture. Future callbacks can use the same wire format with other names. Creator script admission and per-property bindings remain open.
+
+The four scripted, typed, timer and roundtrip AppContainer probes passed, as did the headless live rollover check. Local report at `target/sandbox-validation/5e08e0db3d4442ed84577747a6910b23/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

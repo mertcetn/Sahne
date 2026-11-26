@@ -1,6 +1,6 @@
 //! Trusted fixture for host commits and terminal rejection over inherited pipes.
 use super::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use wallpaper_protocol::{SCENE_REJECT_CODE, accept_scene_batch};
 use wallpaper_scene::{
     Color, Content, Node, Rect, SCENE_VERSION, Scene, ValidatedScene,
@@ -190,7 +190,13 @@ pub fn read_response(
         .map_err(|_| "Could not initialize fixture host scene")?;
     if mode == Mode::Script {
         requests
-            .try_send(envelope(session, 2, Body::ClockBindings { clock, accent }))
+            .try_send(envelope(
+                session,
+                2,
+                Body::SceneBindings {
+                    targets: BTreeMap::from([("clock".into(), clock), ("accent".into(), accent)]),
+                },
+            ))
             .map_err(|_| "Scene binding writer queue unavailable")?;
     }
     let expected_color = if mode != Mode::Typed {
@@ -378,10 +384,13 @@ pub fn worker(
     let (clock, accent) = if mode == Mode::Script {
         let bindings = read_frame(input)?.ok_or(MissingFrame("clock bindings"))?;
         bindings.check_context(session, 2, 0)?;
-        let Body::ClockBindings { clock, accent } = bindings.body else {
+        let Body::SceneBindings { targets } = bindings.body else {
             return Err("Expected host clock bindings".into());
         };
-        (clock, accent)
+        match (targets.len(), targets.get("clock"), targets.get("accent")) {
+            (2, Some(&clock), Some(&accent)) => (clock, accent),
+            _ => return Err("Unexpected bindings for embedded clock script".into()),
+        }
     } else {
         (1, 2)
     };

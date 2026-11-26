@@ -625,3 +625,7 @@ The scripted probe resolves a unique text node for each of two author spans that
 ## 70. M4 host-delivered clock bindings
 
 In the scripted development probe, the host validates and compiles the embedded package, chooses writable targets and delivers the two clock bindings through IPC before the worker runs its callback. The worker verifies the session and initialization envelope and resolves the callback's local indices against the received mapping. Transaction authorization remains with the host. See [Host-delivered clock bindings](m4-scene-transactions.md#host-delivered-clock-bindings).
+
+## 71. M4 bounded named scene bindings
+
+The host can send a bounded author-ID to node-ID table during worker initialization. The codec validates entry count, supported names, distinct targets and base revision. The embedded clock worker also checks that it received its expected names. The host grants transaction authority independently. See [Named binding table](m4-scene-transactions.md#named-binding-table).
