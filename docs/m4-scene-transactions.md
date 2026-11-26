@@ -49,6 +49,14 @@ The worker maps staged text and RGBA edits to those generated node IDs. The host
 
 Release checks for `scene-script`, `scene-transaction` and `scene-timer` passed with three verified profile cleanups. The live rollover bridge passed its headless regression check. Local report at `target/sandbox-validation/6ebfa1ff6c54495ba2bdf908121362e7/`.
 
+## Foreground bindings for spans with backgrounds
+
+The scripted fixture now gives both author spans a background and text. The resolver selects the unique node of the requested content kind inside the author ID's node list. A missing or ambiguous match fails fixture setup. The clock text and the UTC label's foreground RGBA target their respective text nodes. The host allowlist contains those two nodes. The terminal test pairs a permitted foreground edit with an unauthorized background edit and checks that rejection preserves the committed scene and revision. [CSS foreground color](https://www.w3.org/TR/css-color-4/#the-color-property)
+
+Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case scene-script` to exercise the mapping and rejection in AppContainer. The fixture covers spans with independent foreground and background nodes. Creator-package binding delivery remains open.
+
+The scripted, typed and timer probes passed with three verified profile cleanups. The live clock bridge also passed its headless rollover check. Local report at `target/sandbox-validation/4c66c42d831847319c0573e200e96502/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

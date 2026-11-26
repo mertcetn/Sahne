@@ -106,10 +106,21 @@ fn update_message(session: u64, sequence: u64, body: Body) -> Message {
     }
 }
 
-fn compiled_script_scene() -> Result<(ValidatedScene, u32, u32)> {
+struct CompiledScriptScene {
+    scene: ValidatedScene,
+    clock: u32,
+    accent: u32,
+    accent_background: u32,
+}
+
+fn compiled_script_scene() -> Result<CompiledScriptScene> {
     let package = wallpaper_format::Package::from_entries(vec![
         ("manifest.json".into(), br#"{"formatVersion":1,"apiVersion":1,"id":"probe.scene","name":"Scene binding probe","entry":"index.html","permissions":[],"preferredFps":30}"#.to_vec()),
-        ("index.html".into(), br#"<div style="width:100px;height:100px;background-color:#121212"></div><span id="clock" style="width:100px;height:24px">initial</span><div id="accent" style="width:10px;height:10px;background-color:#ffffff"></div>"#.to_vec()),
+        ("index.html".into(), br#"
+            <div style="width:100px;height:100px;background-color:#121212"></div>
+            <span id="clock" style="width:100px;height:24px;background-color:#222222">initial</span>
+            <span id="accent" style="width:100px;height:24px;background-color:#333333">UTC</span>
+        "#.to_vec()),
     ])?;
     let compiled = wallpaper_compiler::compile(
         &package,
@@ -120,25 +131,33 @@ fn compiled_script_scene() -> Result<(ValidatedScene, u32, u32)> {
         },
     )?;
     let node_for = |name: &str, supports: fn(&Content) -> bool| -> Result<u32> {
-        let Some([id]) = compiled.symbols().get(name).map(Vec::as_slice) else {
-            return Err("Expected exactly one compiled node per script binding".into());
-        };
-        if !compiled
+        let ids = compiled
+            .symbols()
+            .get(name)
+            .ok_or("Missing compiled author ID")?;
+        let mut targets = compiled
             .scene()
             .scene()
             .nodes
             .iter()
-            .any(|node| node.id == *id && supports(&node.content))
-        {
-            return Err("Compiled node does not support the requested script binding".into());
+            .filter(|node| ids.contains(&node.id) && supports(&node.content));
+        let target = targets.next().ok_or("Missing compiled property target")?;
+        if targets.next().is_some() {
+            return Err("Ambiguous compiled property target".into());
         }
-        Ok(*id)
+        Ok(target.id)
     };
     let clock = node_for("clock", |content| matches!(content, Content::Text { .. }))?;
-    let accent = node_for("accent", |content| {
+    let accent = node_for("accent", |content| matches!(content, Content::Text { .. }))?;
+    let accent_background = node_for("accent", |content| {
         matches!(content, Content::Rectangle { .. })
     })?;
-    Ok((compiled.into_scene(), clock, accent))
+    Ok(CompiledScriptScene {
+        scene: compiled.into_scene(),
+        clock,
+        accent,
+        accent_background,
+    })
 }
 
 pub fn read_response(
@@ -159,7 +178,8 @@ pub fn read_response(
         return Err("Invalid scene Pong".into());
     }
     let (scene, clock, accent) = if mode == Mode::Script {
-        compiled_script_scene()?
+        let compiled = compiled_script_scene()?;
+        (compiled.scene, compiled.clock, compiled.accent)
     } else {
         (fixed_scene()?, 1, 2)
     };
@@ -212,12 +232,16 @@ pub fn read_response(
         };
         let accepted = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
         let ack = accept_scene_batch(&mut host, accepted);
+        let accent_matches = match content(host.scene(), accent) {
+            Some(Content::Text { text, color, .. }) if mode == Mode::Script => {
+                text == "UTC" && *color == expected_color
+            }
+            Some(Content::Rectangle { color }) if mode != Mode::Script => *color == expected_color,
+            _ => false,
+        };
         if ack != update_message(session, sequence, Body::SceneAck { revision: sequence })
             || !matches!(content(host.scene(), clock), Some(Content::Text { text, .. }) if text == &display_time)
-            || content(host.scene(), accent)
-                != Some(&Content::Rectangle {
-                    color: expected_color,
-                })
+            || !accent_matches
         {
             return Err("Scene acknowledgement or committed content mismatch".into());
         }
@@ -343,11 +367,15 @@ pub fn worker(
     mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
-    let (clock, accent) = if mode == Mode::Script {
-        let (_, clock, accent) = compiled_script_scene()?;
-        (clock, accent)
+    let (clock, accent, accent_background) = if mode == Mode::Script {
+        let compiled = compiled_script_scene()?;
+        (
+            compiled.clock,
+            compiled.accent,
+            Some(compiled.accent_background),
+        )
     } else {
-        (1, 2)
+        (1, 2, None)
     };
     let text = |value: &str| Edit::Text {
         node: clock,
@@ -386,6 +414,13 @@ pub fn worker(
         previous = display_time;
         sequence = sequence.checked_add(1).ok_or("Clock sequence exhausted")?;
     }
+    let terminal_edit = match accent_background {
+        Some(node) => Edit::Color {
+            node,
+            value: Color([255; 4]),
+        },
+        None => text("invalid\0text"),
+    };
     send(
         output,
         Message {
@@ -398,7 +433,7 @@ pub fn worker(
                         node: clock,
                         value: Color([0; 4]),
                     },
-                    text("invalid\0text"),
+                    terminal_edit,
                 ],
             },
         },

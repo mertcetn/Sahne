@@ -611,3 +611,7 @@ The opt-in Windows development preview can keep one AppContainer worker running 
 ## 68. M4 compiler-derived script bindings
 
 The scripted AppContainer probe now compiles a trusted embedded HTML fixture in both processes. The host derives its writable node set from the validated scene and the compiler's author IDs. The worker resolves the adapter's local indices against the same source and sends typed edits on the existing transaction channel. The fixture admits single-node bindings for text and RGBA updates. See [Compiler-derived fixture bindings](m4-scene-transactions.md#compiler-derived-fixture-bindings).
+
+## 69. M4 property targets for compiled spans
+
+The scripted probe resolves a unique text node for each of two author spans that also emit a background rectangle. Text and foreground RGBA target the text nodes. The host only authorizes those two node IDs. A transaction that tries to edit the background is rejected in full. See [Foreground bindings for spans with backgrounds](m4-scene-transactions.md#foreground-bindings-for-spans-with-backgrounds).
