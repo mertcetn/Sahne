@@ -68,6 +68,14 @@ target/release/wallpaper-preview.exe --check-package-intake $folder
 
 The headless command captures the folder in the host. AppContainer validates the manifest, entry set and declared source references, then compiles the supported flat HTML/CSS subset and decodes referenced RGBA8 PNG assets. On success the host independently decodes the returned flat scene, validates the image IDs and derives the expected RGBA8 buffer sizes from the scene. The command reports the node and image counts after the helper exits and its profile is removed. Validation or compilation failure returns a fixed error. Font processing, script execution and rendering are outside this check. Run `pwsh -NoProfile -File tools/test-script-preview.ps1` to exercise input larger than a control frame, manifest and source validation, HTML/CSS compilation, and PNG acceptance and rejection.
 
+### Windows sandboxed package preview
+
+```powershell
+target/release/wallpaper-preview.exe --sandboxed-package-preview $folder --seconds 30
+```
+
+This development command opens a D3D12 window after the same intake checks pass and the helper exits. It displays the static flat scene and its decoded images. Text uses the bundled Noto Sans font. Package scripts and custom fonts are outside this preview mode. Escape closes the window. The optional `--seconds` sets a time limit between 1 and 3600 seconds. Use `--check-package-intake` to verify the same package without opening a window.
+
 Callers establish regular-file and containment guarantees before passing readers and supply operational deadlines if needed. The Windows directory collector still needs handle-relative opens and reparse rejection. Path checks followed by a fresh open by name leave a window for directory replacement. The reader interface gives that future collector a single bounded ingestion path. [Windows file opening semantics](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)
 
 ## Windows handle-relative opening

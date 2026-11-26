@@ -15,6 +15,17 @@ enum IntakeReply {
 }
 
 pub fn check(folder: &str) -> Result<()> {
+    let compiled = load(folder)?;
+    println!("Package validated and compiled in AppContainer.");
+    println!(
+        "Host independently validated flat output. Nodes: {}. Images: {}.",
+        compiled.scene.scene().nodes.len(),
+        compiled.images.len()
+    );
+    Ok(())
+}
+
+pub fn load(folder: &str) -> Result<FlatOutput> {
     let snapshot = wallpaper_platform::package_directory::collect_snapshot(folder)?;
     let exe = std::env::current_exe()?.with_file_name("wallpaper-sandbox-probe.exe");
     let session = wallpaper_sandbox::random_id()?;
@@ -103,15 +114,8 @@ pub fn check(folder: &str) -> Result<()> {
     if exit? != Some(0) {
         return Err("Package helper did not exit cleanly".into());
     }
-    let compiled = match result {
-        IntakeReply::Compiled(compiled) => compiled,
-        IntakeReply::Rejected(reason) => return Err(reason.into()),
-    };
-    println!("Package validated and compiled in AppContainer.");
-    println!(
-        "Host independently validated flat output. Nodes: {}. Images: {}.",
-        compiled.scene.scene().nodes.len(),
-        compiled.images.len()
-    );
-    Ok(())
+    match result {
+        IntakeReply::Compiled(compiled) => Ok(compiled),
+        IntakeReply::Rejected(reason) => Err(reason.into()),
+    }
 }

@@ -1,6 +1,8 @@
 //! Renders validated flat scenes and bundled image resources.
 use super::*;
 use glyphon::Wrap;
+use std::collections::BTreeMap;
+use wallpaper_media::{RgbaImage, flat_output::FlatOutput};
 use wallpaper_scene::{Content, ValidatedScene};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -16,6 +18,21 @@ pub enum Example {
 pub enum Source<'a> {
     Example(Example),
     Retained(&'a Arc<ValidatedScene>),
+    Sandboxed(&'a SandboxedScene),
+}
+
+pub struct SandboxedScene {
+    scene: Arc<ValidatedScene>,
+    images: BTreeMap<u32, RgbaImage>,
+}
+
+impl From<FlatOutput> for SandboxedScene {
+    fn from(output: FlatOutput) -> Self {
+        Self {
+            scene: Arc::new(output.scene),
+            images: output.images,
+        }
+    }
 }
 
 pub fn load_retained(folder: &str) -> Result<Arc<ValidatedScene>> {
@@ -80,7 +97,7 @@ impl Renderer {
             return Err("Compiled preview requires an sRGB surface".into());
         }
         let compiled = match source {
-            Source::Retained(_) | Source::Example(Example::Clock) => None,
+            Source::Retained(_) | Source::Sandboxed(_) | Source::Example(Example::Clock) => None,
             Source::Example(example @ (Example::Static | Example::Image)) => {
                 let package = if example == Example::Static {
                     wallpaper_compiler::fixtures::static_package()?
@@ -106,10 +123,12 @@ impl Renderer {
                 Arc::new(wallpaper_scene::decode(&compiled.scene().encode())?),
                 compiled.images(),
             )
-        } else if let Source::Retained(scene) = source {
-            (Arc::clone(scene), &empty)
         } else {
-            (Arc::new(clock::initial_scene()?), &empty)
+            match source {
+                Source::Retained(scene) => (Arc::clone(scene), &empty),
+                Source::Sandboxed(output) => (Arc::clone(&output.scene), &output.images),
+                Source::Example(_) => (Arc::new(clock::initial_scene()?), &empty),
+            }
         };
         wallpaper_media::validate_assets(&scene, assets)?;
         for image in assets.values() {
@@ -346,6 +365,7 @@ impl Renderer {
         let label = match source {
             Source::Example(example) => format!("Compiled original {example:?} fixture"),
             Source::Retained(_) => "Accepted local scene snapshot".into(),
+            Source::Sandboxed(_) => "Accepted AppContainer package output".into(),
         };
         eprintln!(
             "{label}: nodes={}, canvas={}x{}; text line-height=1.25, no wrap, own-box clipping.",

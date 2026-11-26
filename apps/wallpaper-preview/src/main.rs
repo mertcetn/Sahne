@@ -53,6 +53,7 @@ fn main() -> Result<()> {
     let mut check_retained_scene = false;
     let mut script_package_folder = None;
     let mut check_script_package = false;
+    let mut sandbox_package_folder = None;
     let mut worker_live = None;
     let mut check_worker_live = false;
     let mut compiled_example = None;
@@ -82,6 +83,9 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--check-package-intake <absolute-folder> validates and compiles a flat package in AppContainer without rendering or running a script."
+                );
+                println!(
+                    "--sandboxed-package-preview <absolute-folder> [--seconds 1..3600] displays the AppContainer-compiled static scene in a window."
                 );
                 return Ok(());
             }
@@ -142,6 +146,13 @@ fn main() -> Result<()> {
                 script_package_folder =
                     Some(args.next().ok_or("Missing trusted script package folder")?);
             }
+            "--sandboxed-package-preview" => {
+                if sandbox_package_folder.is_some() {
+                    return Err("Choose one sandboxed package folder".into());
+                }
+                sandbox_package_folder =
+                    Some(args.next().ok_or("Missing sandboxed package folder")?);
+            }
             "--seconds" => {
                 let n = args.next().ok_or("Missing seconds")?.parse::<u64>()?;
                 if !(1..=3600).contains(&n) {
@@ -157,6 +168,21 @@ fn main() -> Result<()> {
             }
             _ => return Err(format!("Unsupported argument: {arg}").into()),
         }
+    }
+    if sandbox_package_folder.is_some()
+        && (desktop_mode
+            || compiled_example.is_some()
+            || worker_snapshot.is_some()
+            || worker_live.is_some()
+            || retained_scene_folder.is_some()
+            || script_package_folder.is_some()
+            || recreate != 0
+            || test_device_loss
+            || test_pixels
+            || test_clock_rollover
+            || reference_pose)
+    {
+        return Err("Sandboxed package preview accepts a folder and optional --seconds".into());
     }
     if (retained_scene_folder.is_some() || script_package_folder.is_some())
         && (compiled_example.is_some()
@@ -294,6 +320,11 @@ fn main() -> Result<()> {
     } else {
         None
     };
+    let sandbox_scene = sandbox_package_folder
+        .as_deref()
+        .map(package_intake::load)
+        .transpose()?
+        .map(compiled::SandboxedScene::from);
     let events = EventLoop::<AppEvent>::with_user_event().build()?;
     events.set_control_flow(ControlFlow::Wait);
     let mut app = App {
@@ -308,6 +339,7 @@ fn main() -> Result<()> {
         desktop_mode,
         compiled_example,
         retained_scene,
+        sandbox_scene,
         start_script_package: script_package,
         test_pixels,
         pixels_passed: false,
@@ -378,6 +410,7 @@ struct App {
     desktop_mode: bool,
     compiled_example: Option<compiled::Example>,
     retained_scene: Option<Arc<wallpaper_scene::ValidatedScene>>,
+    sandbox_scene: Option<compiled::SandboxedScene>,
     start_script_package: Option<script_package::Prepared>,
     test_pixels: bool,
     pixels_passed: bool,
@@ -550,6 +583,7 @@ impl App {
                     Some(compiled::Example::GroupEffects) => "Sahne — M3 group effects example",
                     Some(compiled::Example::Animated) => "Sahne — M3 native animated shapes",
                     Some(compiled::Example::Clock) => "Sahne — M4 UTC clock",
+                    None if self.sandbox_scene.is_some() => "Sahne — M4 sandboxed package",
                     None if self.retained_scene.is_some() => "Sahne — M4 retained scene",
                     None => "Sahne — M1 trusted scene",
                 })
@@ -561,13 +595,18 @@ impl App {
             };
             let window = Arc::new(events.create_window(attrs)?);
             self.desktop = desktop;
+            let flat_scene = self
+                .sandbox_scene
+                .as_ref()
+                .map(compiled::Source::Sandboxed)
+                .or_else(|| self.retained_scene.as_ref().map(compiled::Source::Retained));
             let mut state = pollster::block_on(State::new(
                 window,
                 events,
                 self.proxy.clone(),
                 self.generation,
                 !self.loss_test.complete(),
-                (self.compiled_example, self.retained_scene.as_ref()),
+                (self.compiled_example, flat_scene),
                 self.test_pixels,
             ))?;
             if utc_worker && !self.desktop_mode {
@@ -932,13 +971,10 @@ impl State {
         proxy: EventLoopProxy<AppEvent>,
         generation: u64,
         report_destroyed: bool,
-        scene_source: (
-            Option<compiled::Example>,
-            Option<&Arc<wallpaper_scene::ValidatedScene>>,
-        ),
+        scene_source: (Option<compiled::Example>, Option<compiled::Source<'_>>),
         test_pixels: bool,
     ) -> Result<Self> {
-        let (compiled_example, retained_scene) = scene_source;
+        let (compiled_example, flat_scene) = scene_source;
         let mut desc = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
             events.owned_display_handle(),
         ));
@@ -972,7 +1008,7 @@ impl State {
         let mut config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
             .ok_or("Unsupported surface")?;
-        if compiled_example.is_some() || retained_scene.is_some() {
+        if compiled_example.is_some() || flat_scene.is_some() {
             config.format = surface
                 .get_capabilities(&adapter)
                 .formats
@@ -1108,7 +1144,7 @@ impl State {
             } else {
                 None
             };
-        let flat_source = retained_scene.map(compiled::Source::Retained).or_else(|| {
+        let flat_source = flat_scene.or_else(|| {
             compiled_example
                 .filter(|v| v.group_fixture().is_none())
                 .map(compiled::Source::Example)
