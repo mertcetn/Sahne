@@ -73,6 +73,14 @@ The worker still requires exactly `clock` and `accent` for this embedded fixture
 
 The four scripted, typed, timer and roundtrip AppContainer probes passed, as did the headless live rollover check. Local report at `target/sandbox-validation/5e08e0db3d4442ed84577747a6910b23/`.
 
+### Manifest-selected fixture script
+
+The `scene-script` probe now declares a JavaScript entry in its embedded wallpaper package. The host resolves it from the validated snapshot using the compiler's retained script reference. Message kind 12 (`SceneProgram`) sends the binding table and source together. A little-endian u16 byte count and UTF-8 source of up to 32 KiB follow the binding table. The codec rejects zero-length, oversized, invalid UTF-8 and NUL-containing source.
+
+The worker evaluates the source as a callback expression and runs it with the existing DOM adapter. Evaluation and the callback share the existing 100 ms QuickJS deadline, 16 MiB heap, 256 KiB stack and AppContainer isolation. The host applies the same transaction validation, acknowledgement and rollback tests. This command uses an embedded package and continues to require its two clock bindings. Loading creator-supplied packages and their general DOM state remains open.
+
+The scripted, typed and timer probes, three JavaScript controls and the headless live clock check passed. Local AppContainer report at `target/sandbox-validation/6fd0d656a93741899e47418014b6cb79/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

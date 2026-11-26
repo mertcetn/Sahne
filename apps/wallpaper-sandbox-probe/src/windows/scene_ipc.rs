@@ -112,16 +112,18 @@ struct CompiledScriptScene {
     scene: ValidatedScene,
     clock: u32,
     accent: u32,
+    source: String,
 }
 
 fn compiled_script_scene() -> Result<CompiledScriptScene> {
     let package = wallpaper_format::Package::from_entries(vec![
-        ("manifest.json".into(), br#"{"formatVersion":1,"apiVersion":1,"id":"probe.scene","name":"Scene binding probe","entry":"index.html","permissions":[],"preferredFps":30}"#.to_vec()),
+        ("manifest.json".into(), br#"{"formatVersion":1,"apiVersion":1,"id":"probe.scene","name":"Scene binding probe","entry":"index.html","script":"clock.js","permissions":[],"preferredFps":30}"#.to_vec()),
         ("index.html".into(), br#"
             <div style="width:100px;height:100px;background-color:#121212"></div>
             <span id="clock" style="width:100px;height:24px;background-color:#222222">initial</span>
             <span id="accent" style="width:100px;height:24px;background-color:#333333">UTC</span>
         "#.to_vec()),
+        ("clock.js".into(), include_bytes!("clock_fixture.js").to_vec()),
     ])?;
     let compiled = wallpaper_compiler::compile(
         &package,
@@ -131,6 +133,10 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
             background: Color([0; 4]),
         },
     )?;
+    let script = compiled
+        .script()
+        .ok_or("Missing compiled script reference")?;
+    let source = package.require_text(script, ".js", "script")?.to_owned();
     let node_for = |name: &str, supports: fn(&Content) -> bool| -> Result<u32> {
         let ids = compiled
             .symbols()
@@ -160,6 +166,7 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
         scene: compiled.into_scene(),
         clock,
         accent,
+        source,
     })
 }
 
@@ -180,24 +187,30 @@ pub fn read_response(
     if pong != envelope(session, 2, Body::Pong { nonce }) {
         return Err("Invalid scene Pong".into());
     }
-    let (scene, clock, accent) = if mode == Mode::Script {
+    let (scene, clock, accent, source) = if mode == Mode::Script {
         let compiled = compiled_script_scene()?;
-        (compiled.scene, compiled.clock, compiled.accent)
+        (
+            compiled.scene,
+            compiled.clock,
+            compiled.accent,
+            Some(compiled.source),
+        )
     } else {
-        (fixed_scene()?, 1, 2)
+        (fixed_scene()?, 1, 2, None)
     };
     let mut host = HostScene::new(scene, session, &BTreeSet::from([clock, accent]))
         .map_err(|_| "Could not initialize fixture host scene")?;
-    if mode == Mode::Script {
+    if let Some(source) = source {
         requests
             .try_send(envelope(
                 session,
                 2,
-                Body::SceneBindings {
+                Body::SceneProgram {
                     targets: BTreeMap::from([("clock".into(), clock), ("accent".into(), accent)]),
+                    source,
                 },
             ))
-            .map_err(|_| "Scene binding writer queue unavailable")?;
+            .map_err(|_| "Scene program writer queue unavailable")?;
     }
     let expected_color = if mode != Mode::Typed {
         Color([36, 179, 144, 255])
@@ -381,18 +394,18 @@ pub fn worker(
     mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
-    let (clock, accent) = if mode == Mode::Script {
-        let bindings = read_frame(input)?.ok_or(MissingFrame("clock bindings"))?;
-        bindings.check_context(session, 2, 0)?;
-        let Body::SceneBindings { targets } = bindings.body else {
-            return Err("Expected host clock bindings".into());
+    let (clock, accent, source) = if mode == Mode::Script {
+        let program = read_frame(input)?.ok_or(MissingFrame("scene program"))?;
+        program.check_context(session, 2, 0)?;
+        let Body::SceneProgram { targets, source } = program.body else {
+            return Err("Expected host scene program".into());
         };
         match (targets.len(), targets.get("clock"), targets.get("accent")) {
-            (2, Some(&clock), Some(&accent)) => (clock, accent),
+            (2, Some(&clock), Some(&accent)) => (clock, accent, Some(source)),
             _ => return Err("Unexpected bindings for embedded clock script".into()),
         }
     } else {
-        (1, 2)
+        (1, 2, None)
     };
     let text = |value: &str| Edit::Text {
         node: clock,
@@ -416,7 +429,7 @@ pub fn worker(
             "12:34".into()
         };
         let edits = if mode != Mode::Typed {
-            script::clock_edits(clock, accent, &previous, &display_time)?
+            script::clock_edits(clock, accent, &previous, &display_time, source.as_deref())?
         } else {
             vec![text(&display_time)]
         };

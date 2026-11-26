@@ -149,6 +149,7 @@ pub fn clock_edits(
     accent: u32,
     previous: &str,
     display_time: &str,
+    package_source: Option<&str>,
 ) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
     if !wallpaper_sandbox::is_appcontainer()? {
         return Err("Clock fixture refuses non-AppContainer execution".into());
@@ -160,7 +161,7 @@ pub fn clock_edits(
         run_scene_callback(
             &ctx,
             &bindings,
-            include_str!("clock_fixture.js"),
+            package_source.unwrap_or(include_str!("clock_fixture.js")),
             display_time,
         )
     })?;
@@ -173,7 +174,7 @@ pub fn clock_edits(
 fn run_scene_callback(
     ctx: &rquickjs::Ctx<'_>,
     bindings: &[(&str, u32, Option<&str>)],
-    embedded_callback: &str,
+    callback_source: &str,
     value: &str,
 ) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
     use rquickjs::{Array, Function};
@@ -198,7 +199,9 @@ fn run_scene_callback(
         input.set(index, entry)?;
     }
     let adapter: Function = ctx.eval(include_str!("dom_adapter.js"))?;
-    let callback: Function = ctx.eval(embedded_callback)?;
+    let callback: Function = ctx
+        .eval(callback_source)
+        .map_err(|_| "Scene source did not evaluate to a callback")?;
     let staged: Array = adapter
         .call((input, callback, value))
         .map_err(|_| "Fixed clock callback failed")?;

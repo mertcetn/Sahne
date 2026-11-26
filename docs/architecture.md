@@ -629,3 +629,7 @@ In the scripted development probe, the host validates and compiles the embedded 
 ## 71. M4 bounded named scene bindings
 
 The host can send a bounded author-ID to node-ID table during worker initialization. The codec validates entry count, supported names, distinct targets and base revision. The embedded clock worker also checks that it received its expected names. The host grants transaction authority independently. See [Named binding table](m4-scene-transactions.md#named-binding-table).
+
+## 72. M4 manifest-selected script source
+
+The scripted development probe resolves the manifest's script reference from the same validated embedded package used for scene compilation. The host sends the UTF-8 source and its binding table in one bounded initialization frame. The AppContainer worker checks the envelope and evaluates the received source within its existing QuickJS deadline, memory and stack limits. See [Manifest-selected fixture script](m4-scene-transactions.md#manifest-selected-fixture-script).

@@ -26,6 +26,37 @@ fn encode(message: &Message) -> Vec<u8> {
 }
 
 #[test]
+fn scene_program_checks_source_bounds_and_encoding() {
+    let program = |source: String| {
+        message(
+            Body::SceneProgram {
+                targets: BTreeMap::from([("clock".into(), 3)]),
+                source,
+            },
+            2,
+            0,
+        )
+    };
+    let valid = program("x".repeat(MAX_SCRIPT_SOURCE_BYTES));
+    let wire = encode(&valid);
+    assert_eq!(read_frame(&mut wire.as_slice()).unwrap(), Some(valid));
+    for source in [
+        String::new(),
+        "x".repeat(MAX_SCRIPT_SOURCE_BYTES + 1),
+        "a\0b".into(),
+    ] {
+        let mut output = Vec::new();
+        assert!(write_frame(&mut output, &program(source)).is_err());
+        assert!(output.is_empty());
+    }
+    for byte in [0, 0xff] {
+        let mut wire = encode(&program("x".into()));
+        *wire.last_mut().unwrap() = byte;
+        assert!(read_frame(&mut wire.as_slice()).is_err());
+    }
+}
+
+#[test]
 fn scene_binding_table_roundtrips_and_rejects_invalid_entries() {
     let targets = BTreeMap::from([("a".into(), 3), ("b".into(), 5)]);
     let binding = message(

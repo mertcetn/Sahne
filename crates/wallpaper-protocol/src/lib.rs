@@ -50,16 +50,39 @@ pub struct Message {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Body {
-    Hello { api_version: u16 },
-    ProbeResult { denied: u32 },
-    Ping { nonce: u64 },
-    Pong { nonce: u64 },
-    Reject { code: u16, message: String },
-    SceneBatch { edits: Vec<Edit> },
-    SceneAck { revision: u64 },
-    ClockTick { utc_minute: u16 },
+    Hello {
+        api_version: u16,
+    },
+    ProbeResult {
+        denied: u32,
+    },
+    Ping {
+        nonce: u64,
+    },
+    Pong {
+        nonce: u64,
+    },
+    Reject {
+        code: u16,
+        message: String,
+    },
+    SceneBatch {
+        edits: Vec<Edit>,
+    },
+    SceneAck {
+        revision: u64,
+    },
+    ClockTick {
+        utc_minute: u16,
+    },
     ClockReady,
-    SceneBindings { targets: BTreeMap<String, u32> },
+    SceneBindings {
+        targets: BTreeMap<String, u32>,
+    },
+    SceneProgram {
+        targets: BTreeMap<String, u32>,
+        source: String,
+    },
 }
 impl Message {
     /// Check expected envelope state without advancing any host state.
@@ -135,6 +158,11 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
         Body::SceneBindings { targets } => {
             data.push(11);
             scene::encode_bindings(&mut data, message.base_revision, targets)?;
+        }
+        Body::SceneProgram { targets, source } => {
+            data.push(12);
+            scene::encode_bindings(&mut data, message.base_revision, targets)?;
+            scene::encode_script_source(&mut data, source)?;
         }
     }
     if data.len() > MAX_FRAME_BYTES {
@@ -220,6 +248,10 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         9 => Body::ClockReady,
         11 => Body::SceneBindings {
             targets: scene::decode_bindings(&mut data, base_revision)?,
+        },
+        12 => Body::SceneProgram {
+            targets: scene::decode_bindings(&mut data, base_revision)?,
+            source: scene::decode_script_source(&mut data)?,
         },
         _ => return Err(Error::Invalid("unknown message kind")),
     };

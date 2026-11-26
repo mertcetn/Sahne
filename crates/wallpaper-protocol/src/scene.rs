@@ -8,6 +8,35 @@ use wallpaper_scene::{
 pub const SCENE_REJECT_CODE: u16 = 100;
 const MAX_BINDINGS: usize = 64;
 const MAX_BINDING_NAME_BYTES: usize = 64;
+const MAX_SCRIPT_SOURCE_BYTES: usize = 32 * 1024;
+
+fn check_script_size(size: usize) -> Result<()> {
+    if !(1..=MAX_SCRIPT_SOURCE_BYTES).contains(&size) {
+        return Err(Error::Invalid("scene script size outside bounds"));
+    }
+    Ok(())
+}
+
+pub(super) fn encode_script_source(output: &mut Vec<u8>, source: &str) -> Result<()> {
+    check_script_size(source.len())?;
+    if source.contains('\0') {
+        return Err(Error::Invalid("scene script contains a NUL byte"));
+    }
+    output.extend_from_slice(&(source.len() as u16).to_le_bytes());
+    output.extend_from_slice(source.as_bytes());
+    Ok(())
+}
+
+pub(super) fn decode_script_source(input: &mut Decoder<'_>) -> Result<String> {
+    let size = usize::from(input.u16()?);
+    check_script_size(size)?;
+    let source = std::str::from_utf8(input.take(size)?)
+        .map_err(|_| Error::Invalid("scene script is not UTF-8"))?;
+    if source.contains('\0') {
+        return Err(Error::Invalid("scene script contains a NUL byte"));
+    }
+    Ok(source.to_owned())
+}
 
 fn check_binding_header(base_revision: u64, count: usize) -> Result<()> {
     if base_revision != 0 || !(1..=MAX_BINDINGS).contains(&count) {
