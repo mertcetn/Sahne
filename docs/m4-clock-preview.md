@@ -111,4 +111,6 @@ The preview subscribes to `GUID_SESSION_DISPLAY_STATUS` on its owned window. It 
 
 The headless release check passed both the deterministic rollover and the 15:06 → 15:07 UTC transition with pause and resume acknowledgements. Unit tests cover the native display payload and independent pause reasons.
 
-The new subscription needs a live Modern Standby retest. Start the preview with `--example clock --clock-worker-utc --seconds 300`. Sleep and wake while it runs, then check for `SessionDisplayOff(true)` and `SessionDisplayOff(false)` in the log. If the session is locked on wake, the worker should stay paused until unlock. Confirm the current UTC minute after resume.
+To reproduce the Modern Standby test, start the preview with `--example clock --clock-worker-utc --seconds 300`. Sleep and wake while it runs, then check for `SessionDisplayOff(true)` and `SessionDisplayOff(false)` in the log. If the session is locked on wake, the worker should stay paused until unlock. Confirm the current UTC minute after resume.
+
+On November 26, 2026, the live retest of `11ca78a` recorded two Modern Standby entry and exit pairs in the Windows Kernel-Power log. The preview log recorded two display-off/on pairs, each with matching worker pause and resume acknowledgements. The clock advanced from 15:14 to 15:15 UTC after wake, and 15:15 was visible in the D3D12 window. Escape closed the preview, and both processes were absent afterward. Local log at `target/m4-utc-standby-visual/bdef7346aee84d9b9954047b8bfd3466/stderr.log`.
