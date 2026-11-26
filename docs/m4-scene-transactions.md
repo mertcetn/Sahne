@@ -242,9 +242,11 @@ target/release/wallpaper-preview.exe --isolated-script-live $folder --seconds 90
 target/release/wallpaper-preview.exe --check-isolated-script-live $folder
 ```
 
-These development commands use the isolated preparation path. The preview opens only after the scene and bindings pass host validation and the preparation profile is removed. The one-shot mode renders one callback update. The live mode uses the [live package callback contract](m4-timers.md#live-trusted-package-lifecycle-preview). Add `--desktop` to either display command to attach it behind Windows icons. The headless live check uses synthetic lifecycle events. Visible rendering of the isolated script modes still needs local verification, and the G2 gate remains open.
+These development commands use the isolated preparation path. The preview opens only after the scene and bindings pass host validation and the preparation profile is removed. The one-shot mode renders one callback update. The live mode uses the [live package callback contract](m4-timers.md#live-trusted-package-lifecycle-preview). Add `--desktop` to either display command to attach it behind Windows icons. The headless live check uses synthetic lifecycle events. The G2 gate remains open.
 
 The November 26, 2026 run passed 40 headless cases. The isolated live check verified pause, resume, two scene updates and both profile cleanups. A separate isolated live case rejected the second callback, preserved revision 1 and cleaned up both profiles. Local report: `target/script-preview-validation/7855166e64d94c9ba632461c1fc1734c/summary.json`.
+
+On November 26, 2026, the user confirmed that the live counter was visible and advancing behind Windows icons with commit `cc34c05`. Over the 90-second desktop run, the preview consumed 88 scene snapshots and presented 89 frames in one renderer generation. The log recorded eight per-frame and eight per-snapshot lines and verified cleanup of both AppContainer profiles. The run exercised the live desktop mode. Local logs: `target/m4-isolated-script-visual/de6ca43b040441fb8ba0bd280d9ea817/`.
 
 #### Direct package preview on the desktop
 
