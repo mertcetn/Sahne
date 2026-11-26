@@ -53,6 +53,7 @@ fn main() -> Result<()> {
     let mut check_retained_scene = false;
     let mut script_package_folder = None;
     let mut check_script_package = false;
+    let mut check_script_lifecycle = false;
     let mut sandbox_package_folder = None;
     let mut worker_live = None;
     let mut check_worker_live = false;
@@ -83,6 +84,9 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--check-package-intake <absolute-folder> validates and compiles a flat package in AppContainer without rendering or running a script."
+                );
+                println!(
+                    "--check-trusted-script-lifecycle <absolute-folder> checks pause, resume and one script tick without a window."
                 );
                 println!(
                     "--sandboxed-package-preview <absolute-folder> [--desktop] [--seconds 1..3600] displays the AppContainer-compiled static scene in a window or behind Windows icons."
@@ -138,11 +142,14 @@ fn main() -> Result<()> {
                 retained_scene_folder =
                     Some(args.next().ok_or("Missing scene snapshot run folder")?);
             }
-            "--trusted-script-preview" | "--check-trusted-script-preview" => {
+            "--trusted-script-preview"
+            | "--check-trusted-script-preview"
+            | "--check-trusted-script-lifecycle" => {
                 if script_package_folder.is_some() {
                     return Err("Choose one script preview input".into());
                 }
                 check_script_package = arg.starts_with("--check-");
+                check_script_lifecycle = arg == "--check-trusted-script-lifecycle";
                 script_package_folder =
                     Some(args.next().ok_or("Missing trusted script package folder")?);
             }
@@ -203,7 +210,9 @@ fn main() -> Result<()> {
         .map(script_package::prepare)
         .transpose()?;
     if check_script_package {
-        return live_clock::check_package(script_package.ok_or("Missing script preview package")?);
+        let mut package = script_package.ok_or("Missing script preview package")?;
+        package.lifecycle_check = check_script_lifecycle;
+        return live_clock::check_package(package);
     }
     let retained_scene = if let Some(folder) = retained_scene_folder.as_deref() {
         let scene = compiled::load_retained(folder)?;

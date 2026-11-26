@@ -215,7 +215,7 @@ fn supervise(
         (
             wallpaper_scene::decode(&package.scene.encode())?,
             targets.values().copied().collect(),
-            Some(package.program),
+            Some((package.program, package.lifecycle_check)),
         )
     } else {
         (
@@ -230,8 +230,12 @@ fn supervise(
     fs::create_dir_all(&base)?;
     let root = base.join(format!("preview-{}-{session:016x}", std::process::id()));
     let package_mode = program.is_some();
-    let case = if package_mode {
-        "local-script-package"
+    let case = if let Some((_, lifecycle_check)) = &program {
+        if *lifecycle_check {
+            "local-lifecycle-package"
+        } else {
+            "local-script-package"
+        }
     } else {
         match state.mode {
             Mode::Fixture => "scene-timer",
@@ -337,7 +341,7 @@ fn exchange(
     nonce: u64,
     mut host: HostScene,
     state: &ChannelState,
-    program: Option<Body>,
+    program: Option<(Body, bool)>,
 ) -> WorkerResult<()> {
     let mut key = host
         .snapshot_after(None)
@@ -621,13 +625,37 @@ fn exchange_package(
     session: u64,
     mut host: HostScene,
     state: &ChannelState,
-    program: Body,
+    (program, lifecycle_check): (Body, bool),
 ) -> WorkerResult<()> {
     let before = host
         .snapshot_after(None)
         .ok_or("Missing initial package scene")?
         .key;
     send(&mut input, frame(session, 2, 0, program))?;
+    if lifecycle_check {
+        if read_frame(&mut output)? != Some(frame(session, 3, 0, Body::LifecycleReady)) {
+            return Err("Package lifecycle initialization rejected".into());
+        }
+        for (sequence, paused) in [(4, true), (5, false)] {
+            send(
+                &mut input,
+                frame(session, sequence, 0, Body::Lifecycle { paused }),
+            )?;
+            let reply = read_frame(&mut output)?;
+            if reply != Some(frame(session, sequence, 0, Body::LifecycleAck { paused })) {
+                return Err(if paused {
+                    "Package pause callback rejected"
+                } else {
+                    "Package resume callback rejected"
+                }
+                .into());
+            }
+            println!(
+                "Package lifecycle acknowledged: {}.",
+                if paused { "pause" } else { "resume" }
+            );
+        }
+    }
     let batch = read_frame(&mut output)?.ok_or("Missing package scene batch")?;
     let ack = accept_scene_batch(&mut host, batch);
     if ack != frame(session, 1, 0, Body::SceneAck { revision: 1 }) {

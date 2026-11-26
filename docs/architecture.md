@@ -765,3 +765,7 @@ The sandboxed package preview consumes the same validated intake result as the h
 ## 105. M4 sandboxed static package desktop attachment
 
 The static package preview can pass the verified scene and image data to the existing Windows desktop attachment. Package validation and helper cleanup complete before Explorer attachment. When the surface is recreated, the application uses its retained scene and pixels.
+
+## 106. M4 preview bridge for trusted lifecycle checks
+
+The headless preview can route a trusted package to the retained lifecycle worker. Its host bridge checks readiness and both synthetic lifecycle acknowledgements before admitting one tick through the existing scene transaction path. A failed callback ends the exchange and the host cleans up the worker profile. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).

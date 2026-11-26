@@ -36,6 +36,8 @@ $cases = @(
     @{ Name = 'dom-over-limit-caught'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; try { for (let i = 0; i < 255; i++) document.getElementById("status"); } catch (error) { if (!(error instanceof RangeError)) throw error; } }' }
     @{ Name = 'dom-at-limit'; Changed = 'true'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; for (let i = 0; i < 254; i++) document.getElementById("status"); }' }
     @{ Name = 'missing-script' }
+    @{ Name = 'lifecycle-promise'; Lifecycle = $true; Changed = 'true'; Script = '(() => { let phase = 0; return { pause() { return Promise.resolve().then(() => { phase = 1; }); }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Resumed"; } }; })()' }
+    @{ Name = 'lifecycle-resume-rejected'; Lifecycle = $true; Script = '({ pause() {}, resume() { return Promise.reject(new Error("private-fixture-error")); }, tick(document) { document.getElementById("status").textContent = "Unexpected"; } })' }
     @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; HtmlBytes = 128 * 1024 }
     @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = 'validation' }
     @{ Name = 'intake-missing-script'; Intake = $true; Reject = 'validation' }
@@ -78,7 +80,9 @@ $results = foreach ($case in $cases) {
         }
     }
 
-    $mode = if ($case.ContainsKey('Intake')) { '--check-package-intake' } else { '--check-trusted-script-preview' }
+    $mode = if ($case.ContainsKey('Intake')) { '--check-package-intake' }
+        elseif ($case.ContainsKey('Lifecycle')) { '--check-trusted-script-lifecycle' }
+        else { '--check-trusted-script-preview' }
     $result = Invoke-SahneGuardedProcess -FilePath $preview -ArgumentList @($mode) `
         -PackageFolder $inputFolder -WorkingDirectory $repo -OutputDirectory (Join-Path $run "logs/$($case.Name)")
     $stdout = Read-SahneBoundedLog -Path $result.StdoutPath
@@ -99,6 +103,19 @@ $results = foreach ($case in $cases) {
             $outputVerified = $stdout -match "(?m)^Host independently validated flat output\. Nodes: [1-9][0-9]*\. Images: $imageCount\.\r?$"
             $passed = $passed -and $result.ExitCode -eq 0 -and $validated -and $outputVerified -and
                 [string]::IsNullOrWhiteSpace($stderr)
+        }
+    }
+    elseif ($case.ContainsKey('Lifecycle')) {
+        $pause = $stdout.IndexOf('Package lifecycle acknowledged: pause.')
+        $resume = $stdout.IndexOf('Package lifecycle acknowledged: resume.')
+        $passed = $passed -and $cleanupCount -eq 1 -and $pause -ge 0
+        if ($case.ContainsKey('Changed')) {
+            $passed = $passed -and $resume -gt $pause -and $result.ExitCode -eq 0 -and
+                $stdout -match ($accepted.Replace('(true|false)', $case.Changed)) -and [string]::IsNullOrWhiteSpace($stderr)
+        }
+        else {
+            $passed = $passed -and $resume -eq -1 -and $result.ExitCode -ne 0 -and
+                $stdout -notmatch $accepted -and $stderr.Contains('Package resume callback rejected')
         }
     }
     elseif ($case.ContainsKey('Changed')) {

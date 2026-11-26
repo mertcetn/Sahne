@@ -93,6 +93,17 @@ The local release probe acknowledged pause, resume and one edit in that order. A
 
 ## Promise jobs in retained callbacks
 
+The Windows preview executable also exposes the trusted package lifecycle sequence as a headless check.
+
+```powershell
+cargo build --release -p wallpaper-preview -p wallpaper-sandbox-probe --locked
+target/release/wallpaper-preview.exe --check-trusted-script-lifecycle $folder
+```
+
+This command uses the preview's scene bridge and profile cleanup path. It checks worker readiness, synthetic pause and resume acknowledgements, one tick and terminal scene rollback. If a lifecycle callback fails, the command stops before accepting a tick. The check uses the callback object described above. General interval registration and Windows lifecycle delivery to package callbacks remain open.
+
+The November 26, 2026 regression verified that pause finished its Promise job before resume, that the tick observed the resumed state, and that a rejected resume returned a fixed error with no accepted scene update. Both cases verified worker profile cleanup. Local report: `target/script-preview-validation/5f3d8ce2a1a64f53acdcd54ab67d2fe0/summary.json`.
+
 The registered and continuous clock callbacks and the trusted package lifecycle probe use the same bounded Promise job drain. A lifecycle callback runs at most 64 jobs within its own 100 ms deadline. It must finish with an empty queue and fulfill any Promise it returns before the worker acknowledges the event. A tick follows the same rules before its DOM writes are collected. A rejection reported as unhandled fails the invocation. The trusted package's initial callback object must be available synchronously with no queued jobs.
 
 A failed lifecycle callback sends a bounded rejection and terminates the worker session. Its pending jobs cannot run in a subsequent invocation. The host retains the last accepted scene and revision.
