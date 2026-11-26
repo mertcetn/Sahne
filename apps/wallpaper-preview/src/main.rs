@@ -91,6 +91,9 @@ fn main() -> Result<()> {
                     "--isolated-script-preview <absolute-folder> displays one script update. --isolated-script-live <absolute-folder> runs a package timer with Windows lifecycle callbacks. Both use separate AppContainer workers for preparation and execution. Add --desktop or --seconds N, or use --check-isolated-script-preview / --check-isolated-script-live for a headless check."
                 );
                 println!(
+                    "--check-isolated-script-lifecycle <absolute-folder> checks synthetic pause, resume and bounded ticks with separate AppContainer workers."
+                );
+                println!(
                     "--check-trusted-script-lifecycle <absolute-folder> checks pause, resume and one script tick without a window."
                 );
                 println!(
@@ -161,12 +164,13 @@ fn main() -> Result<()> {
             | "--isolated-script-live"
             | "--check-isolated-script-preview"
             | "--check-isolated-script-live"
+            | "--check-isolated-script-lifecycle"
             | "--check-trusted-script-lifecycle" => {
                 if script_package_folder.is_some() {
                     return Err("Choose one script preview input".into());
                 }
                 check_script_package = arg.starts_with("--check-");
-                check_script_lifecycle = arg == "--check-trusted-script-lifecycle";
+                check_script_lifecycle = arg.ends_with("-lifecycle");
                 live_script_lifecycle = arg.ends_with("-live");
                 isolated_script_preparation =
                     arg.starts_with("--isolated-") || arg.starts_with("--check-isolated-");

@@ -98,9 +98,12 @@ The Windows preview executable also exposes the trusted package lifecycle sequen
 ```powershell
 cargo build --release -p wallpaper-preview -p wallpaper-sandbox-probe --locked
 target/release/wallpaper-preview.exe --check-trusted-script-lifecycle $folder
+target/release/wallpaper-preview.exe --check-isolated-script-lifecycle $folder
 ```
 
-This command uses the preview's scene bridge and profile cleanup path. It checks worker readiness, synthetic pause and resume acknowledgements, one tick and terminal scene rollback. If a lifecycle callback fails, the command stops before accepting a tick. The check uses the callback object described above. General interval registration and Windows lifecycle delivery to package callbacks remain open.
+These checks use the preview's scene bridge and profile cleanup path. They check worker readiness, synthetic pause and resume acknowledgements, one tick by default and terminal scene rollback. If a lifecycle callback fails, the check stops before accepting a tick. Both variants use the callback object described above.
+
+The isolated variant prepares the package in a separate AppContainer and checks that its scene and bindings agree before launching the lifecycle worker. It accepts the same callback object and timer options. The headless regression exercises three ordered ticks and the rejection of an out-of-range tick count, with cleanup of both AppContainer profiles.
 
 The November 26, 2026 regression verified that pause finished its Promise job before resume, that the tick observed the resumed state, and that a rejected resume returned a fixed error with no accepted scene update. Both cases verified worker profile cleanup. Local report: `target/script-preview-validation/5f3d8ce2a1a64f53acdcd54ab67d2fe0/summary.json`.
 

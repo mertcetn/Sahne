@@ -811,3 +811,7 @@ The one-shot and retained script paths initialize the DOM adapter before evaluat
 ## 115. M4 package worker failure replies
 
 The package scene bridge checks the session, sequence and base revision before accepting any worker response. A script failure closes the transaction and preserves the current scene without writing back to the departing worker. A rejected scene batch still receives a rejection reply. The same checks apply to one-shot, scheduled and live package execution.
+
+## 116. M4 isolated scheduled lifecycle check
+
+The isolated lifecycle check uses the same preparation helper and host binding checks as the isolated preview. A separate execution worker runs the bounded synthetic lifecycle and tick sequence. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).

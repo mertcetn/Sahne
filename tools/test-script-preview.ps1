@@ -68,6 +68,8 @@ $cases = @(
     @{ Name = 'isolated-script-runtime-rejected'; Isolated = $true; Script = '() => { throw new Error("private-fixture-error"); }'; RuntimeReject = $true }
     @{ Name = 'isolated-script-too-many-bindings'; Isolated = $true; Targets = 33; Script = '() => {}'; Reject = 'script preparation' }
     @{ Name = 'isolated-script-missing-source'; Isolated = $true; Reject = 'validation' }
+    @{ Name = 'isolated-script-scheduled'; Isolated = $true; Lifecycle = $true; Ticks = 3; Changed = 'true'; Script = '(() => { let calls = 0; return { intervalMs: 16, tickCount: 3, pause() {}, resume() {}, tick(document) { const node = document.getElementById("status"); if (calls > 0 && node.textContent !== "Tick " + calls) throw new Error("private-fixture-error"); node.textContent = "Tick " + (++calls); } }; })()' }
+    @{ Name = 'isolated-script-invalid-timer'; Isolated = $true; Lifecycle = $true; InvalidDelay = $true; Script = '({ intervalMs: 16, tickCount: 4, pause() {}, resume() {}, tick() {} })' }
     @{ Name = 'isolated-script-live'; Isolated = $true; Live = $true; Script = '(() => { let phase = 0, calls = 0; return { intervalMs: 32, pause() { phase = 1; }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Tick " + (++calls); } }; })()' }
     @{ Name = 'isolated-script-live-rejected'; Isolated = $true; Live = $true; RuntimeReject = $true; Script = '(() => { let calls = 0; return { intervalMs: 32, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Tick " + (++calls); if (calls === 2) throw new Error("private-fixture-error"); } }; })()' }
 )
@@ -119,6 +121,7 @@ $results = foreach ($case in $cases) {
 
     $mode = if ($case.ContainsKey('Intake')) { '--check-package-intake' }
         elseif ($case.ContainsKey('Isolated') -and $case.ContainsKey('Live')) { '--check-isolated-script-live' }
+        elseif ($case.ContainsKey('Isolated') -and $case.ContainsKey('Lifecycle')) { '--check-isolated-script-lifecycle' }
         elseif ($case.ContainsKey('Isolated')) { '--check-isolated-script-preview' }
         elseif ($case.ContainsKey('Lifecycle')) { '--check-trusted-script-lifecycle' }
         elseif ($case.ContainsKey('Live')) { '--check-trusted-script-live' }
@@ -130,6 +133,10 @@ $results = foreach ($case in $cases) {
     $cleanupCount = [regex]::Matches($stdout, '(?m)^Package worker profile cleanup verified\.\r?$').Count
     $accepted = '(?m)^Live package transaction verified; scene changed=(true|false); worker cleaned up\.\r?$'
     $passed = $result.Completion -eq 'Exited' -and "$stdout$stderr" -notmatch 'private-fixture-error'
+    if ($case.ContainsKey('Isolated')) {
+        $helperCount = [regex]::Matches($stdout, '(?m)^Package helper profile cleanup verified\.\r?$').Count
+        $passed = $passed -and $helperCount -eq 1
+    }
     if ($case.ContainsKey('Intake')) {
         $cleanupCount = [regex]::Matches($stdout, '(?m)^Package helper profile cleanup verified\.\r?$').Count
         $validated = $stdout -match '(?m)^Package validated and compiled in AppContainer\.\r?$'
@@ -145,9 +152,7 @@ $results = foreach ($case in $cases) {
                 [string]::IsNullOrWhiteSpace($stderr)
         }
     }
-    elseif ($case.ContainsKey('Isolated')) {
-        $helperCount = [regex]::Matches($stdout, '(?m)^Package helper profile cleanup verified\.\r?$').Count
-        $passed = $passed -and $helperCount -eq 1
+    elseif ($case.ContainsKey('Isolated') -and -not $case.ContainsKey('Lifecycle')) {
         $successPattern = if ($case.ContainsKey('Live')) { '(?m)^Live package pause, resume and two updates verified\.\r?$' }
             else { $accepted.Replace('(true|false)', 'true') }
         if ($case.ContainsKey('Reject')) {
