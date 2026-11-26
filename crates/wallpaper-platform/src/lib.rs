@@ -5,6 +5,8 @@ pub mod package_directory;
 #[cfg(windows)]
 pub mod package_open;
 #[cfg(windows)]
+pub mod session_lifecycle;
+#[cfg(windows)]
 mod desktop {
     use std::{io, ptr};
     use windows_sys::Win32::{

@@ -33,6 +33,10 @@ struct DeviceLost {
 enum AppEvent {
     DeviceLost(DeviceLost),
     ClockUpdate,
+    WindowsLifecycle {
+        generation: u64,
+        event: wallpaper_platform::session_lifecycle::Event,
+    },
 }
 
 fn main() -> Result<()> {
@@ -218,6 +222,7 @@ fn main() -> Result<()> {
         motion,
         clock,
         live_clock: None,
+        clock_pause: live_clock::PauseState::default(),
         start_live_clock: worker_live,
         state: None,
         desktop: None,
@@ -284,6 +289,7 @@ struct App {
     motion: Option<motion::Playback>,
     clock: Option<clock::Clock>,
     live_clock: Option<live_clock::Bridge>,
+    clock_pause: live_clock::PauseState,
     start_live_clock: Option<live_clock::Mode>,
     state: Option<State>,
     desktop: Option<wallpaper_platform::Desktop>,
@@ -407,7 +413,7 @@ impl App {
             };
             let window = Arc::new(events.create_window(attrs)?);
             self.desktop = desktop;
-            pollster::block_on(State::new(
+            let mut state = pollster::block_on(State::new(
                 window,
                 events,
                 self.proxy.clone(),
@@ -415,7 +421,25 @@ impl App {
                 !self.loss_test.complete(),
                 self.compiled_example,
                 self.test_pixels,
-            ))
+            ))?;
+            if self.start_live_clock == Some(live_clock::Mode::Utc)
+                || self
+                    .live_clock
+                    .as_ref()
+                    .is_some_and(live_clock::Bridge::is_utc)
+            {
+                let proxy = self.proxy.clone();
+                let generation = self.generation;
+                state._session_lifecycle =
+                    Some(wallpaper_platform::session_lifecycle::Subscription::new(
+                        Arc::clone(&state.window),
+                        move |event| {
+                            let _ =
+                                proxy.send_event(AppEvent::WindowsLifecycle { generation, event });
+                        },
+                    )?);
+            }
+            Ok(state)
         })();
         match result {
             Ok(state) => {
@@ -436,8 +460,10 @@ impl App {
                     );
                 }
                 state.window.request_redraw();
+                self.clock_pause.suspended = false;
+                self.clock_pause.minimized = state.window.is_minimized() == Some(true);
                 if let Some(bridge) = &self.live_clock {
-                    bridge.set_paused(state.window.is_minimized() == Some(true));
+                    bridge.set_paused(self.clock_pause.paused());
                 }
                 let zero =
                     state.window.inner_size().width == 0 || state.window.inner_size().height == 0;
@@ -464,6 +490,7 @@ impl ApplicationHandler<AppEvent> for App {
         }
     }
     fn suspended(&mut self, events: &ActiveEventLoop) {
+        self.clock_pause.suspended = true;
         if let Some(bridge) = &self.live_clock {
             bridge.set_paused(true);
         }
@@ -475,14 +502,25 @@ impl ApplicationHandler<AppEvent> for App {
         self.next_recreate = None;
     }
     fn user_event(&mut self, events: &ActiveEventLoop, event: AppEvent) {
-        let AppEvent::DeviceLost(loss) = event else {
-            self.apply_live_update();
-            return;
-        };
-        if loss.generation == self.generation && self.state.is_some() {
-            self.loss_test
-                .callback(loss.generation, loss.explicitly_destroyed);
-            self.recover(events, &loss.reason);
+        match event {
+            AppEvent::ClockUpdate => self.apply_live_update(),
+            AppEvent::WindowsLifecycle { generation, event }
+                if generation == self.generation && self.state.is_some() =>
+            {
+                self.clock_pause.apply(event);
+                if let Some(bridge) = &self.live_clock {
+                    bridge.set_paused(self.clock_pause.paused());
+                }
+                eprintln!("Windows clock lifecycle: {event:?}");
+            }
+            AppEvent::DeviceLost(loss)
+                if loss.generation == self.generation && self.state.is_some() =>
+            {
+                self.loss_test
+                    .callback(loss.generation, loss.explicitly_destroyed);
+                self.recover(events, &loss.reason);
+            }
+            _ => {}
         }
     }
     fn about_to_wait(&mut self, events: &ActiveEventLoop) {
@@ -617,10 +655,11 @@ impl ApplicationHandler<AppEvent> for App {
                     Ok(())
                 }
                 WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
-                    if let Some(bridge) = &self.live_clock
-                        && let Some(minimized) = state.window.is_minimized()
-                    {
-                        bridge.set_paused(minimized);
+                    if let Some(minimized) = state.window.is_minimized() {
+                        self.clock_pause.minimized = minimized;
+                        if let Some(bridge) = &self.live_clock {
+                            bridge.set_paused(self.clock_pause.paused());
+                        }
                     }
                     eprintln!(
                         "Surface event: size={:?} scale={}",
@@ -675,7 +714,7 @@ impl ApplicationHandler<AppEvent> for App {
                                 let _ = proxy.send_event(AppEvent::ClockUpdate);
                             }) {
                                 Ok(bridge) => {
-                                    bridge.set_paused(state.window.is_minimized() == Some(true));
+                                    bridge.set_paused(self.clock_pause.paused());
                                     self.live_clock = Some(bridge);
                                 }
                                 Err(error) => eprintln!("Clock worker could not start: {error}"),
@@ -710,6 +749,7 @@ impl ApplicationHandler<AppEvent> for App {
     }
 }
 struct State {
+    _session_lifecycle: Option<wallpaper_platform::session_lifecycle::Subscription>,
     pixel_pending: bool,
     surface_retries: u8,
     surface: wgpu::Surface<'static>,
@@ -922,6 +962,7 @@ impl State {
                 None
             };
         Ok(Self {
+            _session_lifecycle: None,
             pixel_pending: test_pixels,
             surface_retries: 0,
             surface,

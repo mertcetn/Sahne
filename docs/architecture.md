@@ -685,3 +685,7 @@ The Windows developer probe can retain a callback object from a trusted flat pac
 ## 85. M4 Windows UTC preview lifecycle bridge
 
 The continuous UTC preview forwards minimize and restore transitions to its retained AppContainer clock callback. The host correlates lifecycle frames separately from scene ticks and checks the current scene revision. Once paused, the worker waits with no scheduled ticks. Resume triggers a fresh UTC sample. Callback and IPC response deadlines apply during transitions. See [Continuous UTC pause and resume](m4-clock-preview.md#continuous-utc-pause-and-resume).
+
+## 86. M4 Windows session and power notifications
+
+The continuous Windows UTC preview subscribes its owned window to lock and unlock notifications for the current session and observes system suspend and automatic resume broadcasts. The native adapter forwards only those events to the preview. The preview tracks each pause reason independently, so clearing one reason cannot resume the worker while another applies. See [Windows lock and sleep notifications](m4-clock-preview.md#windows-lock-and-sleep-notifications).

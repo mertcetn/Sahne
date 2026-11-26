@@ -31,6 +31,53 @@ pub enum Mode {
     Utc,
 }
 
+#[derive(Default)]
+pub struct PauseState {
+    pub minimized: bool,
+    pub suspended: bool,
+    session_locked: bool,
+    system_suspended: bool,
+}
+
+impl PauseState {
+    pub fn apply(&mut self, event: wallpaper_platform::session_lifecycle::Event) {
+        use wallpaper_platform::session_lifecycle::Event;
+        match event {
+            Event::SessionLocked(locked) => self.session_locked = locked,
+            Event::SystemSuspended(suspended) => self.system_suspended = suspended,
+        }
+    }
+
+    pub fn paused(&self) -> bool {
+        self.minimized || self.suspended || self.session_locked || self.system_suspended
+    }
+}
+
+#[cfg(test)]
+mod pause_tests {
+    use super::PauseState;
+    use wallpaper_platform::session_lifecycle::Event;
+
+    #[test]
+    fn clearing_one_pause_reason_does_not_resume_clock() {
+        let mut state = PauseState {
+            minimized: true,
+            ..PauseState::default()
+        };
+        state.apply(Event::SessionLocked(true));
+        state.apply(Event::SystemSuspended(true));
+        state.apply(Event::SystemSuspended(false));
+        assert!(state.paused());
+        state.minimized = false;
+        assert!(state.paused());
+        state.suspended = true;
+        state.apply(Event::SessionLocked(false));
+        assert!(state.paused());
+        state.suspended = false;
+        assert!(!state.paused());
+    }
+}
+
 enum Signal {
     Deadline(Option<Instant>),
     Finished(WorkerResult<()>),
@@ -60,6 +107,9 @@ pub struct Bridge {
 }
 
 impl Bridge {
+    pub fn is_utc(&self) -> bool {
+        self.state.mode == Mode::Utc
+    }
     pub fn start(mode: Mode, notify: impl Fn() + Send + Sync + 'static) -> Result<Self> {
         let (signal, receiver) = mpsc::sync_channel(2);
         let state = Arc::new(ChannelState {

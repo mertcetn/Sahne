@@ -91,8 +91,16 @@ The continuous Windows window mode checks whether the window is minimized on res
 
 The headless UTC command exercises the shared bridge, including a pause longer than the eight-second IPC response deadline, resume and subsequent minute publication. On November 26, 2026, the release check observed 11:17 → 11:18 UTC, both lifecycle acknowledgements and worker cleanup. Three AppContainer controls and the headless rollover fixture passed. Local regression report at `target/sandbox-validation/20549facfa6e41cf9387c42c40775ede/`.
 
-During an idle pause, an unexpected worker exit is detected when the next exchange starts. Closing the preview still cleans up the profile. This development path covers the fixed clock callback. Windows session lock and sleep delivery and integration with local package scripts remain open.
+During an idle pause, an unexpected worker exit is detected when the next exchange starts. Closing the preview still cleans up the profile. This development path covers the fixed clock callback. Integration with local package scripts remains open.
 
 For the Windows visual check, run `wallpaper-preview.exe --example clock --clock-worker-utc --seconds 120`. After the first accepted time appears, minimize the preview and leave it minimized across a UTC minute boundary. Restore it and confirm that the window shows the current UTC minute. The log should show a pause acknowledgement, a resume acknowledgement and the refreshed time in that order.
 
 On November 26, 2026, source `540a670` displayed 11:24 UTC before minimization in the 960×600 D3D12 window. The worker acknowledged pause and published no new minute while the window stayed minimized past 11:25 UTC. On restore, the worker acknowledged resume and the window displayed 11:25 UTC. Escape closed the preview. The log recorded four presentations in one generation, and both processes were absent after closure. Local log at `target/m4-utc-pause-visual/d7b9b11dcd9c4974b0fbe6f6f4b96490/stderr.log`.
+
+### Windows lock and sleep notifications
+
+The continuous UTC window subscribes to lock and unlock notifications for the current Windows session. It also observes system suspend and automatic resume messages. The preview combines those states with minimization and framework suspension. The worker resumes after all active pause reasons clear. Windows events are forwarded to the application event loop and the worker receives the latest effective state. The subscription is scoped to the owned preview window and is removed when it is torn down. The existing pinned Windows bindings provide these APIs. [Windows session notifications](https://learn.microsoft.com/en-us/windows/win32/termserv/wm-wtssession-change) · [Windows power notifications](https://learn.microsoft.com/en-us/windows/win32/power/wm-powerbroadcast)
+
+Windows unit tests cover message classification and overlapping pause reasons. The release headless checks passed both the deterministic rollover and the 11:31 → 11:32 UTC transition with pause and resume acknowledgements.
+
+The native notification path needs a live lock/unlock and sleep/wake check. Start the preview with `--example clock --clock-worker-utc --seconds 300` and leave it running during the test. After each transition, compare the Windows event and worker acknowledgement in the log. If sleep is followed by a lock screen, the clock should wait for unlock before resuming. Check that the preview displays the current UTC minute after resume.
