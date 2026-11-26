@@ -1,12 +1,14 @@
 use super::*;
 
+pub(crate) const MAX_PATH_BYTES: usize = 240;
+
 /// Portable ASCII relative path. Slash-separated, exact-case lookup, no normalization.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RelativePath(String);
 impl RelativePath {
     pub fn parse(value: &str) -> Result<Self> {
         let invalid = || diagnostic(ErrorCode::InvalidPath);
-        if value.is_empty() || value.len() > 240 {
+        if value.is_empty() || value.len() > MAX_PATH_BYTES {
             return Err(invalid());
         }
         let mut count = 0;

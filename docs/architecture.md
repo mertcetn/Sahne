@@ -741,3 +741,7 @@ The direct package supervisor reports successful worker profile cleanup before r
 ## 99. M4 bounded capture before package parsing
 
 Windows folder collection can return owned source bytes after handle-relative filesystem checks and bounded reads. Manifest decoding, source reference checks and package entry-set validation are deferred to a consuming operation. The trusted callers perform that operation locally. The separation provides an intake boundary for a future restricted helper. See [Bounded snapshot from open readers](m3-manifest.md#bounded-snapshot-from-open-readers).
+
+## 100. M4 bounded package snapshot stream
+
+The package snapshot has a versioned stream encoding for moving opaque file bytes across a process boundary. The decoder checks path lengths, entry counts and per-file and aggregate budgets before reading the corresponding payloads. The exchange owner supplies the deadline. See [Bounded snapshot from open readers](m3-manifest.md#bounded-snapshot-from-open-readers).

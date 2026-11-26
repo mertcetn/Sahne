@@ -7,6 +7,16 @@ use std::{
     io::{self, Read},
 };
 
+mod wire;
+
+fn file_limit(path: &RelativePath, remaining: usize) -> usize {
+    remaining.min(if path.as_str() == "manifest.json" {
+        MAX_MANIFEST_BYTES
+    } else {
+        MAX_FILE_BYTES
+    })
+}
+
 #[derive(Debug)]
 pub enum SnapshotError {
     Package(Diagnostic),
@@ -76,12 +86,7 @@ impl PackageSnapshot {
                 error.entry_index = Some(index);
                 SnapshotError::Package(error)
             })?;
-            let file_limit = if relative.as_str() == "manifest.json" {
-                MAX_MANIFEST_BYTES
-            } else {
-                MAX_FILE_BYTES
-            };
-            let limit = remaining.min(file_limit);
+            let limit = file_limit(&relative, remaining);
             let mut bytes = Vec::new();
             loop {
                 // The extra byte distinguishes an exact fit from an oversized stream.
