@@ -141,7 +141,7 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Visually verify a [real UTC minute change in the continuous AppContainer preview](m4-clock-preview.md#continuous-utc-visual-result).
 - [x] Validate native manifests and compile flat HTML/CSS and supported PNGs in the [AppContainer intake check](m3-manifest.md#windows-appcontainer-intake-check), with independent host scene and pixel validation.
 - [x] Visually verify the [sandboxed static package window](m3-manifest.md#windows-sandboxed-package-preview) with text and a PNG.
-- [ ] Visually verify the sandboxed static package behind Windows icons and check that idle content stops redrawing.
+- [x] Visually verify the [sandboxed static package behind Windows icons](m3-manifest.md#windows-sandboxed-package-preview) and observe one frame in a 15-second idle run.
 - [ ] Integrate package/resource validation and restricted helper processing for untrusted parsing/media/font operations before accepting those inputs.
 - [ ] Re-run the complete sandbox failure suite through the integrated content path.
 
