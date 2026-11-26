@@ -50,6 +50,14 @@ The registered timer probe logged cancellation and no dispatch at the former dea
 
 The `scene-timer-registration` fixture now stores its registered callback in one QuickJS context for the three acknowledged ticks. Each invocation gets a fresh 100 ms interrupt deadline and uses the same bounded runtime. The DOM values are initialized from acknowledged bindings for that invocation. The callback closes over a private counter and calls its scoped `clearInterval` on the third invocation. The worker checks the cancellation flag before accepting the sequence as complete and sends the existing cancellation request after the corresponding scene acknowledgement.
 
-This is a single-handle development fixture with an embedded script. General user timer handles and lifecycle event delivery remain open. [QuickJS context globals](https://docs.rs/rquickjs/0.14.0/rquickjs/struct.Ctx.html#method.globals)
+This is a single-handle development fixture with an embedded script. General user timer handles remain open. [QuickJS context globals](https://docs.rs/rquickjs/0.14.0/rquickjs/struct.Ctx.html#method.globals)
 
 The retained interval, original interval, JavaScript timer, scripted scene and interrupt probes passed with five profile cleanups. The headless live rollover check also passed. Local report at `target/sandbox-validation/09af0234661c443586d9acc035ebe91f/`.
+
+## Pause and resume callbacks over IPC
+
+The `scene-timer-registration` fixture delivers pause and resume to the retained QuickJS context. Protocol kinds 17 and 18 carry the lifecycle event and acknowledgement. Their single state byte is 1 for pause or 0 for resume. The fixture uses sequence 4 for pause and 5 for resume, both at base revision zero, and verifies the full envelope and state for each reply.
+
+The host pauses its queue before notifying the worker. The worker calls the matching JavaScript function under the existing per-callback deadline and acknowledges completion. After the resume acknowledgement, the host dispatches the overdue interval once and schedules its next deadline from that dispatch. The embedded JavaScript checks that pause precedes resume and that both occur before any timer call. Lifecycle callbacks in this fixture stage no DOM edits. Connecting operating system lifecycle events and exposing the callbacks to local package scripts remain open.
+
+The release probe logged both JavaScript acknowledgements and verified three subsequent clock revisions, cancellation and profile cleanup. Four AppContainer controls and the headless live rollover also passed. Local report at `target/sandbox-validation/52db4c027ea4473ea91eb01632cbe1f2/`.

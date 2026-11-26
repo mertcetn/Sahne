@@ -673,3 +673,7 @@ After the final acknowledged tick, the interval fixture requests cancellation of
 ## 82. M4 retained JavaScript interval callback
 
 The registered interval fixture retains its JavaScript callback in one worker context and applies a fresh execution deadline for each invocation. The callback's private counter calls the scoped cancellation function on its third invocation. The worker sends the cancellation after the corresponding scene revision is acknowledged. See [Retained callback and script-driven cancellation](m4-timers.md#retained-callback-and-script-driven-cancellation).
+
+## 83. M4 JavaScript pause and resume delivery
+
+The registered interval fixture sends host pause and resume transitions to the retained worker context. The worker acknowledges each transition after its bounded callback completes. The host dispatches the first overdue tick after the resume acknowledgement, then schedules from the actual dispatch instant. See [Pause and resume callbacks over IPC](m4-timers.md#pause-and-resume-callbacks-over-ipc).

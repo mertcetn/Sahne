@@ -55,7 +55,10 @@ fn format_minute(minute: u16) -> String {
     format!("{:02}:{:02}", minute / 60, minute % 60)
 }
 
-fn resumed_timer(delay: Duration) -> Result<(Timers, wallpaper_scene::timer::TimerId)> {
+fn resumed_timer(
+    delay: Duration,
+    mut transition: impl FnMut(bool) -> Result<()>,
+) -> Result<(Timers, wallpaper_scene::timer::TimerId)> {
     let start = Instant::now();
     let mut timers = Timers::new(start);
     let id = timers
@@ -64,6 +67,7 @@ fn resumed_timer(delay: Duration) -> Result<(Timers, wallpaper_scene::timer::Tim
     timers
         .set_paused(start, true)
         .map_err(|_| "Could not pause timer")?;
+    transition(true)?;
     std::thread::sleep(delay * 4);
     let resumed = Instant::now();
     if timers.next_wake().is_some()
@@ -77,15 +81,17 @@ fn resumed_timer(delay: Duration) -> Result<(Timers, wallpaper_scene::timer::Tim
     timers
         .set_paused(resumed, false)
         .map_err(|_| "Could not resume timer")?;
+    transition(false)?;
+    let dispatched = Instant::now();
     if timers
-        .take_due(resumed)
+        .take_due(dispatched)
         .map_err(|_| "Could not dispatch resumed timer")?
         != Some(id)
         || timers
-            .take_due(resumed)
+            .take_due(dispatched)
             .map_err(|_| "Could not check pending timer")?
             .is_some()
-        || timers.next_wake() != resumed.checked_add(delay)
+        || timers.next_wake() != dispatched.checked_add(delay)
     {
         return Err("Timer did not dispatch exactly once after resume".into());
     }
@@ -307,7 +313,7 @@ pub fn read_response(
         Color([255; 4])
     };
     let mut timer = match mode {
-        Mode::Timer => Some(resumed_timer(MIN_DELAY)?),
+        Mode::Timer => Some(resumed_timer(MIN_DELAY, |_| Ok(()))?),
         Mode::RegisteredTimer => {
             let registration = read_frame(output)?.ok_or(MissingFrame("interval registration"))?;
             registration.check_context(session, 3, 0)?;
@@ -317,7 +323,19 @@ pub fn read_response(
             if delay_ms > 64 {
                 return Err("Interval exceeds the fixed probe's duration budget".into());
             }
-            let timer = resumed_timer(Duration::from_millis(u64::from(delay_ms)))?;
+            let timer = resumed_timer(Duration::from_millis(u64::from(delay_ms)), |paused| {
+                let sequence = lifecycle_sequence(paused);
+                requests
+                    .try_send(envelope(session, sequence, Body::Lifecycle { paused }))
+                    .map_err(|_| "Lifecycle writer queue unavailable")?;
+                let ack = read_frame(output)?.ok_or(MissingFrame("lifecycle acknowledgement"))?;
+                if ack != envelope(session, sequence, Body::LifecycleAck { paused }) {
+                    return Err("Unexpected lifecycle acknowledgement".into());
+                }
+                let event = if paused { "pause" } else { "resume" };
+                println!("JavaScript lifecycle acknowledged: {event}.");
+                Ok(())
+            })?;
             println!("Worker interval registered with host: {delay_ms} ms.");
             Some(timer)
         }
@@ -547,6 +565,18 @@ pub fn worker(
             output,
             envelope(session, 3, Body::RegisterInterval { delay_ms }),
         )?;
+        for paused in [true, false] {
+            let sequence = lifecycle_sequence(paused);
+            let event = read_frame(input)?.ok_or(MissingFrame("lifecycle event"))?;
+            if event != envelope(session, sequence, Body::Lifecycle { paused }) {
+                return Err("Unexpected lifecycle event".into());
+            }
+            callback.lifecycle(paused)?;
+            send(
+                output,
+                envelope(session, sequence, Body::LifecycleAck { paused }),
+            )?;
+        }
         Some(callback)
     } else {
         None
@@ -703,6 +733,10 @@ pub fn worker(
             },
         ),
     )
+}
+
+fn lifecycle_sequence(paused: bool) -> u64 {
+    if paused { 4 } else { 5 }
 }
 
 fn send(output: &mut impl Write, message: impl std::borrow::Borrow<Message>) -> Result<()> {

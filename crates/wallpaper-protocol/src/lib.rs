@@ -81,6 +81,12 @@ pub enum Body {
     },
     CancelInterval,
     IntervalCancelled,
+    Lifecycle {
+        paused: bool,
+    },
+    LifecycleAck {
+        paused: bool,
+    },
     SceneBindings {
         targets: BTreeMap<String, u32>,
     },
@@ -168,6 +174,8 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
         }
         Body::CancelInterval => data.push(15),
         Body::IntervalCancelled => data.push(16),
+        Body::Lifecycle { paused } => data.extend_from_slice(&[17, u8::from(*paused)]),
+        Body::LifecycleAck { paused } => data.extend_from_slice(&[18, u8::from(*paused)]),
         Body::SceneBindings { targets } => {
             data.push(11);
             scene::encode_bindings(&mut data, message.base_revision, targets)?;
@@ -274,6 +282,12 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         }
         15 => Body::CancelInterval,
         16 => Body::IntervalCancelled,
+        17 => Body::Lifecycle {
+            paused: decode_paused(&mut data)?,
+        },
+        18 => Body::LifecycleAck {
+            paused: decode_paused(&mut data)?,
+        },
         11 => Body::SceneBindings {
             targets: scene::decode_bindings(&mut data, base_revision)?,
         },
@@ -304,6 +318,14 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         base_revision,
         body,
     }))
+}
+
+fn decode_paused(data: &mut Decoder<'_>) -> Result<bool> {
+    match data.array::<1>()?[0] {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(Error::Invalid("invalid lifecycle state")),
+    }
 }
 
 fn check_interval_delay(delay_ms: u32) -> Result<()> {

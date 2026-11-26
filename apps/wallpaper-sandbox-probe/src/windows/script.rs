@@ -1,6 +1,6 @@
 //! Fixed trusted fixtures only. The caller must already be a verified AppContainer worker.
 use super::Result;
-use rquickjs::{Context, Error, Function, Runtime, context::intrinsic};
+use rquickjs::{Context, Error, Function, Object, Runtime, context::intrinsic};
 use std::{
     cell::Cell,
     collections::BTreeMap,
@@ -85,8 +85,8 @@ impl RegisteredClock {
             })?;
             let clock: Function = ctx.eval(include_str!("clock_fixture.js"))?;
             let setup: Function = ctx.eval(include_str!("script/registered_clock.js"))?;
-            let callback: Function = setup.call((register, clear, clock))?;
-            ctx.globals().set("registeredClock", callback)
+            let callbacks: Object = setup.call((register, clear, clock))?;
+            ctx.globals().set("registeredClock", callbacks)
         })?;
         check_callback_budget(&runtime, &interrupted)?;
         let delay_ms = delay
@@ -105,11 +105,22 @@ impl RegisteredClock {
     pub fn edits(&self, bindings: &[Binding], display_time: &str) -> Result<Vec<Edit>> {
         let interrupted = arm_deadline(&self.runtime);
         let edits = self.context.with(|ctx| {
-            let callback: Function = ctx.globals().get("registeredClock")?;
+            let callbacks: Object = ctx.globals().get("registeredClock")?;
+            let callback: Function = callbacks.get("tick")?;
             run_scene_callback(&ctx, bindings, callback, display_time)
         })?;
         check_callback_budget(&self.runtime, &interrupted)?;
         Ok(edits)
+    }
+
+    pub fn lifecycle(&self, paused: bool) -> Result<()> {
+        let interrupted = arm_deadline(&self.runtime);
+        self.context.with(|ctx| -> rquickjs::Result<()> {
+            let callbacks: Object = ctx.globals().get("registeredClock")?;
+            let callback: Function = callbacks.get(if paused { "pause" } else { "resume" })?;
+            callback.call(())
+        })?;
+        check_callback_budget(&self.runtime, &interrupted)
     }
 
     pub fn cancelled(&self) -> bool {

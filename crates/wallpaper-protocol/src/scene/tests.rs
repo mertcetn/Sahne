@@ -62,6 +62,22 @@ fn interval_cancellation_roundtrips_without_payload() {
 }
 
 #[test]
+fn lifecycle_messages_require_a_canonical_state_byte() {
+    for body in [
+        Body::Lifecycle { paused: true },
+        Body::Lifecycle { paused: false },
+        Body::LifecycleAck { paused: true },
+        Body::LifecycleAck { paused: false },
+    ] {
+        let event = message(body, 4, 0);
+        let mut frame = encode(&event);
+        assert_eq!(read_frame(&mut frame.as_slice()).unwrap(), Some(event));
+        *frame.last_mut().unwrap() = 2;
+        assert!(read_frame(&mut frame.as_slice()).is_err());
+    }
+}
+
+#[test]
 fn scene_program_checks_source_bounds_and_encoding() {
     let program = |source: String| {
         message(
