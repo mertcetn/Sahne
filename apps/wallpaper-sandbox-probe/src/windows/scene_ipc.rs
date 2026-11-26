@@ -541,13 +541,16 @@ pub fn worker(
     mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
-    if mode == Mode::RegisteredTimer {
-        let delay_ms = script::clock_interval_request()?;
+    let registered_clock = if mode == Mode::RegisteredTimer {
+        let (callback, delay_ms) = script::RegisteredClock::new()?;
         send(
             output,
             envelope(session, 3, Body::RegisterInterval { delay_ms }),
         )?;
-    }
+        Some(callback)
+    } else {
+        None
+    };
     let (mut bindings, source) = if mode.loads_script() {
         let program = read_frame(input)?.ok_or(MissingFrame("scene program"))?;
         program.check_context(session, 2, 0)?;
@@ -616,7 +619,13 @@ pub fn worker(
         } else {
             "12:34".into()
         };
-        let edits = if mode != Mode::Typed {
+        let edits = if let Some(callback) = &registered_clock {
+            let edits = callback.edits(&bindings, &display_time)?;
+            if callback.cancelled() != (sequence == updates) {
+                return Err("JavaScript interval did not cancel on its third callback".into());
+            }
+            edits
+        } else if mode != Mode::Typed {
             script::scene_edits(&bindings, &display_time, source.as_deref())?
         } else {
             vec![text(&display_time)]
@@ -632,7 +641,7 @@ pub fn worker(
         }
         sequence = sequence.checked_add(1).ok_or("Clock sequence exhausted")?;
     }
-    if mode == Mode::RegisteredTimer {
+    if registered_clock.is_some_and(|callback| callback.cancelled()) {
         send(
             output,
             update_message(session, sequence, Body::CancelInterval),

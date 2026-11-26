@@ -669,3 +669,7 @@ The registered clock fixture sends a bounded interval request from the AppContai
 ## 81. M4 worker interval cancellation over IPC
 
 After the final acknowledged tick, the interval fixture requests cancellation of its single registered timer. The host removes the timer, verifies that its former deadline produces no dispatch and acknowledges the request. The worker waits for that reply before the terminal rollback check. See [Worker interval cancellation over IPC](m4-timers.md#worker-interval-cancellation-over-ipc).
+
+## 82. M4 retained JavaScript interval callback
+
+The registered interval fixture retains its JavaScript callback in one worker context and applies a fresh execution deadline for each invocation. The callback's private counter calls the scoped cancellation function on its third invocation. The worker sends the cancellation after the corresponding scene revision is acknowledged. See [Retained callback and script-driven cancellation](m4-timers.md#retained-callback-and-script-driven-cancellation).

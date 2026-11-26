@@ -1,8 +1,10 @@
 //! Fixed trusted fixtures only. The caller must already be a verified AppContainer worker.
 use super::Result;
-use rquickjs::{Context, Error, Runtime, context::intrinsic};
+use rquickjs::{Context, Error, Function, Runtime, context::intrinsic};
 use std::{
+    cell::Cell,
     collections::BTreeMap,
+    rc::Rc,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -33,6 +35,11 @@ fn bounded_runtime() -> Result<(Runtime, Arc<AtomicBool>)> {
     // Keep the default C allocator: rust-alloc/allocator features would disable this limit.
     runtime.set_memory_limit(HEAP_BYTES);
     runtime.set_max_stack_size(STACK_BYTES);
+    let interrupted = arm_deadline(&runtime);
+    Ok((runtime, interrupted))
+}
+
+fn arm_deadline(runtime: &Runtime) -> Arc<AtomicBool> {
     let interrupted = Arc::new(AtomicBool::new(false));
     let observed = interrupted.clone();
     let deadline = Instant::now() + Duration::from_millis(100);
@@ -43,27 +50,78 @@ fn bounded_runtime() -> Result<(Runtime, Arc<AtomicBool>)> {
         }
         expired
     })));
-    Ok((runtime, interrupted))
+    interrupted
 }
 
-pub fn clock_interval_request() -> Result<u32> {
-    if !wallpaper_sandbox::is_appcontainer()? {
-        return Err("Interval fixture refuses non-AppContainer execution".into());
+pub struct RegisteredClock {
+    context: Context,
+    runtime: Runtime,
+    cancelled: Rc<Cell<bool>>,
+}
+
+impl RegisteredClock {
+    pub fn new() -> Result<(Self, u32)> {
+        if !wallpaper_sandbox::is_appcontainer()? {
+            return Err("Interval fixture refuses non-AppContainer execution".into());
+        }
+        let (runtime, interrupted) = bounded_runtime()?;
+        let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
+        let cancelled = Rc::new(Cell::new(false));
+        let delay = Rc::new(Cell::new(None));
+        context.with(|ctx| -> rquickjs::Result<()> {
+            let requested = Rc::clone(&delay);
+            let register = Function::new(ctx.clone(), move |milliseconds: u32| {
+                if requested.get().is_some() {
+                    return 0;
+                }
+                requested.set(Some(milliseconds));
+                1
+            })?;
+            let stopped = Rc::clone(&cancelled);
+            let clear = Function::new(ctx.clone(), move |handle: u32| {
+                if handle == 1 {
+                    stopped.set(true);
+                }
+            })?;
+            let clock: Function = ctx.eval(include_str!("clock_fixture.js"))?;
+            let setup: Function = ctx.eval(include_str!("script/registered_clock.js"))?;
+            let callback: Function = setup.call((register, clear, clock))?;
+            ctx.globals().set("registeredClock", callback)
+        })?;
+        check_callback_budget(&runtime, &interrupted)?;
+        let delay_ms = delay
+            .get()
+            .ok_or("Missing JavaScript interval registration")?;
+        Ok((
+            Self {
+                context,
+                runtime,
+                cancelled,
+            },
+            delay_ms,
+        ))
     }
-    let (runtime, interrupted) = bounded_runtime()?;
-    let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
-    let delay = context.with(|ctx| {
-        let register =
-            rquickjs::Function::new(ctx.clone(), |_: rquickjs::Function<'_>, delay: u32| delay)?;
-        let clock: rquickjs::Function = ctx.eval(include_str!("clock_fixture.js"))?;
-        let setup: rquickjs::Function =
-            ctx.eval("(setInterval, clock) => setInterval(clock, 32)")?;
-        setup.call::<_, u32>((register, clock))
-    })?;
+
+    pub fn edits(&self, bindings: &[Binding], display_time: &str) -> Result<Vec<Edit>> {
+        let interrupted = arm_deadline(&self.runtime);
+        let edits = self.context.with(|ctx| {
+            let callback: Function = ctx.globals().get("registeredClock")?;
+            run_scene_callback(&ctx, bindings, callback, display_time)
+        })?;
+        check_callback_budget(&self.runtime, &interrupted)?;
+        Ok(edits)
+    }
+
+    pub fn cancelled(&self) -> bool {
+        self.cancelled.get()
+    }
+}
+
+fn check_callback_budget(runtime: &Runtime, interrupted: &AtomicBool) -> Result<()> {
     if interrupted.load(Ordering::Relaxed) || runtime.is_job_pending() {
-        return Err("Interval fixture exceeded its execution budget".into());
+        return Err("Scene callback exceeded its execution budget".into());
     }
-    Ok(delay)
+    Ok(())
 }
 
 fn run_case(
@@ -232,26 +290,22 @@ pub fn scene_edits(
     let (runtime, interrupted) = bounded_runtime()?;
     let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
     let edits = context.with(|ctx| {
-        run_scene_callback(
-            &ctx,
-            bindings,
-            package_source.unwrap_or(include_str!("clock_fixture.js")),
-            display_time,
-        )
+        let callback: Function = ctx
+            .eval(package_source.unwrap_or(include_str!("clock_fixture.js")))
+            .map_err(|_| "Scene source did not evaluate to a callback")?;
+        run_scene_callback(&ctx, bindings, callback, display_time)
     })?;
-    if interrupted.load(Ordering::Relaxed) || runtime.is_job_pending() {
-        return Err("Clock fixture exceeded its execution budget".into());
-    }
+    check_callback_budget(&runtime, &interrupted)?;
     Ok(edits)
 }
 
-fn run_scene_callback(
-    ctx: &rquickjs::Ctx<'_>,
+fn run_scene_callback<'js>(
+    ctx: &rquickjs::Ctx<'js>,
     bindings: &[Binding],
-    callback_source: &str,
+    callback: Function<'js>,
     value: &str,
 ) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
-    use rquickjs::{Array, Function};
+    use rquickjs::Array;
     use wallpaper_scene::{
         Color, MAX_TEXT_BYTES,
         transaction::{Edit, MAX_BATCH_TEXT_BYTES, MAX_EDITS},
@@ -273,9 +327,6 @@ fn run_scene_callback(
         input.set(index, entry)?;
     }
     let adapter: Function = ctx.eval(include_str!("dom_adapter.js"))?;
-    let callback: Function = ctx
-        .eval(callback_source)
-        .map_err(|_| "Scene source did not evaluate to a callback")?;
     let staged: Array = adapter
         .call((input, callback, value))
         .map_err(|_| "Fixed clock callback failed")?;
