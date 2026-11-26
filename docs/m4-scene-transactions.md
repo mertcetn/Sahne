@@ -220,6 +220,8 @@ pwsh -NoProfile -File tools/test-script-preview.ps1
 
 The runner builds the release binaries and generates local fixtures. It checks changed and unchanged transactions, a Promise-based update, rejection of invalid text, a redacted script exception, the Promise job limit and a missing script. It checks worker profile cleanup for every case that launches an AppContainer. Each run writes a JSON summary and bounded process logs under `target/script-preview-validation/`. Use `-SkipBuild` to check already-built release binaries. This regression covers trusted local input and runs without a renderer.
 
+The November 26, 2026 run accepted callbacks at exactly 64 Promise jobs and 256 DOM operations. It rejected 65 jobs, a rejected Promise, and 257 DOM operations even when the script caught the adapter's exception. The rejected cases staged a write before the failure. They produced no accepted scene update, omitted the private exception text and verified worker profile cleanup. All 20 cases passed. Local report: `target/script-preview-validation/c713f2af04644f8b81ebd1c3050e00d0/summary.json`.
+
 #### Direct package preview on the desktop
 
 ```powershell

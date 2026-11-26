@@ -31,6 +31,10 @@ $cases = @(
     @{ Name = 'invalid-edit'; Script = '(document) => { document.getElementById("status").textContent = String.fromCharCode(0); }' }
     @{ Name = 'script-error'; Script = '() => { throw new Error("private-fixture-error"); }' }
     @{ Name = 'promise-budget'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; for (let i = 0; i < 65; i++) Promise.resolve().then(() => {}); }' }
+    @{ Name = 'promise-at-limit'; Changed = 'true'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; for (let i = 0; i < 64; i++) Promise.resolve().then(() => {}); }' }
+    @{ Name = 'promise-rejection'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; return Promise.reject(new Error("private-fixture-error")); }' }
+    @{ Name = 'dom-over-limit-caught'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; try { for (let i = 0; i < 255; i++) document.getElementById("status"); } catch (error) { if (!(error instanceof RangeError)) throw error; } }' }
+    @{ Name = 'dom-at-limit'; Changed = 'true'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; for (let i = 0; i < 254; i++) document.getElementById("status"); }' }
     @{ Name = 'missing-script' }
     @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; HtmlBytes = 128 * 1024 }
     @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = 'validation' }
