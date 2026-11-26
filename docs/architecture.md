@@ -665,3 +665,7 @@ An AppContainer test fixture registers and cancels JavaScript callbacks through 
 ## 80. M4 worker interval registration over IPC
 
 The registered clock fixture sends a bounded interval request from the AppContainer worker during initialization. The host validates the frame and owns all deadlines, pause state and clock dispatch. The worker receives each tick through the existing readiness and scene acknowledgement flow. See [Worker interval registration over IPC](m4-timers.md#worker-interval-registration-over-ipc).
+
+## 81. M4 worker interval cancellation over IPC
+
+After the final acknowledged tick, the interval fixture requests cancellation of its single registered timer. The host removes the timer, verifies that its former deadline produces no dispatch and acknowledges the request. The worker waits for that reply before the terminal rollback check. See [Worker interval cancellation over IPC](m4-timers.md#worker-interval-cancellation-over-ipc).

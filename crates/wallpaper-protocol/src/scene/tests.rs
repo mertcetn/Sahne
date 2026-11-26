@@ -46,6 +46,22 @@ fn interval_registration_enforces_scheduler_delay_limits() {
 }
 
 #[test]
+fn interval_cancellation_roundtrips_without_payload() {
+    for (body, tag) in [(Body::CancelInterval, 15), (Body::IntervalCancelled, 16)] {
+        let request = message(body, 4, 3);
+        let mut frame = encode(&request);
+        assert_eq!(&frame[30..], &[tag]);
+        let decoded = read_frame(&mut frame.as_slice()).unwrap().unwrap();
+        assert_eq!(decoded, request);
+        assert!(decoded.check_context(42, 4, 3).is_ok());
+        assert!(decoded.check_context(42, 4, 2).is_err());
+        frame[0] += 1;
+        frame.push(0);
+        assert!(read_frame(&mut frame.as_slice()).is_err());
+    }
+}
+
+#[test]
 fn scene_program_checks_source_bounds_and_encoding() {
     let program = |source: String| {
         message(

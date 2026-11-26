@@ -34,6 +34,14 @@ The release `js-timers`, `js-basic`, `js-interrupt`, `js-jobs` and `scene-timer`
 
 Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case scene-timer-registration`. In this fixture an embedded JavaScript setup requests a 32 ms interval inside AppContainer. The worker sends message kind 14 with one little-endian u32 delay in milliseconds after Pong. The host checks the session, sequence 3, base revision 0 and a fixture-specific upper limit of 64 ms. The codec accepts the scheduler's 16 ms to 24 hour range.
 
-The host starts the monotonic schedule from the received delay, pauses it for four intervals, verifies dispatch remains suppressed and resumes with one immediately due callback. Three clock ticks and scene acknowledgements follow, with one tick outstanding at a time. The host checks the schedule after resume and verifies terminal rollback. This fixture evaluates the embedded clock callback afresh on each dispatch. Retention of user callbacks, timer cancellation across IPC and lifecycle event delivery remain open.
+The host starts the monotonic schedule from the received delay, pauses it for four intervals, verifies dispatch remains suppressed and resumes with one immediately due callback. Three clock ticks and scene acknowledgements follow, with one tick outstanding at a time. The host checks the schedule after resume and verifies terminal rollback. This fixture evaluates the embedded clock callback afresh on each dispatch.
 
 The registered timer, existing timer, JavaScript timer and scripted scene probes passed with four verified profile cleanups. The headless live clock regression also passed. Local report at `target/sandbox-validation/17f4dca9fc414204a83d4affc68c1202/`.
+
+## Worker interval cancellation over IPC
+
+The `scene-timer-registration` probe also verifies cancellation. After the third scene acknowledgement the worker sends kind 15 (`CancelInterval`) with sequence 4 and base revision 3. The host requires that exact envelope in the cancellation phase, removes the sole timer and tests the queue at the former deadline. It returns kind 16 (`IntervalCancelled`) with the same envelope. Both messages have empty payloads. The worker waits for this reply before sending the terminal invalid batch. The host checks that the accepted revision and scene survive the rejection.
+
+The worker fixture issues the cancellation after a fixed number of callbacks. Persistent user callback handles, script-driven cancellation through this channel and lifecycle events remain open.
+
+The registered timer probe logged cancellation and no dispatch at the former deadline. The existing timer, JavaScript timer and scripted scene probes also passed, with four profile cleanups across those cases. The headless live clock check passed. Local report at `target/sandbox-validation/a5779b26f75b4f3bbe1d6201401c1b2a/`.

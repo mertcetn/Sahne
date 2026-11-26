@@ -79,6 +79,8 @@ pub enum Body {
     RegisterInterval {
         delay_ms: u32,
     },
+    CancelInterval,
+    IntervalCancelled,
     SceneBindings {
         targets: BTreeMap<String, u32>,
     },
@@ -164,6 +166,8 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
             data.push(14);
             data.extend_from_slice(&delay_ms.to_le_bytes());
         }
+        Body::CancelInterval => data.push(15),
+        Body::IntervalCancelled => data.push(16),
         Body::SceneBindings { targets } => {
             data.push(11);
             scene::encode_bindings(&mut data, message.base_revision, targets)?;
@@ -268,6 +272,8 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
             check_interval_delay(delay_ms)?;
             Body::RegisterInterval { delay_ms }
         }
+        15 => Body::CancelInterval,
+        16 => Body::IntervalCancelled,
         11 => Body::SceneBindings {
             targets: scene::decode_bindings(&mut data, base_revision)?,
         },

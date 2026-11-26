@@ -412,6 +412,30 @@ pub fn read_response(
             .try_send(ack)
             .map_err(|_| "Scene writer queue unavailable")?;
     }
+    if mode == Mode::RegisteredTimer {
+        let (mut timers, id) = timer.take().ok_or("Missing registered interval")?;
+        let sequence = updates + 1;
+        let cancel = read_frame(output)?.ok_or(MissingFrame("interval cancellation"))?;
+        if cancel != update_message(session, sequence, Body::CancelInterval) {
+            return Err("Unexpected interval cancellation".into());
+        }
+        let next_wake = timers
+            .next_wake()
+            .ok_or("Missing interval deadline before cancellation")?;
+        if !timers.cancel(id)
+            || timers.next_wake().is_some()
+            || timers
+                .take_due(next_wake)
+                .map_err(|_| "Could not check cancelled interval")?
+                .is_some()
+        {
+            return Err("Cancelled interval remained eligible for dispatch".into());
+        }
+        requests
+            .try_send(update_message(session, sequence, Body::IntervalCancelled))
+            .map_err(|_| "Interval cancellation writer queue unavailable")?;
+        println!("Worker interval cancelled with no dispatch at its former deadline.");
+    }
     let committed = host.scene().encode();
     let invalid = read_frame(output)?.ok_or(MissingFrame("invalid scene batch"))?;
     invalid.check_context(session, updates + 1, updates)?;
@@ -607,6 +631,17 @@ pub fn worker(
             script::apply_accepted_edits(&mut bindings, edits);
         }
         sequence = sequence.checked_add(1).ok_or("Clock sequence exhausted")?;
+    }
+    if mode == Mode::RegisteredTimer {
+        send(
+            output,
+            update_message(session, sequence, Body::CancelInterval),
+        )?;
+        let reply =
+            read_frame(input)?.ok_or(MissingFrame("interval cancellation acknowledgement"))?;
+        if reply != update_message(session, sequence, Body::IntervalCancelled) {
+            return Err("Unexpected interval cancellation acknowledgement".into());
+        }
     }
     let terminal_edit = if matches!(mode, Mode::Script | Mode::LocalScene) {
         Edit::Color {
