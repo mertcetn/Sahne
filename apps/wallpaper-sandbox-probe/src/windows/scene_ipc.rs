@@ -514,6 +514,12 @@ pub fn read_response(
             .map_err(|_| "Invalid clock snapshot length")?;
         return Ok(ProbeReply::ClockSnapshot { bits, text });
     }
+    if mode.uses_general_bindings() && snapshot.scene.scene().resources.is_empty() {
+        return Ok(ProbeReply::SceneSnapshot {
+            bits,
+            scene: committed,
+        });
+    }
     Ok(ProbeReply::Report(bits))
 }
 

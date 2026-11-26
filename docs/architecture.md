@@ -713,3 +713,7 @@ The worker DOM adapter bounds the number of lookups and property accesses in eac
 ## 92. M4 bounded native interval controls
 
 The retained interval fixture admits one native registration and one cancellation. The worker validates the delay and cancellation handle before converting them to the fixture's IPC operations. An invalid or repeated call blocks the current reply or edit batch. See [Native interval call limits](m4-timers.md#native-interval-call-limits).
+
+## 93. M4 retained local script scene preview
+
+The trusted local script and lifecycle probes export the final host-validated flat scene after terminal rejection and verified worker cleanup when the scene has no image resources. The preview opens the fixed export file using the existing bounded Windows folder loader, independently decodes it and can display it with the flat renderer. See [Retained local script scene](m4-scene-transactions.md#retained-local-script-scene).

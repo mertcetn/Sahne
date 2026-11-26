@@ -178,6 +178,20 @@ A scene callback can perform up to 256 DOM operations across its synchronous bod
 
 The local release test accepted a write on operation 256 inside a Promise job. Operation 257 failed the invocation even when caught and the host acknowledged no edits. Both runs verified profile cleanup. Four AppContainer regression cases and headless rollover passed. Local report at `target/sandbox-validation/f29755f813d54a4fb370ec26606bfc85/`.
 
+### Retained local script scene
+
+Run the trusted script or lifecycle probe on a local flat text-and-rectangle package. After the host verifies its accepted scene, terminal rollback and worker cleanup, it prints the location of `scene-snapshot.bin` in the run folder. Use the absolute run folder as `$runFolder`.
+
+```powershell
+cargo build --release -p wallpaper-sandbox-probe -p wallpaper-preview --locked
+target/release/wallpaper-preview.exe --check-scene-worker-snapshot $runFolder
+target/release/wallpaper-preview.exe --scene-worker-snapshot $runFolder --seconds 20
+```
+
+The check loads the validated flat scene without opening a window. The window command displays the retained scene until Escape or the optional deadline. Both commands independently decode the bounded binary file and require a scene with zero image resources. The artifact contains scene data and provides no origin authentication. Use a trusted run folder. Window rendering uses the existing flat text and rectangle renderer. A live package-to-renderer connection and visual verification remain open.
+
+The release check exported a two-node scene after the host acknowledged text and rectangle color changes and the worker profile was cleaned up. The headless loader accepted the 1920×1080 export, rejected trailing bytes and rejected a conflicting duration flag. The exported text was `Worker update accepted`. Local visual test input at `target/sandbox-runs/9344-dd9302e011b7eace/`. Three AppContainer regression cases and headless rollover passed. Local report at `target/sandbox-validation/ff8ac44acf654f9c99f2654c28a00acf/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

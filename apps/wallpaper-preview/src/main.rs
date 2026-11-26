@@ -47,6 +47,8 @@ fn main() -> Result<()> {
     let mut test_clock_rollover = false;
     let mut worker_snapshot = None;
     let mut check_worker_snapshot = false;
+    let mut retained_scene_folder = None;
+    let mut check_retained_scene = false;
     let mut worker_live = None;
     let mut check_worker_live = false;
     let mut compiled_example = None;
@@ -56,6 +58,9 @@ fn main() -> Result<()> {
             "--help" => {
                 println!(
                     "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes|clock] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap. --reference-pose freezes animated-shapes at exactly 1 s for visual reference; use it in window mode without other test flags. clock shows host-provided UTC time in window mode. --test-clock-rollover requires clock and --seconds 5..30; it demonstrates 23:59 to 00:00. --clock-worker-snapshot <run-folder> displays a retained worker value with --example clock. --check-clock-worker-snapshot <run-folder> verifies that value without opening a window. --clock-worker-live requires --example clock --seconds 8..30 and the sibling sandbox probe. --check-clock-worker-live runs the same bridge without a window. --clock-worker-utc uses current UTC minutes with --example clock. --check-clock-worker-utc verifies two live UTC updates without opening a window."
+                );
+                println!(
+                    "--scene-worker-snapshot <run-folder> displays a retained flat scene. --check-scene-worker-snapshot <run-folder> validates it headlessly."
                 );
                 return Ok(());
             }
@@ -100,6 +105,14 @@ fn main() -> Result<()> {
                 check_worker_snapshot = arg == "--check-clock-worker-snapshot";
                 worker_snapshot = Some(args.next().ok_or("Missing clock snapshot run folder")?);
             }
+            "--scene-worker-snapshot" | "--check-scene-worker-snapshot" => {
+                if retained_scene_folder.is_some() {
+                    return Err("Choose one retained scene input".into());
+                }
+                check_retained_scene = arg.starts_with("--check-");
+                retained_scene_folder =
+                    Some(args.next().ok_or("Missing scene snapshot run folder")?);
+            }
             "--seconds" => {
                 let n = args.next().ok_or("Missing seconds")?.parse::<u64>()?;
                 if !(1..=3600).contains(&n) {
@@ -116,6 +129,34 @@ fn main() -> Result<()> {
             _ => return Err(format!("Unsupported argument: {arg}").into()),
         }
     }
+    let retained_scene = if let Some(folder) = retained_scene_folder.as_deref() {
+        if compiled_example.is_some()
+            || worker_snapshot.is_some()
+            || worker_live.is_some()
+            || desktop_mode
+            || recreate != 0
+            || test_device_loss
+            || test_pixels
+            || test_clock_rollover
+            || reference_pose
+            || (check_retained_scene && seconds.is_some())
+        {
+            return Err("Retained scene requires its own window or headless mode".into());
+        }
+        let scene = compiled::load_retained(folder)?;
+        if check_retained_scene {
+            println!(
+                "Accepted retained scene: {} nodes, {}x{} canvas.",
+                scene.scene().nodes.len(),
+                scene.scene().width,
+                scene.scene().height
+            );
+            return Ok(());
+        }
+        Some(scene)
+    } else {
+        None
+    };
     if test_device_loss && recreate > 0 {
         return Err("Choose one test mode per run".into());
     }
@@ -228,6 +269,7 @@ fn main() -> Result<()> {
         desktop: None,
         desktop_mode,
         compiled_example,
+        retained_scene,
         test_pixels,
         pixels_passed: false,
         next_probe: Instant::now() + Duration::from_secs(2),
@@ -295,6 +337,7 @@ struct App {
     desktop: Option<wallpaper_platform::Desktop>,
     desktop_mode: bool,
     compiled_example: Option<compiled::Example>,
+    retained_scene: Option<Arc<wallpaper_scene::ValidatedScene>>,
     test_pixels: bool,
     pixels_passed: bool,
     next_probe: Instant,
@@ -403,6 +446,7 @@ impl App {
                     Some(compiled::Example::GroupEffects) => "Sahne — M3 group effects example",
                     Some(compiled::Example::Animated) => "Sahne — M3 native animated shapes",
                     Some(compiled::Example::Clock) => "Sahne — M4 UTC clock",
+                    None if self.retained_scene.is_some() => "Sahne — M4 retained scene",
                     None => "Sahne — M1 trusted scene",
                 })
                 .with_inner_size(LogicalSize::new(960.0, 600.0));
@@ -419,7 +463,7 @@ impl App {
                 self.proxy.clone(),
                 self.generation,
                 !self.loss_test.complete(),
-                self.compiled_example,
+                (self.compiled_example, self.retained_scene.as_ref()),
                 self.test_pixels,
             ))?;
             if self.start_live_clock == Some(live_clock::Mode::Utc)
@@ -776,9 +820,13 @@ impl State {
         proxy: EventLoopProxy<AppEvent>,
         generation: u64,
         report_destroyed: bool,
-        compiled_example: Option<compiled::Example>,
+        scene_source: (
+            Option<compiled::Example>,
+            Option<&Arc<wallpaper_scene::ValidatedScene>>,
+        ),
         test_pixels: bool,
     ) -> Result<Self> {
+        let (compiled_example, retained_scene) = scene_source;
         let mut desc = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
             events.owned_display_handle(),
         ));
@@ -812,7 +860,7 @@ impl State {
         let mut config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
             .ok_or("Unsupported surface")?;
-        if compiled_example.is_some() {
+        if compiled_example.is_some() || retained_scene.is_some() {
             config.format = surface
                 .get_capabilities(&adapter)
                 .formats
@@ -948,19 +996,23 @@ impl State {
             } else {
                 None
             };
-        let compiled =
-            if let Some(example) = compiled_example.filter(|v| v.group_fixture().is_none()) {
-                Some(compiled::Renderer::new(
-                    &device,
-                    &queue,
-                    config.format,
-                    &mut fonts,
-                    &mut atlas,
-                    example,
-                )?)
-            } else {
-                None
-            };
+        let flat_source = retained_scene.map(compiled::Source::Retained).or_else(|| {
+            compiled_example
+                .filter(|v| v.group_fixture().is_none())
+                .map(compiled::Source::Example)
+        });
+        let compiled = if let Some(source) = flat_source {
+            Some(compiled::Renderer::new(
+                &device,
+                &queue,
+                config.format,
+                &mut fonts,
+                &mut atlas,
+                source,
+            )?)
+        } else {
+            None
+        };
         Ok(Self {
             _session_lifecycle: None,
             pixel_pending: test_pixels,

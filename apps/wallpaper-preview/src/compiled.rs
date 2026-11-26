@@ -1,4 +1,4 @@
-//! Renders the original compiled flat fixture only; no external scene/resource input.
+//! Renders validated flat scenes and bundled image resources.
 use super::*;
 use glyphon::Wrap;
 use wallpaper_scene::{Content, ValidatedScene};
@@ -11,6 +11,29 @@ pub enum Example {
     GroupEffects,
     Animated,
     Clock,
+}
+
+pub enum Source<'a> {
+    Example(Example),
+    Retained(&'a Arc<ValidatedScene>),
+}
+
+pub fn load_retained(folder: &str) -> Result<Arc<ValidatedScene>> {
+    use std::io::Read;
+    use wallpaper_platform::{
+        package_directory::open_folder,
+        package_open::{Kind, open_child},
+    };
+    let parent = open_folder(folder)?;
+    let file = open_child(&parent, "scene-snapshot.bin", Kind::RegularFile)?;
+    let mut bytes = Vec::new();
+    file.take(wallpaper_scene::MAX_SCENE_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    let scene = wallpaper_scene::decode(&bytes)?;
+    if !scene.scene().resources.is_empty() {
+        return Err("Retained scene does not support image resources".into());
+    }
+    Ok(Arc::new(scene))
 }
 impl Example {
     pub fn group_fixture(self) -> Option<groups::Fixture> {
@@ -51,14 +74,14 @@ impl Renderer {
         format: wgpu::TextureFormat,
         fonts: &mut FontSystem,
         atlas: &mut TextAtlas,
-        example: Example,
+        source: Source<'_>,
     ) -> Result<Self> {
         if !format.is_srgb() {
             return Err("Compiled preview requires an sRGB surface".into());
         }
-        let compiled = match example {
-            Example::Clock => None,
-            Example::Static | Example::Image => {
+        let compiled = match source {
+            Source::Retained(_) | Source::Example(Example::Clock) => None,
+            Source::Example(example @ (Example::Static | Example::Image)) => {
                 let package = if example == Example::Static {
                     wallpaper_compiler::fixtures::static_package()?
                 } else {
@@ -73,18 +96,20 @@ impl Renderer {
                     },
                 )?)
             }
-            Example::Groups | Example::GroupEffects | Example::Animated => {
+            Source::Example(Example::Groups | Example::GroupEffects | Example::Animated) => {
                 return Err("Group example requires the version-2 renderer".into());
             }
         };
         let empty = std::collections::BTreeMap::new();
         let (scene, assets) = if let Some(compiled) = &compiled {
             (
-                wallpaper_scene::decode(&compiled.scene().encode())?,
+                Arc::new(wallpaper_scene::decode(&compiled.scene().encode())?),
                 compiled.images(),
             )
+        } else if let Source::Retained(scene) = source {
+            (Arc::clone(scene), &empty)
         } else {
-            (clock::initial_scene()?, &empty)
+            (Arc::new(clock::initial_scene()?), &empty)
         };
         wallpaper_media::validate_assets(&scene, assets)?;
         for image in assets.values() {
@@ -318,14 +343,18 @@ impl Renderer {
                 }
             }
         }
+        let label = match source {
+            Source::Example(example) => format!("Compiled original {example:?} fixture"),
+            Source::Retained(_) => "Accepted local scene snapshot".into(),
+        };
         eprintln!(
-            "Compiled original {example:?} fixture: nodes={}, canvas={}x{}, no external input; text line-height=1.25, no wrap, own-box clipping.",
+            "{label}: nodes={}, canvas={}x{}; text line-height=1.25, no wrap, own-box clipping.",
             scene.scene().nodes.len(),
             scene.scene().width,
             scene.scene().height
         );
         Ok(Self {
-            scene: Arc::new(scene),
+            scene,
             snapshot_key: None,
             items,
             pipeline,

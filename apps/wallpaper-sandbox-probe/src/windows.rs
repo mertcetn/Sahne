@@ -23,6 +23,7 @@ const INVALID_HANDLE_EXIT: u32 = 0xc0000008;
 enum ProbeReply {
     Report(u32),
     ClockSnapshot { bits: u32, text: [u8; 5] },
+    SceneSnapshot { bits: u32, scene: Vec<u8> },
     InvalidHandleTermination,
 }
 #[derive(Debug)]
@@ -654,9 +655,18 @@ fn host(args: &[String]) -> Result<()> {
     let root = attempt.root.clone();
     let sandbox = &attempt.sandbox;
     let result = attempt.response.take().ok_or("Missing attempt result")?;
-    let (result, clock_snapshot) = match result {
-        Ok(Ok(ProbeReply::ClockSnapshot { bits, text })) if case == "scene-timer" => {
-            (Ok(Ok(ProbeReply::Report(bits))), Some(text))
+    let (result, snapshot) = match result {
+        Ok(Ok(ProbeReply::ClockSnapshot { bits, text })) if case == "scene-timer" => (
+            Ok(Ok(ProbeReply::Report(bits))),
+            Some(("clock-snapshot.bin", text.to_vec())),
+        ),
+        Ok(Ok(ProbeReply::SceneSnapshot { bits, scene }))
+            if matches!(case, "local-script-package" | "local-lifecycle-package") =>
+        {
+            (
+                Ok(Ok(ProbeReply::Report(bits))),
+                Some(("scene-snapshot.bin", scene)),
+            )
         }
         other => (other, None),
     };
@@ -925,15 +935,20 @@ fn host(args: &[String]) -> Result<()> {
     // Kill even on errors before joining a potentially blocked pipe reader.
     attempt.finish()?;
     outcome?;
-    if let Some(text) = clock_snapshot {
-        let path = root.join("clock-snapshot.bin");
+    if let Some((filename, bytes)) = snapshot {
+        let path = root.join(filename);
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)?;
-        file.write_all(&text)?;
+        file.write_all(&bytes)?;
         file.flush()?;
-        println!("Accepted clock snapshot retained at {}", path.display());
+        let kind = if filename == "clock-snapshot.bin" {
+            "clock"
+        } else {
+            "scene"
+        };
+        println!("Accepted {kind} snapshot retained at {}", path.display());
     }
     if case == "filesystem" {
         wallpaper_sandbox::verify_filesystem_fixture(&root)?;
