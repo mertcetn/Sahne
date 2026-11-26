@@ -282,6 +282,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "local-clock-package"
         | "local-script-package"
         | "local-lifecycle-package"
+        | "preview-lifecycle-package"
         | "scene-timer"
         | "scene-timer-registration"
         | "preview-clock-utc"

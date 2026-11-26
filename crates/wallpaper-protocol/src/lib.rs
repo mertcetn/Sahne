@@ -11,6 +11,7 @@ use wallpaper_scene::transaction::Edit;
 pub const PROTOCOL_VERSION: u16 = 1;
 pub const MAX_FRAME_BYTES: usize = 64 * 1024;
 pub const MAX_DIAGNOSTIC_BYTES: usize = 256;
+pub const MAX_PACKAGE_TICK_DELAY_MS: u32 = 1000;
 const HEADER_BYTES: usize = 27;
 
 #[derive(Debug)]
@@ -88,6 +89,7 @@ pub enum Body {
         paused: bool,
     },
     LifecycleReady,
+    PackageTick,
     SceneBindings {
         targets: BTreeMap<String, u32>,
     },
@@ -178,6 +180,7 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
         Body::Lifecycle { paused } => data.extend_from_slice(&[17, u8::from(*paused)]),
         Body::LifecycleAck { paused } => data.extend_from_slice(&[18, u8::from(*paused)]),
         Body::LifecycleReady => data.push(19),
+        Body::PackageTick => data.push(20),
         Body::SceneBindings { targets } => {
             data.push(11);
             scene::encode_bindings(&mut data, message.base_revision, targets)?;
@@ -291,6 +294,7 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
             paused: decode_paused(&mut data)?,
         },
         19 => Body::LifecycleReady,
+        20 => Body::PackageTick,
         11 => Body::SceneBindings {
             targets: scene::decode_bindings(&mut data, base_revision)?,
         },
@@ -410,6 +414,7 @@ mod tests {
             sample(Body::Ping { nonce: u64::MAX }),
             sample(Body::Pong { nonce: u64::MAX }),
             sample(Body::ProbeResult { denied: u32::MAX }),
+            sample(Body::PackageTick),
             sample(Body::Reject {
                 code: 2,
                 message: "unsupported capability".into(),

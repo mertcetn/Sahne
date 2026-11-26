@@ -192,24 +192,50 @@ impl RetainedCallbacks {
     }
 
     pub fn from_source(source: &str) -> Result<Self> {
+        Self::load(source, false).map(|(callbacks, _)| callbacks)
+    }
+
+    pub fn from_package_source(source: &str) -> Result<(Self, Option<u32>)> {
+        Self::load(source, true)
+    }
+
+    fn load(source: &str, read_interval: bool) -> Result<(Self, Option<u32>)> {
         if !wallpaper_sandbox::is_appcontainer()? {
             return Err("Lifecycle probe refuses non-AppContainer execution".into());
         }
         let (runtime, interrupted) = bounded_runtime()?;
         let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
         let rejected = track_rejections(&runtime);
-        context
-            .with(|ctx| -> rquickjs::Result<()> {
+        let delay = context
+            .with(|ctx| -> rquickjs::Result<Option<f64>> {
                 let callbacks: Object = ctx.eval(source)?;
                 for name in ["pause", "resume", "tick"] {
                     let _: Function = callbacks.get(name)?;
                 }
-                ctx.globals().set("registeredClock", callbacks)
+                let delay = if read_interval {
+                    callbacks.get("intervalMs")?
+                } else {
+                    None
+                };
+                ctx.globals().set("registeredClock", callbacks)?;
+                Ok(delay)
             })
             .map_err(|_| "Expected an object with pause, resume and tick callbacks")?;
         check_callback_budget(&runtime, &interrupted)?;
         check_rejections(&rejected)?;
-        Ok(Self { context, runtime })
+        let delay = match delay {
+            Some(value)
+                if value.fract() == 0.0
+                    && (wallpaper_scene::timer::MIN_DELAY.as_millis() as f64
+                        ..=f64::from(wallpaper_protocol::MAX_PACKAGE_TICK_DELAY_MS))
+                        .contains(&value) =>
+            {
+                Some(value as u32)
+            }
+            Some(_) => return Err("Invalid package interval delay".into()),
+            None => None,
+        };
+        Ok((Self { context, runtime }, delay))
     }
 
     pub fn edits(&self, bindings: &[Binding], display_time: &str) -> Result<Vec<Edit>> {

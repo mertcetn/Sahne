@@ -773,3 +773,7 @@ The headless preview can route a trusted package to the retained lifecycle worke
 ## 107. M4 interval host-call phase checks
 
 The retained registered-clock worker checks the active callback phase inside its native controls. Setup owns registration, and the tick plus its bounded microtasks owns cancellation. A call from another phase records a sticky failure before modifying the interval state. See [Native interval call limits](m4-timers.md#native-interval-call-limits).
+
+## 108. M4 host-scheduled trusted package tick
+
+In the headless preview lifecycle check, a retained package callback object may supply one bounded delay during setup. The worker sends the registration over the control channel. The host validates the registration, completes the synthetic lifecycle exchange and arms its monotonic scheduler. A session-checked tick frame then authorizes one callback. The scene batch still passes through the existing validation and acknowledgement path. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).

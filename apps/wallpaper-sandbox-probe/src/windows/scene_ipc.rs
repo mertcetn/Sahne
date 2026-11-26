@@ -21,6 +21,7 @@ pub enum Mode {
     LocalClock,
     LocalScene,
     LocalLifecycle,
+    PreviewLifecycle,
     Timer,
     RegisteredTimer,
     Utc,
@@ -34,6 +35,7 @@ impl Mode {
             "local-clock-package" => Some(Self::LocalClock),
             "local-script-package" => Some(Self::LocalScene),
             "local-lifecycle-package" => Some(Self::LocalLifecycle),
+            "preview-lifecycle-package" => Some(Self::PreviewLifecycle),
             "scene-timer" => Some(Self::Timer),
             "scene-timer-registration" => Some(Self::RegisteredTimer),
             "preview-clock-utc" => Some(Self::Utc),
@@ -46,7 +48,10 @@ impl Mode {
     }
 
     fn uses_general_bindings(self) -> bool {
-        matches!(self, Self::LocalScene | Self::LocalLifecycle)
+        matches!(
+            self,
+            Self::LocalScene | Self::LocalLifecycle | Self::PreviewLifecycle
+        )
     }
 
     fn updates(self) -> u64 {
@@ -621,17 +626,31 @@ pub fn worker(
             None,
         )
     };
-    let local_callbacks = if mode == Mode::LocalLifecycle {
+    let local_callbacks = if matches!(mode, Mode::LocalLifecycle | Mode::PreviewLifecycle) {
         let source = source.as_deref().ok_or("Missing local lifecycle source")?;
-        let callbacks = script_result(
+        let (callbacks, delay) = script_result(
             output,
             session,
             3,
             0,
-            script::RetainedCallbacks::from_source(source),
+            if mode == Mode::PreviewLifecycle {
+                script::RetainedCallbacks::from_package_source(source)
+            } else {
+                script::RetainedCallbacks::from_source(source).map(|callbacks| (callbacks, None))
+            },
         )?;
-        send(output, envelope(session, 3, Body::LifecycleReady))?;
+        if let Some(delay_ms) = delay {
+            send(
+                output,
+                envelope(session, 3, Body::RegisterInterval { delay_ms }),
+            )?;
+        } else {
+            send(output, envelope(session, 3, Body::LifecycleReady))?;
+        }
         deliver_lifecycle(input, output, session, |paused| callbacks.lifecycle(paused))?;
+        if delay.is_some() && read_frame(input)? != Some(envelope(session, 6, Body::PackageTick)) {
+            return Err("Expected host package tick".into());
+        }
         Some(callbacks)
     } else {
         None

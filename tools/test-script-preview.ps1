@@ -38,6 +38,8 @@ $cases = @(
     @{ Name = 'missing-script' }
     @{ Name = 'lifecycle-promise'; Lifecycle = $true; Changed = 'true'; Script = '(() => { let phase = 0; return { pause() { return Promise.resolve().then(() => { phase = 1; }); }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Resumed"; } }; })()' }
     @{ Name = 'lifecycle-resume-rejected'; Lifecycle = $true; Script = '({ pause() {}, resume() { return Promise.reject(new Error("private-fixture-error")); }, tick(document) { document.getElementById("status").textContent = "Unexpected"; } })' }
+    @{ Name = 'lifecycle-scheduled'; Lifecycle = $true; Scheduled = $true; Changed = 'true'; Script = '(() => { let resumed = false; return { intervalMs: 32, pause() {}, resume() { resumed = true; }, tick(document) { if (!resumed) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Timer ran"; } }; })()' }
+    @{ Name = 'lifecycle-invalid-delay'; Lifecycle = $true; InvalidDelay = $true; Script = '({ intervalMs: 32.5, pause() {}, resume() {}, tick() {} })' }
     @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; HtmlBytes = 128 * 1024 }
     @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = 'validation' }
     @{ Name = 'intake-missing-script'; Intake = $true; Reject = 'validation' }
@@ -108,13 +110,19 @@ $results = foreach ($case in $cases) {
     elseif ($case.ContainsKey('Lifecycle')) {
         $pause = $stdout.IndexOf('Package lifecycle acknowledged: pause.')
         $resume = $stdout.IndexOf('Package lifecycle acknowledged: resume.')
-        $passed = $passed -and $cleanupCount -eq 1 -and $pause -ge 0
+        $tick = $stdout.IndexOf('Host dispatched scheduled package tick.')
+        $passed = $passed -and $cleanupCount -eq 1
         if ($case.ContainsKey('Changed')) {
-            $passed = $passed -and $resume -gt $pause -and $result.ExitCode -eq 0 -and
+            $tickOrder = if ($case.ContainsKey('Scheduled')) { $tick -gt $resume } else { $tick -eq -1 }
+            $passed = $passed -and $pause -ge 0 -and $resume -gt $pause -and $tickOrder -and $result.ExitCode -eq 0 -and
                 $stdout -match ($accepted.Replace('(true|false)', $case.Changed)) -and [string]::IsNullOrWhiteSpace($stderr)
         }
+        elseif ($case.ContainsKey('InvalidDelay')) {
+            $passed = $passed -and $pause -eq -1 -and $resume -eq -1 -and $tick -eq -1 -and $result.ExitCode -ne 0 -and
+                $stdout -notmatch $accepted -and $stderr.Contains('Package lifecycle initialization rejected')
+        }
         else {
-            $passed = $passed -and $resume -eq -1 -and $result.ExitCode -ne 0 -and
+            $passed = $passed -and $pause -ge 0 -and $resume -eq -1 -and $tick -eq -1 -and $result.ExitCode -ne 0 -and
                 $stdout -notmatch $accepted -and $stderr.Contains('Package resume callback rejected')
         }
     }

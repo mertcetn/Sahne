@@ -12,7 +12,8 @@ use std::{
     thread::{self, JoinHandle},
 };
 use wallpaper_protocol::{
-    Body, Message, SCENE_REJECT_CODE, accept_scene_batch, read_frame, write_frame,
+    Body, MAX_PACKAGE_TICK_DELAY_MS, Message, SCENE_REJECT_CODE, accept_scene_batch, read_frame,
+    write_frame,
 };
 use wallpaper_scene::{
     Color, Content,
@@ -232,7 +233,7 @@ fn supervise(
     let package_mode = program.is_some();
     let case = if let Some((_, lifecycle_check)) = &program {
         if *lifecycle_check {
-            "local-lifecycle-package"
+            "preview-lifecycle-package"
         } else {
             "local-script-package"
         }
@@ -633,9 +634,15 @@ fn exchange_package(
         .key;
     send(&mut input, frame(session, 2, 0, program))?;
     if lifecycle_check {
-        if read_frame(&mut output)? != Some(frame(session, 3, 0, Body::LifecycleReady)) {
-            return Err("Package lifecycle initialization rejected".into());
-        }
+        let ready = read_frame(&mut output)?.ok_or("Missing package lifecycle readiness")?;
+        ready.check_context(session, 3, 0)?;
+        let delay = match ready.body {
+            Body::LifecycleReady => None,
+            Body::RegisterInterval { delay_ms } if delay_ms <= MAX_PACKAGE_TICK_DELAY_MS => {
+                Some(Duration::from_millis(u64::from(delay_ms)))
+            }
+            _ => return Err("Package lifecycle initialization rejected".into()),
+        };
         for (sequence, paused) in [(4, true), (5, false)] {
             send(
                 &mut input,
@@ -654,6 +661,26 @@ fn exchange_package(
                 "Package lifecycle acknowledged: {}.",
                 if paused { "pause" } else { "resume" }
             );
+        }
+        if let Some(delay) = delay {
+            let start = Instant::now();
+            let mut timers = wallpaper_scene::timer::Timers::new(start);
+            let timer = timers
+                .schedule(start, delay, false)
+                .map_err(|_| "Could not schedule package tick")?;
+            loop {
+                if state.cancel.load(Ordering::Acquire) {
+                    return Err("Package tick cancelled".into());
+                }
+                let now = Instant::now();
+                if timers.take_due(now).map_err(|_| "Package timer failed")? == Some(timer) {
+                    break;
+                }
+                let wake = timers.next_wake().ok_or("Missing package timer deadline")?;
+                thread::park_timeout(wake.saturating_duration_since(now));
+            }
+            send(&mut input, frame(session, 6, 0, Body::PackageTick))?;
+            println!("Host dispatched scheduled package tick.");
         }
     }
     let batch = read_frame(&mut output)?.ok_or("Missing package scene batch")?;
