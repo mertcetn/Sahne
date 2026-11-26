@@ -1,7 +1,7 @@
 //! Trusted fixture for host commits and terminal rejection over inherited pipes.
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
-use wallpaper_protocol::{SCENE_REJECT_CODE, accept_scene_batch};
+use wallpaper_protocol::{SCENE_REJECT_CODE, SCRIPT_FAILURE_CODE, accept_scene_batch};
 use wallpaper_scene::{
     Color, Content, Node, Rect, SCENE_VERSION, Scene, ValidatedScene,
     timer::{MIN_DELAY, Timers},
@@ -12,7 +12,6 @@ pub const RESULT_BIT: u32 = 1 << 23;
 // Deliberately ungranted target for the embedded scene's terminal rejection test.
 const SCRIPT_BACKGROUND_PROBE: u32 = 4;
 const PANEL_COLOR: Color = Color([51, 102, 153, 255]);
-const SCRIPT_FAILURE_CODE: u16 = 101;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {

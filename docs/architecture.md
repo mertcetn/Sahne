@@ -807,3 +807,7 @@ The worker captures the three validated callback functions under the setup deadl
 ## 114. M4 DOM adapter initialization
 
 The one-shot and retained script paths initialize the DOM adapter before evaluating package JavaScript. The adapter captures its validation and object-construction built-ins. Its private binding and staging lists have no inherited prototype. The host still validates the resulting edits before accepting a scene revision.
+
+## 115. M4 package worker failure replies
+
+The package scene bridge checks the session, sequence and base revision before accepting any worker response. A script failure closes the transaction and preserves the current scene without writing back to the departing worker. A rejected scene batch still receives a rejection reply. The same checks apply to one-shot, scheduled and live package execution.

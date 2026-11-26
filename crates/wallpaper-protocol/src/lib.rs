@@ -13,6 +13,7 @@ use wallpaper_scene::transaction::Edit;
 pub const PROTOCOL_VERSION: u16 = 1;
 pub const MAX_FRAME_BYTES: usize = 64 * 1024;
 pub const MAX_DIAGNOSTIC_BYTES: usize = 256;
+pub const SCRIPT_FAILURE_CODE: u16 = 101;
 pub const MAX_PACKAGE_TICK_DELAY_MS: u32 = 1000;
 pub const MAX_PACKAGE_TICKS: u8 = 3;
 const HEADER_BYTES: usize = 27;

@@ -13,7 +13,8 @@ use std::{
     thread::{self, JoinHandle},
 };
 use wallpaper_protocol::{
-    Body, Message, SCENE_REJECT_CODE, accept_scene_batch, read_frame, write_frame,
+    Body, Message, SCENE_REJECT_CODE, SCRIPT_FAILURE_CODE, accept_scene_batch, read_frame,
+    write_frame,
 };
 use wallpaper_scene::{
     Color, Content,
@@ -770,10 +771,15 @@ fn exchange_package(
             }
         }
         let batch = read_frame(&mut output)?.ok_or("Missing package scene batch")?;
-        let worker_rejected = live && matches!(batch.body, Body::Reject { .. });
-        if worker_rejected {
-            batch.check_context(session, sequence, base)?;
-        }
+        batch.check_context(session, sequence, base)?;
+        let worker_rejected = match &batch.body {
+            Body::Reject {
+                code: SCRIPT_FAILURE_CODE,
+                ..
+            } => true,
+            Body::SceneBatch { .. } => false,
+            _ => return Err("Unexpected package worker response".into()),
+        };
         let ack = accept_scene_batch(&mut host, batch);
         if ack
             != frame(
@@ -783,13 +789,13 @@ fn exchange_package(
                 Body::SceneAck { revision: sequence },
             )
         {
+            if !host.is_closed()
+                || host.revision() != base
+                || host.snapshot_after(Some(accepted_key)).is_some()
+            {
+                return Err("Package rejection changed the accepted scene".into());
+            }
             if live {
-                if !host.is_closed()
-                    || host.revision() != base
-                    || host.snapshot_after(Some(accepted_key)).is_some()
-                {
-                    return Err("Live package rejection changed the accepted scene".into());
-                }
                 let rejection = if worker_rejected {
                     "worker callback rejection"
                 } else {
@@ -798,7 +804,7 @@ fn exchange_package(
                 println!("Live package revision {base} preserved after {rejection}.");
             }
             // A worker reporting callback failure exits without waiting for a reply.
-            if !worker_rejected && matches!(ack.body, Body::Reject { .. }) {
+            if !worker_rejected {
                 send(&mut input, ack)?;
             }
             return Err("Package scene batch rejected".into());
