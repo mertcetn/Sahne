@@ -626,35 +626,41 @@ pub fn worker(
             None,
         )
     };
-    let local_callbacks = if matches!(mode, Mode::LocalLifecycle | Mode::PreviewLifecycle) {
-        let source = source.as_deref().ok_or("Missing local lifecycle source")?;
-        let (callbacks, delay) = script_result(
-            output,
-            session,
-            3,
-            0,
-            if mode == Mode::PreviewLifecycle {
-                script::RetainedCallbacks::from_package_source(source)
-            } else {
-                script::RetainedCallbacks::from_source(source).map(|callbacks| (callbacks, None))
-            },
-        )?;
-        if let Some(delay_ms) = delay {
-            send(
+    let (local_callbacks, package_ticks) =
+        if matches!(mode, Mode::LocalLifecycle | Mode::PreviewLifecycle) {
+            let source = source.as_deref().ok_or("Missing local lifecycle source")?;
+            let (callbacks, timer) = script_result(
                 output,
-                envelope(session, 3, Body::RegisterInterval { delay_ms }),
+                session,
+                3,
+                0,
+                if mode == Mode::PreviewLifecycle {
+                    script::RetainedCallbacks::from_package_source(source)
+                } else {
+                    script::RetainedCallbacks::from_source(source)
+                        .map(|callbacks| (callbacks, None))
+                },
             )?;
+            if let Some(timer) = &timer {
+                send(
+                    output,
+                    envelope(
+                        session,
+                        3,
+                        Body::PackageTimer {
+                            delay_ms: timer.delay_ms,
+                            ticks: timer.ticks,
+                        },
+                    ),
+                )?;
+            } else {
+                send(output, envelope(session, 3, Body::LifecycleReady))?;
+            }
+            deliver_lifecycle(input, output, session, |paused| callbacks.lifecycle(paused))?;
+            (Some(callbacks), timer.map(|timer| u64::from(timer.ticks)))
         } else {
-            send(output, envelope(session, 3, Body::LifecycleReady))?;
-        }
-        deliver_lifecycle(input, output, session, |paused| callbacks.lifecycle(paused))?;
-        if delay.is_some() && read_frame(input)? != Some(envelope(session, 6, Body::PackageTick)) {
-            return Err("Expected host package tick".into());
-        }
-        Some(callbacks)
-    } else {
-        None
-    };
+            (None, None)
+        };
     let clock = if mode.uses_general_bindings() {
         bindings
             .first()
@@ -671,7 +677,7 @@ pub fn worker(
         node: clock,
         value: value.into(),
     };
-    let updates = mode.updates();
+    let updates = package_ticks.unwrap_or_else(|| mode.updates());
     let mut sequence = 1u64;
     let utc_callbacks = (mode == Mode::Utc)
         .then(script::RetainedCallbacks::utc_clock)
@@ -679,6 +685,13 @@ pub fn worker(
     let mut lifecycle_sequence = 1u64;
     let mut utc_paused = false;
     while mode == Mode::Utc || sequence <= updates {
+        if package_ticks.is_some() {
+            let tick = read_frame(input)?.ok_or(MissingFrame("package tick"))?;
+            tick.check_context(session, sequence + 5, sequence - 1)?;
+            if tick.body != Body::PackageTick {
+                return Err("Expected host package tick".into());
+            }
+        }
         let display_time = if mode.uses_host_timer() || mode == Mode::Utc {
             if sequence > 1 {
                 send(output, update_message(session, sequence, Body::ClockReady))?;

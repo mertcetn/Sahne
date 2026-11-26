@@ -12,6 +12,7 @@ pub const PROTOCOL_VERSION: u16 = 1;
 pub const MAX_FRAME_BYTES: usize = 64 * 1024;
 pub const MAX_DIAGNOSTIC_BYTES: usize = 256;
 pub const MAX_PACKAGE_TICK_DELAY_MS: u32 = 1000;
+pub const MAX_PACKAGE_TICKS: u8 = 3;
 const HEADER_BYTES: usize = 27;
 
 #[derive(Debug)]
@@ -90,6 +91,10 @@ pub enum Body {
     },
     LifecycleReady,
     PackageTick,
+    PackageTimer {
+        delay_ms: u32,
+        ticks: u8,
+    },
     SceneBindings {
         targets: BTreeMap<String, u32>,
     },
@@ -181,6 +186,11 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
         Body::LifecycleAck { paused } => data.extend_from_slice(&[18, u8::from(*paused)]),
         Body::LifecycleReady => data.push(19),
         Body::PackageTick => data.push(20),
+        Body::PackageTimer { delay_ms, ticks } => {
+            check_package_timer(*delay_ms, *ticks)?;
+            data.extend_from_slice(&[21, *ticks]);
+            data.extend_from_slice(&delay_ms.to_le_bytes());
+        }
         Body::SceneBindings { targets } => {
             data.push(11);
             scene::encode_bindings(&mut data, message.base_revision, targets)?;
@@ -295,6 +305,12 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         },
         19 => Body::LifecycleReady,
         20 => Body::PackageTick,
+        21 => {
+            let [ticks] = data.array()?;
+            let delay_ms = u32::from_le_bytes(data.array()?);
+            check_package_timer(delay_ms, ticks)?;
+            Body::PackageTimer { delay_ms, ticks }
+        }
         11 => Body::SceneBindings {
             targets: scene::decode_bindings(&mut data, base_revision)?,
         },
@@ -333,6 +349,14 @@ fn decode_paused(data: &mut Decoder<'_>) -> Result<bool> {
         1 => Ok(true),
         _ => Err(Error::Invalid("invalid lifecycle state")),
     }
+}
+
+fn check_package_timer(delay_ms: u32, ticks: u8) -> Result<()> {
+    check_interval_delay(delay_ms)?;
+    if delay_ms > MAX_PACKAGE_TICK_DELAY_MS || !(1..=MAX_PACKAGE_TICKS).contains(&ticks) {
+        return Err(Error::Invalid("package timer outside bounds"));
+    }
+    Ok(())
 }
 
 fn check_interval_delay(delay_ms: u32) -> Result<()> {
@@ -415,6 +439,10 @@ mod tests {
             sample(Body::Pong { nonce: u64::MAX }),
             sample(Body::ProbeResult { denied: u32::MAX }),
             sample(Body::PackageTick),
+            sample(Body::PackageTimer {
+                delay_ms: 32,
+                ticks: MAX_PACKAGE_TICKS,
+            }),
             sample(Body::Reject {
                 code: 2,
                 message: "unsupported capability".into(),

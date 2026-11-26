@@ -38,8 +38,11 @@ $cases = @(
     @{ Name = 'missing-script' }
     @{ Name = 'lifecycle-promise'; Lifecycle = $true; Changed = 'true'; Script = '(() => { let phase = 0; return { pause() { return Promise.resolve().then(() => { phase = 1; }); }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Resumed"; } }; })()' }
     @{ Name = 'lifecycle-resume-rejected'; Lifecycle = $true; Script = '({ pause() {}, resume() { return Promise.reject(new Error("private-fixture-error")); }, tick(document) { document.getElementById("status").textContent = "Unexpected"; } })' }
-    @{ Name = 'lifecycle-scheduled'; Lifecycle = $true; Scheduled = $true; Changed = 'true'; Script = '(() => { let resumed = false; return { intervalMs: 32, pause() {}, resume() { resumed = true; }, tick(document) { if (!resumed) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Timer ran"; } }; })()' }
+    @{ Name = 'lifecycle-scheduled'; Lifecycle = $true; Ticks = 1; Changed = 'true'; Script = '(() => { let resumed = false; return { intervalMs: 32, pause() {}, resume() { resumed = true; }, tick(document) { if (!resumed) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Timer ran"; } }; })()' }
+    @{ Name = 'lifecycle-repeated'; Lifecycle = $true; Ticks = 3; Changed = 'true'; Script = '(() => { let calls = 0; return { intervalMs: 16, tickCount: 3, pause() {}, resume() {}, tick(document) { const element = document.getElementById("status"); if (calls > 0 && element.textContent !== "Tick " + calls) throw new Error("private-fixture-error"); element.textContent = "Tick " + (++calls); } }; })()' }
+    @{ Name = 'lifecycle-repeated-rejected'; Lifecycle = $true; Script = '(() => { let calls = 0; return { intervalMs: 16, tickCount: 3, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Tick " + (++calls); if (calls === 2) throw new Error("private-fixture-error"); } }; })()'; RejectTick = $true }
     @{ Name = 'lifecycle-invalid-delay'; Lifecycle = $true; InvalidDelay = $true; Script = '({ intervalMs: 32.5, pause() {}, resume() {}, tick() {} })' }
+    @{ Name = 'lifecycle-invalid-count'; Lifecycle = $true; InvalidDelay = $true; Script = '({ intervalMs: 16, tickCount: 4, pause() {}, resume() {}, tick() {} })' }
     @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; HtmlBytes = 128 * 1024 }
     @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = 'validation' }
     @{ Name = 'intake-missing-script'; Intake = $true; Reject = 'validation' }
@@ -110,19 +113,33 @@ $results = foreach ($case in $cases) {
     elseif ($case.ContainsKey('Lifecycle')) {
         $pause = $stdout.IndexOf('Package lifecycle acknowledged: pause.')
         $resume = $stdout.IndexOf('Package lifecycle acknowledged: resume.')
-        $tick = $stdout.IndexOf('Host dispatched scheduled package tick.')
+        $dispatches = [regex]::Matches($stdout, 'Host dispatched scheduled package tick\.')
+        $acks = [regex]::Matches($stdout, 'Host acknowledged scheduled package revision ([0-9]+)\.')
         $passed = $passed -and $cleanupCount -eq 1
         if ($case.ContainsKey('Changed')) {
-            $tickOrder = if ($case.ContainsKey('Scheduled')) { $tick -gt $resume } else { $tick -eq -1 }
+            $ticks = if ($case.ContainsKey('Ticks')) { $case.Ticks } else { 0 }
+            $tickOrder = $dispatches.Count -eq $ticks -and $acks.Count -eq $ticks
+            $previous = $resume
+            for ($i = 0; $tickOrder -and $i -lt $ticks; $i++) {
+                $tickOrder = $dispatches[$i].Index -gt $previous -and $acks[$i].Index -gt $dispatches[$i].Index -and
+                    [int]$acks[$i].Groups[1].Value -eq ($i + 1)
+                $previous = $acks[$i].Index
+            }
             $passed = $passed -and $pause -ge 0 -and $resume -gt $pause -and $tickOrder -and $result.ExitCode -eq 0 -and
                 $stdout -match ($accepted.Replace('(true|false)', $case.Changed)) -and [string]::IsNullOrWhiteSpace($stderr)
         }
         elseif ($case.ContainsKey('InvalidDelay')) {
-            $passed = $passed -and $pause -eq -1 -and $resume -eq -1 -and $tick -eq -1 -and $result.ExitCode -ne 0 -and
+            $passed = $passed -and $pause -eq -1 -and $resume -eq -1 -and $dispatches.Count -eq 0 -and $result.ExitCode -ne 0 -and
                 $stdout -notmatch $accepted -and $stderr.Contains('Package lifecycle initialization rejected')
         }
+        elseif ($case.ContainsKey('RejectTick')) {
+            $passed = $passed -and $pause -ge 0 -and $resume -gt $pause -and $dispatches.Count -eq 2 -and $acks.Count -eq 1 -and
+                $acks[0].Groups[1].Value -eq '1' -and $acks[0].Index -gt $dispatches[0].Index -and
+                $dispatches[1].Index -gt $acks[0].Index -and $result.ExitCode -ne 0 -and
+                $stdout -notmatch $accepted -and $stderr.Contains('Package scene batch rejected')
+        }
         else {
-            $passed = $passed -and $pause -ge 0 -and $resume -eq -1 -and $tick -eq -1 -and $result.ExitCode -ne 0 -and
+            $passed = $passed -and $pause -ge 0 -and $resume -eq -1 -and $dispatches.Count -eq 0 -and $result.ExitCode -ne 0 -and
                 $stdout -notmatch $accepted -and $stderr.Contains('Package resume callback rejected')
         }
     }

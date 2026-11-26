@@ -182,6 +182,11 @@ pub struct RetainedCallbacks {
     runtime: Runtime,
 }
 
+pub struct PackageTimer {
+    pub delay_ms: u32,
+    pub ticks: u8,
+}
+
 impl RetainedCallbacks {
     pub fn utc_clock() -> Result<Self> {
         Self::from_source(&format!(
@@ -195,27 +200,27 @@ impl RetainedCallbacks {
         Self::load(source, false).map(|(callbacks, _)| callbacks)
     }
 
-    pub fn from_package_source(source: &str) -> Result<(Self, Option<u32>)> {
+    pub fn from_package_source(source: &str) -> Result<(Self, Option<PackageTimer>)> {
         Self::load(source, true)
     }
 
-    fn load(source: &str, read_interval: bool) -> Result<(Self, Option<u32>)> {
+    fn load(source: &str, read_interval: bool) -> Result<(Self, Option<PackageTimer>)> {
         if !wallpaper_sandbox::is_appcontainer()? {
             return Err("Lifecycle probe refuses non-AppContainer execution".into());
         }
         let (runtime, interrupted) = bounded_runtime()?;
         let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
         let rejected = track_rejections(&runtime);
-        let delay = context
-            .with(|ctx| -> rquickjs::Result<Option<f64>> {
+        let (delay, ticks) = context
+            .with(|ctx| -> rquickjs::Result<(Option<f64>, Option<f64>)> {
                 let callbacks: Object = ctx.eval(source)?;
                 for name in ["pause", "resume", "tick"] {
                     let _: Function = callbacks.get(name)?;
                 }
                 let delay = if read_interval {
-                    callbacks.get("intervalMs")?
+                    (callbacks.get("intervalMs")?, callbacks.get("tickCount")?)
                 } else {
-                    None
+                    (None, None)
                 };
                 ctx.globals().set("registeredClock", callbacks)?;
                 Ok(delay)
@@ -223,19 +228,29 @@ impl RetainedCallbacks {
             .map_err(|_| "Expected an object with pause, resume and tick callbacks")?;
         check_callback_budget(&runtime, &interrupted)?;
         check_rejections(&rejected)?;
-        let delay = match delay {
+        let timer = match delay {
             Some(value)
                 if value.fract() == 0.0
                     && (wallpaper_scene::timer::MIN_DELAY.as_millis() as f64
                         ..=f64::from(wallpaper_protocol::MAX_PACKAGE_TICK_DELAY_MS))
                         .contains(&value) =>
             {
-                Some(value as u32)
+                let ticks = ticks.unwrap_or(1.0);
+                if ticks.fract() != 0.0
+                    || !(1.0..=f64::from(wallpaper_protocol::MAX_PACKAGE_TICKS)).contains(&ticks)
+                {
+                    return Err("Invalid package tick count".into());
+                }
+                Some(PackageTimer {
+                    delay_ms: value as u32,
+                    ticks: ticks as u8,
+                })
             }
             Some(_) => return Err("Invalid package interval delay".into()),
-            None => None,
+            None if ticks.is_none() => None,
+            None => return Err("Package tick count requires an interval".into()),
         };
-        Ok((Self { context, runtime }, delay))
+        Ok((Self { context, runtime }, timer))
     }
 
     pub fn edits(&self, bindings: &[Binding], display_time: &str) -> Result<Vec<Edit>> {

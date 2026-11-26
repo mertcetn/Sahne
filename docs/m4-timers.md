@@ -104,9 +104,13 @@ This command uses the preview's scene bridge and profile cleanup path. It checks
 
 The November 26, 2026 regression verified that pause finished its Promise job before resume, that the tick observed the resumed state, and that a rejected resume returned a fixed error with no accepted scene update. Both cases verified worker profile cleanup. Local report: `target/script-preview-validation/5f3d8ce2a1a64f53acdcd54ab67d2fe0/summary.json`.
 
-The preview check also accepts an optional numeric `intervalMs` field on the callback object. Supply an integer from 16 through 1000. After the synthetic resume acknowledgement, the host schedules one tick on its monotonic timer and sends a dedicated tick frame when due. An omitted field keeps the immediate single tick. A fractional or out-of-range value fails initialization. This development check covers one dispatch; repeating package timers and real Windows lifecycle delivery remain open.
+The preview check also accepts an optional numeric `intervalMs` field on the callback object. Supply an integer from 16 through 1000. With an interval, the optional integer `tickCount` limits the run to one through three dispatches and defaults to one. Without an interval, the host accepts one immediate tick after resume. A fractional or out-of-range timer value fails initialization.
+
+The host starts the first timer after the synthetic resume acknowledgement. It starts each later timer after acknowledging the previous scene revision. Each tick sees edits accepted by the host on the prior tick. A rejected tick stops further dispatches. This headless check uses one bounded timer and synthetic lifecycle events. General timer registration and real Windows lifecycle delivery remain open.
 
 The November 26, 2026 regression verified a 32 ms registration, dispatch after resume and rejection of a fractional delay before either lifecycle callback. All 24 headless cases passed. Local report: `target/script-preview-validation/26f8afc8cf444bdf91e9732e289bb6c3/summary.json`.
+
+A subsequent run verified three ordered dispatches and accepted revisions, a second-tick failure that stopped before the third dispatch, and rejection of a four-tick request during initialization. All 27 headless cases passed. Local report: `target/script-preview-validation/6f876bdee118404aac5da8739cab3ae8/summary.json`.
 
 The registered and continuous clock callbacks and the trusted package lifecycle probe use the same bounded Promise job drain. A lifecycle callback runs at most 64 jobs within its own 100 ms deadline. It must finish with an empty queue and fulfill any Promise it returns before the worker acknowledges the event. A tick follows the same rules before its DOM writes are collected. A rejection reported as unhandled fails the invocation. The trusted package's initial callback object must be available synchronously with no queued jobs.
 

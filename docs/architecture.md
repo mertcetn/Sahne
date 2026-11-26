@@ -777,3 +777,7 @@ The retained registered-clock worker checks the active callback phase inside its
 ## 108. M4 host-scheduled trusted package tick
 
 In the headless preview lifecycle check, a retained package callback object may supply one bounded delay during setup. The worker sends the registration over the control channel. The host validates the registration, completes the synthetic lifecycle exchange and arms its monotonic scheduler. A session-checked tick frame then authorizes one callback. The scene batch still passes through the existing validation and acknowledgement path. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).
+
+## 109. M4 bounded repeated package ticks
+
+The worker registers the delay and dispatch count in a dedicated IPC message. The codec bounds both fields. The host re-arms a one-shot timer after each accepted scene revision and sends the next tick with that base revision. The worker applies acknowledged edits to its bindings before the next callback. The host verifies terminal rejection against the last accepted revision and publishes only changed snapshots.

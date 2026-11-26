@@ -12,8 +12,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 use wallpaper_protocol::{
-    Body, MAX_PACKAGE_TICK_DELAY_MS, Message, SCENE_REJECT_CODE, accept_scene_batch, read_frame,
-    write_frame,
+    Body, Message, SCENE_REJECT_CODE, accept_scene_batch, read_frame, write_frame,
 };
 use wallpaper_scene::{
     Color, Content,
@@ -628,19 +627,20 @@ fn exchange_package(
     state: &ChannelState,
     (program, lifecycle_check): (Body, bool),
 ) -> WorkerResult<()> {
-    let before = host
+    let mut accepted_key = host
         .snapshot_after(None)
         .ok_or("Missing initial package scene")?
         .key;
     send(&mut input, frame(session, 2, 0, program))?;
-    if lifecycle_check {
+    let (delay, ticks) = if lifecycle_check {
         let ready = read_frame(&mut output)?.ok_or("Missing package lifecycle readiness")?;
         ready.check_context(session, 3, 0)?;
-        let delay = match ready.body {
-            Body::LifecycleReady => None,
-            Body::RegisterInterval { delay_ms } if delay_ms <= MAX_PACKAGE_TICK_DELAY_MS => {
-                Some(Duration::from_millis(u64::from(delay_ms)))
-            }
+        let timing = match ready.body {
+            Body::LifecycleReady => (None, 1),
+            Body::PackageTimer { delay_ms, ticks } => (
+                Some(Duration::from_millis(u64::from(delay_ms))),
+                u64::from(ticks),
+            ),
             _ => return Err("Package lifecycle initialization rejected".into()),
         };
         for (sequence, paused) in [(4, true), (5, false)] {
@@ -662,6 +662,12 @@ fn exchange_package(
                 if paused { "pause" } else { "resume" }
             );
         }
+        timing
+    } else {
+        (None, 1)
+    };
+    for sequence in 1..=ticks {
+        let base = sequence - 1;
         if let Some(delay) = delay {
             let start = Instant::now();
             let mut timers = wallpaper_scene::timer::Timers::new(start);
@@ -679,33 +685,43 @@ fn exchange_package(
                 let wake = timers.next_wake().ok_or("Missing package timer deadline")?;
                 thread::park_timeout(wake.saturating_duration_since(now));
             }
-            send(&mut input, frame(session, 6, 0, Body::PackageTick))?;
+            send(
+                &mut input,
+                frame(session, sequence + 5, base, Body::PackageTick),
+            )?;
             println!("Host dispatched scheduled package tick.");
         }
-    }
-    let batch = read_frame(&mut output)?.ok_or("Missing package scene batch")?;
-    let ack = accept_scene_batch(&mut host, batch);
-    if ack != frame(session, 1, 0, Body::SceneAck { revision: 1 }) {
-        if matches!(ack.body, Body::Reject { .. }) {
-            send(&mut input, ack)?;
+        let batch = read_frame(&mut output)?.ok_or("Missing package scene batch")?;
+        let ack = accept_scene_batch(&mut host, batch);
+        if ack
+            != frame(
+                session,
+                sequence,
+                base,
+                Body::SceneAck { revision: sequence },
+            )
+        {
+            if matches!(ack.body, Body::Reject { .. }) {
+                send(&mut input, ack)?;
+            }
+            return Err("Package scene batch rejected".into());
         }
-        return Err("Package scene batch rejected".into());
-    }
-    send(&mut input, ack)?;
-    let accepted = host
-        .snapshot_after(None)
-        .ok_or("Missing accepted package scene")?;
-    let accepted_key = accepted.key;
-    if accepted_key != before {
-        state
-            .update
-            .lock()
-            .map_err(|_| "Package scene mailbox unavailable")?
-            .snapshot = Some(accepted);
-        (state.notify)();
+        send(&mut input, ack)?;
+        if delay.is_some() {
+            println!("Host acknowledged scheduled package revision {sequence}.");
+        }
+        if let Some(accepted) = host.snapshot_after(Some(accepted_key)) {
+            accepted_key = accepted.key;
+            state
+                .update
+                .lock()
+                .map_err(|_| "Package scene mailbox unavailable")?
+                .snapshot = Some(accepted);
+            (state.notify)();
+        }
     }
     let invalid = read_frame(&mut output)?.ok_or("Missing terminal package batch")?;
-    invalid.check_context(session, 2, 1)?;
+    invalid.check_context(session, ticks + 1, ticks)?;
     let rejection = accept_scene_batch(&mut host, invalid);
     if !matches!(
         rejection.body,
@@ -714,7 +730,7 @@ fn exchange_package(
             ..
         }
     ) || !host.is_closed()
-        || host.revision() != 1
+        || host.revision() != ticks
         || host.snapshot_after(Some(accepted_key)).is_some()
     {
         return Err("Package snapshot changed during terminal rejection".into());
