@@ -37,7 +37,26 @@ fn budget(entry_index: usize) -> SnapshotError {
 
 impl Package {
     /// Retain bytes from caller-owned readers. The caller establishes handle provenance,
-    /// directory containment and operational deadlines before supplying readers.
+    /// directory containment and operational deadlines before supplying readers. This
+    /// also parses the package, so use it only where source parsing is permitted.
+    pub fn from_readers<R: Read>(
+        entries: impl IntoIterator<Item = io::Result<(String, R)>>,
+    ) -> Result<Self, SnapshotError> {
+        PackageSnapshot::from_readers(entries)?
+            .parse()
+            .map_err(SnapshotError::Package)
+    }
+}
+
+/// Owned package bytes with bounded sizes and individually validated paths.
+/// Manifest, source and cross-entry validation are deferred until parsing.
+#[derive(Debug)]
+pub struct PackageSnapshot {
+    entries: Vec<(String, Vec<u8>)>,
+}
+
+impl PackageSnapshot {
+    /// Read from handles whose provenance and containment the caller has established.
     pub fn from_readers<R: Read>(
         entries: impl IntoIterator<Item = io::Result<(String, R)>>,
     ) -> Result<Self, SnapshotError> {
@@ -82,7 +101,12 @@ impl Package {
             remaining -= bytes.len();
             retained.push((path, bytes));
         }
-        Self::from_entries(retained).map_err(SnapshotError::Package)
+        Ok(Self { entries: retained })
+    }
+
+    /// Validate the entry set and parse the native manifest and source references.
+    pub fn parse(self) -> crate::Result<Package> {
+        Package::from_entries(self.entries)
     }
 }
 
@@ -90,6 +114,17 @@ impl Package {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn snapshot_capture_leaves_manifest_parsing_to_the_consumer() {
+        let snapshot =
+            PackageSnapshot::from_readers([Ok(("manifest.json".into(), Cursor::new(b"{")))])
+                .unwrap();
+        assert_eq!(
+            snapshot.parse().unwrap_err().code,
+            ErrorCode::ManifestSyntax
+        );
+    }
 
     #[test]
     fn snapshot_owns_exact_bytes_and_still_validates_manifest_references() {

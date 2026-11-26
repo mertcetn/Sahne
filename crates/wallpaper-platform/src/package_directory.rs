@@ -7,7 +7,7 @@ use std::{
     mem::offset_of,
     os::windows::{fs::OpenOptionsExt, io::AsRawHandle},
 };
-use wallpaper_format::{MAX_ENTRIES, Package, RelativePath};
+use wallpaper_format::{MAX_ENTRIES, Package, PackageSnapshot, RelativePath, SnapshotError};
 use windows_sys::Win32::{
     Foundation::ERROR_NO_MORE_FILES,
     Storage::FileSystem::{
@@ -20,11 +20,18 @@ use windows_sys::Win32::{
 
 /// Collect from an absolute fixed-drive path with portable ASCII components.
 pub fn collect(path: &str) -> Result<Package, Box<dyn std::error::Error>> {
+    Ok(collect_snapshot(path)?
+        .parse()
+        .map_err(SnapshotError::Package)?)
+}
+
+/// Capture bounded file bytes without parsing the package sources.
+pub fn collect_snapshot(path: &str) -> Result<PackageSnapshot, Box<dyn std::error::Error>> {
     let mut dir = open_folder(path)?;
     let mut entries = Vec::new();
     let mut count = 0;
     walk(&mut dir, "", &mut count, &mut entries)?;
-    Ok(Package::from_readers(entries.into_iter().map(Ok))?)
+    Ok(PackageSnapshot::from_readers(entries.into_iter().map(Ok))?)
 }
 
 fn invalid(message: &'static str) -> io::Error {
@@ -234,7 +241,7 @@ mod tests {
             junction.status.success(),
             "junction fixture creation failed"
         );
-        assert!(collect(path).is_err());
+        assert!(collect_snapshot(path).is_err());
         assert!(collect(&format!("{path}\\alias")).is_err());
         fs::remove_dir(root.join("alias"))?;
         for index in 0..100 {

@@ -737,3 +737,7 @@ The continuous UTC clock can use the Explorer-owned desktop surface while the Ap
 ## 98. M4 direct package cleanup verification
 
 The direct package supervisor reports successful worker profile cleanup before returning the transaction outcome. The Windows headless regression uses that signal to check cleanup after successful and rejected transactions and expects no cleanup signal when package preparation fails before launch. See [Integrated script preview regression](m4-scene-transactions.md#integrated-script-preview-regression).
+
+## 99. M4 bounded capture before package parsing
+
+Windows folder collection can return owned source bytes after handle-relative filesystem checks and bounded reads. Manifest decoding, source reference checks and package entry-set validation are deferred to a consuming operation. The trusted callers perform that operation locally. The separation provides an intake boundary for a future restricted helper. See [Bounded snapshot from open readers](m3-manifest.md#bounded-snapshot-from-open-readers).

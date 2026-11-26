@@ -5,7 +5,7 @@ mod path;
 mod snapshot;
 pub use manifest::Manifest;
 pub use path::RelativePath;
-pub use snapshot::SnapshotError;
+pub use snapshot::{PackageSnapshot, SnapshotError};
 
 pub const MAX_MANIFEST_BYTES: usize = 16 * 1024;
 pub const MAX_ENTRIES: usize = 1024;
