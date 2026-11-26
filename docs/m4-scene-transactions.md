@@ -232,7 +232,19 @@ target/release/wallpaper-preview.exe --check-isolated-script-preview $folder
 
 This Windows development command captures the folder and sends the raw snapshot to an AppContainer helper. The helper validates and compiles the flat text-and-rectangle package and prepares its manifest-selected script and binding table. The host decodes the flat scene and independently derives each initial binding value from it. After the preparation helper exits and its profile is removed, a separate AppContainer worker runs the one-shot script. The existing preview bridge validates the returned scene transaction.
 
-The November 26, 2026 regression accepted a valid update, rejected a runtime exception, and verified that an oversized binding table and a missing script stopped before launching the execution worker. All 38 cases passed. Local report: `target/script-preview-validation/c36cb122d71749cfa9248c1627d4264a/summary.json`. The isolated path is headless. The existing visible script commands continue to use trusted local preparation, and the G2 gate remains open.
+The November 26, 2026 regression accepted a valid update, rejected a runtime exception, and verified that an oversized binding table and a missing script stopped before launching the execution worker. All 38 cases passed. Local report: `target/script-preview-validation/c36cb122d71749cfa9248c1627d4264a/summary.json`.
+
+#### Isolated script package preview
+
+```powershell
+target/release/wallpaper-preview.exe --isolated-script-preview $folder --seconds 30
+target/release/wallpaper-preview.exe --isolated-script-live $folder --seconds 90
+target/release/wallpaper-preview.exe --check-isolated-script-live $folder
+```
+
+These development commands use the isolated preparation path. The preview opens only after the scene and bindings pass host validation and the preparation profile is removed. The one-shot mode renders one callback update. The live mode uses the [live package callback contract](m4-timers.md#live-trusted-package-lifecycle-preview). Add `--desktop` to either display command to attach it behind Windows icons. The headless live check uses synthetic lifecycle events. Visible rendering of the isolated script modes still needs local verification, and the G2 gate remains open.
+
+The November 26, 2026 run passed 40 headless cases. The isolated live check verified pause, resume, two scene updates and both profile cleanups. A separate isolated live case rejected the second callback, preserved revision 1 and cleaned up both profiles. Local report: `target/script-preview-validation/7855166e64d94c9ba632461c1fc1734c/summary.json`.
 
 #### Direct package preview on the desktop
 

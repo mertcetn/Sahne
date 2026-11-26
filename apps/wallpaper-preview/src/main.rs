@@ -55,22 +55,12 @@ fn main() -> Result<()> {
     let mut check_script_package = false;
     let mut check_script_lifecycle = false;
     let mut live_script_lifecycle = false;
+    let mut isolated_script_preparation = false;
     let mut sandbox_package_folder = None;
     let mut worker_live = None;
     let mut check_worker_live = false;
     let mut compiled_example = None;
     let mut args = std::env::args().skip(1).peekable();
-    if args
-        .peek()
-        .is_some_and(|arg| arg == "--check-isolated-script-preview")
-    {
-        args.next();
-        let folder = args.next().ok_or("Expected an absolute package folder")?;
-        if args.next().is_some() {
-            return Err("Isolated script check takes exactly one folder".into());
-        }
-        return live_clock::check_package(script_package::prepare_isolated(&folder)?);
-    }
     if args
         .peek()
         .is_some_and(|arg| arg == "--check-package-intake")
@@ -98,7 +88,7 @@ fn main() -> Result<()> {
                     "--check-package-intake <absolute-folder> validates and compiles a flat package in AppContainer without rendering or running a script."
                 );
                 println!(
-                    "--check-isolated-script-preview <absolute-folder> prepares and executes a flat script package in separate AppContainer workers without rendering."
+                    "--isolated-script-preview <absolute-folder> displays one script update. --isolated-script-live <absolute-folder> runs a package timer with Windows lifecycle callbacks. Both use separate AppContainer workers for preparation and execution. Add --desktop or --seconds N, or use --check-isolated-script-preview / --check-isolated-script-live for a headless check."
                 );
                 println!(
                     "--check-trusted-script-lifecycle <absolute-folder> checks pause, resume and one script tick without a window."
@@ -167,6 +157,10 @@ fn main() -> Result<()> {
             | "--check-trusted-script-preview"
             | "--trusted-script-live"
             | "--check-trusted-script-live"
+            | "--isolated-script-preview"
+            | "--isolated-script-live"
+            | "--check-isolated-script-preview"
+            | "--check-isolated-script-live"
             | "--check-trusted-script-lifecycle" => {
                 if script_package_folder.is_some() {
                     return Err("Choose one script preview input".into());
@@ -174,8 +168,9 @@ fn main() -> Result<()> {
                 check_script_package = arg.starts_with("--check-");
                 check_script_lifecycle = arg == "--check-trusted-script-lifecycle";
                 live_script_lifecycle = arg.ends_with("-live");
-                script_package_folder =
-                    Some(args.next().ok_or("Missing trusted script package folder")?);
+                isolated_script_preparation =
+                    arg.starts_with("--isolated-") || arg.starts_with("--check-isolated-");
+                script_package_folder = Some(args.next().ok_or("Missing script package folder")?);
             }
             "--sandboxed-package-preview" => {
                 if sandbox_package_folder.is_some() {
@@ -229,9 +224,14 @@ fn main() -> Result<()> {
     {
         return Err("Conflicting options for scripted or retained scene preview".into());
     }
+    let prepare_script = if isolated_script_preparation {
+        script_package::prepare_isolated
+    } else {
+        script_package::prepare
+    };
     let mut script_package = script_package_folder
         .as_deref()
-        .map(script_package::prepare)
+        .map(prepare_script)
         .transpose()?;
     if let Some(package) = &mut script_package {
         if live_script_lifecycle {

@@ -55,7 +55,7 @@ Reviewed November 26, 2026. The Windows headless package regression passed 34 lo
 
 | Area | Evidence | Remaining verification |
 | --- | --- | --- |
-| Native intake | The restricted helper checks the manifest, compiles flat HTML/CSS and decodes supported PNGs. The host validates returned scene and pixel data. A [headless scripted check](m4-scene-transactions.md#isolated-script-package-check) also verifies bindings before starting a separate execution worker. | Visible script previews still use trusted host parsing. Custom font processing and broader input handling remain pending. |
+| Native intake | The restricted helper checks the manifest, compiles flat HTML/CSS and decodes supported PNGs. The host validates returned scene and pixel data. The [isolated script preview](m4-scene-transactions.md#isolated-script-package-preview) also verifies bindings before starting a separate execution worker. | Visual verification of the isolated script modes, custom font processing and broader input handling remain pending. |
 | Live transactions | The preview accepts bounded script updates and retains the accepted revision after callback or scene rejection. | Run the transport failure suite through the integrated path, including stale/reordered frames and independent deadline and cleanup cases. |
 | Callback limits | Promise and DOM limits, staged edit limits, callback deadline, and pause/resume have local AppContainer evidence. | Broader callback and resource failure coverage, including host-death cleanup and OS isolation review. |
 

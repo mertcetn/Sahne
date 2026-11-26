@@ -64,6 +64,8 @@ $cases = @(
     @{ Name = 'isolated-script-runtime-rejected'; Isolated = $true; Script = '() => { throw new Error("private-fixture-error"); }'; RuntimeReject = $true }
     @{ Name = 'isolated-script-too-many-bindings'; Isolated = $true; Targets = 33; Script = '() => {}'; Reject = 'script preparation' }
     @{ Name = 'isolated-script-missing-source'; Isolated = $true; Reject = 'validation' }
+    @{ Name = 'isolated-script-live'; Isolated = $true; Live = $true; Script = '(() => { let phase = 0, calls = 0; return { intervalMs: 32, pause() { phase = 1; }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Tick " + (++calls); } }; })()' }
+    @{ Name = 'isolated-script-live-rejected'; Isolated = $true; Live = $true; RuntimeReject = $true; Script = '(() => { let calls = 0; return { intervalMs: 32, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Tick " + (++calls); if (calls === 2) throw new Error("private-fixture-error"); } }; })()' }
 )
 $manifest = '{"formatVersion":1,"apiVersion":1,"id":"probe.integration","name":"Script preview validation","entry":"index.html","script":"update.js","permissions":[],"preferredFps":30}'
 Write-Host "Script preview validation reports in $run"
@@ -104,6 +106,7 @@ $results = foreach ($case in $cases) {
     }
 
     $mode = if ($case.ContainsKey('Intake')) { '--check-package-intake' }
+        elseif ($case.ContainsKey('Isolated') -and $case.ContainsKey('Live')) { '--check-isolated-script-live' }
         elseif ($case.ContainsKey('Isolated')) { '--check-isolated-script-preview' }
         elseif ($case.ContainsKey('Lifecycle')) { '--check-trusted-script-lifecycle' }
         elseif ($case.ContainsKey('Live')) { '--check-trusted-script-live' }
@@ -133,17 +136,22 @@ $results = foreach ($case in $cases) {
     elseif ($case.ContainsKey('Isolated')) {
         $helperCount = [regex]::Matches($stdout, '(?m)^Package helper profile cleanup verified\.\r?$').Count
         $passed = $passed -and $helperCount -eq 1
+        $successPattern = if ($case.ContainsKey('Live')) { '(?m)^Live package pause, resume and two updates verified\.\r?$' }
+            else { $accepted.Replace('(true|false)', 'true') }
         if ($case.ContainsKey('Reject')) {
             $passed = $passed -and $result.ExitCode -ne 0 -and $cleanupCount -eq 0 -and
                 $stdout -notmatch $accepted -and $stderr.Contains("Package rejected by AppContainer $($case.Reject)")
         }
         elseif ($case.ContainsKey('RuntimeReject')) {
             $passed = $passed -and $result.ExitCode -ne 0 -and $cleanupCount -eq 1 -and
-                $stdout -notmatch $accepted -and $stderr.Contains('Package scene batch rejected')
+                $stdout -notmatch $successPattern -and $stderr.Contains('Package scene batch rejected')
+            if ($case.ContainsKey('Live')) {
+                $passed = $passed -and $stdout.Contains('Live package revision 1 preserved after worker callback rejection.')
+            }
         }
         else {
             $passed = $passed -and $result.ExitCode -eq 0 -and $cleanupCount -eq 1 -and
-                $stdout -match ($accepted.Replace('(true|false)', 'true')) -and [string]::IsNullOrWhiteSpace($stderr)
+                $stdout -match $successPattern -and [string]::IsNullOrWhiteSpace($stderr)
         }
     }
     elseif ($case.ContainsKey('Live')) {
