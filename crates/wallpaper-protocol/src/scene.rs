@@ -10,6 +10,21 @@ const MAX_BINDINGS: usize = 64;
 const MAX_BINDING_NAME_BYTES: usize = 64;
 const MAX_SCRIPT_SOURCE_BYTES: usize = 32 * 1024;
 
+pub(super) fn check_initial(targets: &BTreeMap<String, u32>, initial: &[Edit]) -> Result<()> {
+    let targets: BTreeSet<_> = targets.values().copied().collect();
+    let mut properties = BTreeSet::new();
+    for edit in initial {
+        let (node, text) = match edit {
+            Edit::Text { node, .. } => (*node, true),
+            Edit::Color { node, .. } => (*node, false),
+        };
+        if !targets.contains(&node) || !properties.insert((node, text)) {
+            return Err(Error::Invalid("invalid initial scene property"));
+        }
+    }
+    Ok(())
+}
+
 fn check_script_size(size: usize) -> Result<()> {
     if !(1..=MAX_SCRIPT_SOURCE_BYTES).contains(&size) {
         return Err(Error::Invalid("scene script size outside bounds"));

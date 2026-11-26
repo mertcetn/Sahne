@@ -55,6 +55,7 @@ pub fn run(path: &str, mode: &str, action: Action) -> ExitCode {
                         body: wallpaper_protocol::Body::SceneProgram {
                             targets,
                             source: source.to_owned(),
+                            initial: Vec::new(),
                         },
                     },
                 )?;

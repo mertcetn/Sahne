@@ -145,9 +145,7 @@ fn run_case(
 
 /// Rust resolves the adapter's local indices against the host fixture bindings.
 pub fn clock_edits(
-    clock: u32,
-    accent: u32,
-    previous: &str,
+    bindings: &[(&str, u32, Option<&str>, wallpaper_scene::Color); 2],
     display_time: &str,
     package_source: Option<&str>,
 ) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
@@ -156,11 +154,10 @@ pub fn clock_edits(
     }
     let (runtime, interrupted) = bounded_runtime()?;
     let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
-    let bindings = [("clock", clock, Some(previous)), ("accent", accent, None)];
     let edits = context.with(|ctx| {
         run_scene_callback(
             &ctx,
-            &bindings,
+            bindings,
             package_source.unwrap_or(include_str!("clock_fixture.js")),
             display_time,
         )
@@ -173,7 +170,7 @@ pub fn clock_edits(
 
 fn run_scene_callback(
     ctx: &rquickjs::Ctx<'_>,
-    bindings: &[(&str, u32, Option<&str>)],
+    bindings: &[(&str, u32, Option<&str>, wallpaper_scene::Color)],
     callback_source: &str,
     value: &str,
 ) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
@@ -187,13 +184,13 @@ fn run_scene_callback(
         return Err("Scene binding count outside bounds".into());
     }
     let input = Array::new(ctx.clone())?;
-    for (index, (name, _, text)) in bindings.iter().enumerate() {
+    for (index, (name, _, text, initial_color)) in bindings.iter().enumerate() {
         let entry = Array::new(ctx.clone())?;
         entry.set(0, *name)?;
         entry.set(1, *text)?;
         let color = Array::new(ctx.clone())?;
-        for channel in 0..4 {
-            color.set(channel, 255u8)?;
+        for (channel, value) in initial_color.0.into_iter().enumerate() {
+            color.set(channel, value)?;
         }
         entry.set(2, color)?;
         input.set(index, entry)?;
@@ -214,7 +211,7 @@ fn run_scene_callback(
     for index in 0..count {
         let edit: Array = staged.get(index)?;
         let binding: usize = edit.get(0)?;
-        let (_, node, text) = *bindings
+        let (_, node, text, _) = *bindings
             .get(binding)
             .ok_or("Invalid fixture binding index")?;
         match edit.get::<u8>(1)? {

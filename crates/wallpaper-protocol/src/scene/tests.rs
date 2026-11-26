@@ -32,6 +32,7 @@ fn scene_program_checks_source_bounds_and_encoding() {
             Body::SceneProgram {
                 targets: BTreeMap::from([("clock".into(), 3)]),
                 source,
+                initial: Vec::new(),
             },
             2,
             0,
@@ -54,6 +55,37 @@ fn scene_program_checks_source_bounds_and_encoding() {
         *wire.last_mut().unwrap() = byte;
         assert!(read_frame(&mut wire.as_slice()).is_err());
     }
+}
+
+#[test]
+fn scene_program_initial_properties_are_bound_and_unique() {
+    let program = |initial| {
+        message(
+            Body::SceneProgram {
+                targets: BTreeMap::from([("clock".into(), 1)]),
+                source: "() => {}".into(),
+                initial,
+            },
+            2,
+            0,
+        )
+    };
+    let valid = program(vec![
+        text("old"),
+        Edit::Color {
+            node: 1,
+            value: Color([255; 4]),
+        },
+    ]);
+    let wire = encode(&valid);
+    assert_eq!(read_frame(&mut wire.as_slice()).unwrap(), Some(valid));
+    let mut unbound = wire;
+    let last_color_node = unbound.len() - 8;
+    unbound[last_color_node] = 2;
+    assert!(read_frame(&mut unbound.as_slice()).is_err());
+    let mut output = Vec::new();
+    assert!(write_frame(&mut output, &program(vec![text("old"), text("new")])).is_err());
+    assert!(output.is_empty());
 }
 
 #[test]

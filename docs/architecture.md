@@ -645,3 +645,7 @@ The Windows developer probe can collect and compile a trusted folder matching th
 ## 75. M4 layout-independent local clock targets
 
 The trusted local clock probe selects its two writable text nodes by author ID across different layouts. Decorative nodes stay outside the worker's bindings and the host's write grants. The local case uses invalid text for its terminal rollback check. The embedded case continues to test a write to an existing unauthorized background node. See [Running a trusted local clock package](m4-scene-transactions.md#running-a-trusted-local-clock-package).
+
+## 76. M4 clock DOM initialization from validated scene
+
+For both package clock probes, the host sends the initial text and foreground RGBA of the two bound nodes in the scene program frame. The codec bounds these properties and rejects duplicate or unbound entries. The worker seeds the callback's DOM from these values before evaluation. The host retains revision and publication authority. See [Initial DOM values from the scene](m4-scene-transactions.md#initial-dom-values-from-the-scene).

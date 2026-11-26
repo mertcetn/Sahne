@@ -103,7 +103,7 @@ cargo build --release -p wallpaper-sandbox-probe --locked
 target/release/wallpaper-sandbox-probe.exe --run-trusted-clock-package $folder
 ```
 
-Use a trusted local Windows package folder and its absolute path. The native manifest must declare an HTML entry and a JavaScript callback source. The local command requires the named spans `clock` (text `initial`) and `accent` (text `UTC`) with white foreground. Either span may have a background. Their order is flexible, and the scene can include decorative elements. Only `clock` and `accent` are exposed to the callback. One possible HTML entry is shown below.
+Use a trusted local Windows package folder and its absolute path. The native manifest must declare an HTML entry and a JavaScript callback source. The local command requires the named spans `clock` and `accent`. Their initial text and foreground colors come from the package. Either span may have a background. Their order is flexible, and the scene can include decorative elements. Only `clock` and `accent` are exposed to the callback. One possible HTML entry is shown below.
 
 ```html
 <div style="width:100px;height:100px;background-color:#121212"></div>
@@ -120,6 +120,14 @@ The local release check accepted the folder callback and rejected a replacement 
 The layout-independent local case uses the same invalid-text rollback control as the typed probe. The embedded `scene-script` case continues to check an unauthorized background mutation.
 
 The release check passed with the accent span first, a named decorative rectangle next, and the clock span last. The callback confirmed the decorative ID was unavailable. The local worker cleaned up successfully, and the embedded scripted, typed and timer probes passed. Local regression report at `target/sandbox-validation/fa29398f74ba4dd59f2b9a99c017975c/`.
+
+### Initial DOM values from the scene
+
+Message kind 13 extends the scene program with initial text and RGBA records after the source, encoded with the existing bounded edit format. A target must appear in the binding table, and each target and property pair may appear once. These records initialize the worker's callback values at revision zero. The clock worker requires text and foreground RGBA for both spans. The developer CLI's kind 12 check still validates the source and named binding table.
+
+The package callback reads the actual initial text and foreground color for each span. The host verifies that the clock's foreground and accent's label are preserved across the expected edit. A color-only change publishes a snapshot even when the clock text already matches the sample.
+
+A trusted local release test started with `12:34`, a custom `Zone` label and two nonwhite foregrounds. The callback read all four source values correctly. The host acknowledged the color-only change and verified rollback and profile cleanup. The embedded script, typed and timer cases and the headless live clock passed. Local report at `target/sandbox-validation/daf1109b36964455a03b7854d83c3518/`.
 
 ## Content snapshots for presentation
 

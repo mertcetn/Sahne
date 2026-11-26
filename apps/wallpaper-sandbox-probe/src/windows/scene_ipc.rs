@@ -162,11 +162,8 @@ pub(super) fn prepare_script_scene(
         .get("clock")
         .zip(targets.get("accent"))
         .ok_or("Missing compiled clock bindings")?;
-    if !matches!(content(compiled.scene(), clock), Some(Content::Text { text, color, .. }) if text == "initial" && *color == Color([255; 4]))
-        || !matches!(content(compiled.scene(), accent), Some(Content::Text { text, color, .. }) if text == "UTC" && *color == Color([255; 4]))
-    {
-        return Err("Package does not match the scripted clock fixture's initial bindings".into());
-    }
+    text_state(compiled.scene(), clock)?;
+    text_state(compiled.scene(), accent)?;
     Ok(CompiledScriptScene {
         scene: compiled.into_scene(),
         clock,
@@ -182,6 +179,13 @@ fn content(scene: &ValidatedScene, id: u32) -> Option<&Content> {
         .iter()
         .find(|node| node.id == id)
         .map(|node| &node.content)
+}
+
+fn text_state(scene: &ValidatedScene, id: u32) -> Result<(&str, Color)> {
+    match content(scene, id) {
+        Some(Content::Text { text, color, .. }) => Ok((text, *color)),
+        _ => Err("Expected clock text binding".into()),
+    }
 }
 
 pub fn read_response(
@@ -218,7 +222,14 @@ pub fn read_response(
     };
     let mut host = HostScene::new(scene, session, &BTreeSet::from([clock, accent]))
         .map_err(|_| "Could not initialize fixture host scene")?;
+    let (clock_text, clock_color) = text_state(host.scene(), clock)?;
+    let accent_text = if mode.loads_script() {
+        Some(text_state(host.scene(), accent)?.0.to_owned())
+    } else {
+        None
+    };
     if let Some(source) = source {
+        let (label, color) = text_state(host.scene(), accent)?;
         requests
             .try_send(envelope(
                 session,
@@ -226,6 +237,24 @@ pub fn read_response(
                 Body::SceneProgram {
                     targets: BTreeMap::from([("clock".into(), clock), ("accent".into(), accent)]),
                     source,
+                    initial: vec![
+                        Edit::Text {
+                            node: clock,
+                            value: clock_text.to_owned(),
+                        },
+                        Edit::Color {
+                            node: clock,
+                            value: clock_color,
+                        },
+                        Edit::Text {
+                            node: accent,
+                            value: label.to_owned(),
+                        },
+                        Edit::Color {
+                            node: accent,
+                            value: color,
+                        },
+                    ],
                 },
             ))
             .map_err(|_| "Scene program writer queue unavailable")?;
@@ -244,7 +273,6 @@ pub fn read_response(
     let mut snapshot = host
         .snapshot_after(None)
         .ok_or("Missing initial snapshot")?;
-    let mut previous_display = "initial".to_owned();
     let mut published = 0;
     for sequence in 1..=updates {
         let display_time = if let Some((timers, id)) = timer.as_mut() {
@@ -267,22 +295,28 @@ pub fn read_response(
         } else {
             "12:34".into()
         };
+        let expected_change = text_state(host.scene(), clock)?.0 != display_time
+            || match content(host.scene(), accent) {
+                Some(Content::Text { color, .. } | Content::Rectangle { color }) => {
+                    *color != expected_color
+                }
+                _ => return Err("Missing clock accent content".into()),
+            };
         let accepted = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
         let ack = accept_scene_batch(&mut host, accepted);
         let accent_matches = match content(host.scene(), accent) {
             Some(Content::Text { text, color, .. }) if mode.loads_script() => {
-                text == "UTC" && *color == expected_color
+                accent_text.as_deref() == Some(text.as_str()) && *color == expected_color
             }
             Some(Content::Rectangle { color }) if !mode.loads_script() => *color == expected_color,
             _ => false,
         };
         if ack != update_message(session, sequence, Body::SceneAck { revision: sequence })
-            || !matches!(content(host.scene(), clock), Some(Content::Text { text, .. }) if text == &display_time)
+            || text_state(host.scene(), clock)? != (display_time.as_str(), clock_color)
             || !accent_matches
         {
             return Err("Scene acknowledgement or committed content mismatch".into());
         }
-        let expected_change = display_time != previous_display;
         let updated = host.snapshot_after(Some(snapshot.key));
         if updated.is_some() != expected_change {
             return Err("Unexpected presentation update for clock text".into());
@@ -294,7 +328,6 @@ pub fn read_response(
             snapshot = updated;
             published += 1;
         }
-        previous_display = display_time;
         requests
             .try_send(ack)
             .map_err(|_| "Scene writer queue unavailable")?;
@@ -404,25 +437,78 @@ pub fn worker(
     mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
-    let (clock, accent, source) = if mode.loads_script() {
-        let program = read_frame(input)?.ok_or(MissingFrame("scene program"))?;
-        program.check_context(session, 2, 0)?;
-        let Body::SceneProgram { targets, source } = program.body else {
-            return Err("Expected host scene program".into());
+    let (clock, accent, source, mut previous, label, clock_color, accent_color) =
+        if mode.loads_script() {
+            let program = read_frame(input)?.ok_or(MissingFrame("scene program"))?;
+            program.check_context(session, 2, 0)?;
+            let Body::SceneProgram {
+                targets,
+                source,
+                initial,
+            } = program.body
+            else {
+                return Err("Expected host scene program".into());
+            };
+            let (2, Some(&clock), Some(&accent)) =
+                (targets.len(), targets.get("clock"), targets.get("accent"))
+            else {
+                return Err("Unexpected bindings for clock script".into());
+            };
+            let [
+                Edit::Text {
+                    node: clock_text_node,
+                    value,
+                },
+                Edit::Color {
+                    node: clock_color_node,
+                    value: clock_color,
+                },
+                Edit::Text {
+                    node: accent_text_node,
+                    value: label,
+                },
+                Edit::Color {
+                    node: accent_color_node,
+                    value: accent_color,
+                },
+            ] = initial.as_slice()
+            else {
+                return Err("Missing clock initialization properties".into());
+            };
+            if [
+                *clock_text_node,
+                *clock_color_node,
+                *accent_text_node,
+                *accent_color_node,
+            ] != [clock, clock, accent, accent]
+            {
+                return Err("Unexpected clock initialization targets".into());
+            }
+            (
+                clock,
+                accent,
+                Some(source),
+                value.clone(),
+                Some(label.clone()),
+                *clock_color,
+                *accent_color,
+            )
+        } else {
+            (
+                1,
+                2,
+                None,
+                "initial".to_owned(),
+                None,
+                Color([255; 4]),
+                Color([255; 4]),
+            )
         };
-        match (targets.len(), targets.get("clock"), targets.get("accent")) {
-            (2, Some(&clock), Some(&accent)) => (clock, accent, Some(source)),
-            _ => return Err("Unexpected bindings for embedded clock script".into()),
-        }
-    } else {
-        (1, 2, None)
-    };
     let text = |value: &str| Edit::Text {
         node: clock,
         value: value.into(),
     };
     let updates = mode.updates();
-    let mut previous = "initial".to_owned();
     let mut sequence = 1u64;
     while mode == Mode::Utc || sequence <= updates {
         let display_time = if matches!(mode, Mode::Timer | Mode::Utc) {
@@ -439,7 +525,14 @@ pub fn worker(
             "12:34".into()
         };
         let edits = if mode != Mode::Typed {
-            script::clock_edits(clock, accent, &previous, &display_time, source.as_deref())?
+            script::clock_edits(
+                &[
+                    ("clock", clock, Some(&previous), clock_color),
+                    ("accent", accent, label.as_deref(), accent_color),
+                ],
+                &display_time,
+                source.as_deref(),
+            )?
         } else {
             vec![text(&display_time)]
         };

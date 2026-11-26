@@ -82,6 +82,7 @@ pub enum Body {
     SceneProgram {
         targets: BTreeMap<String, u32>,
         source: String,
+        initial: Vec<Edit>,
     },
 }
 impl Message {
@@ -159,10 +160,18 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
             data.push(11);
             scene::encode_bindings(&mut data, message.base_revision, targets)?;
         }
-        Body::SceneProgram { targets, source } => {
-            data.push(12);
+        Body::SceneProgram {
+            targets,
+            source,
+            initial,
+        } => {
+            data.push(if initial.is_empty() { 12 } else { 13 });
             scene::encode_bindings(&mut data, message.base_revision, targets)?;
             scene::encode_script_source(&mut data, source)?;
+            if !initial.is_empty() {
+                scene::check_initial(targets, initial)?;
+                scene::encode_edits(&mut data, initial)?;
+            }
         }
     }
     if data.len() > MAX_FRAME_BYTES {
@@ -252,7 +261,19 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         12 => Body::SceneProgram {
             targets: scene::decode_bindings(&mut data, base_revision)?,
             source: scene::decode_script_source(&mut data)?,
+            initial: Vec::new(),
         },
+        13 => {
+            let targets = scene::decode_bindings(&mut data, base_revision)?;
+            let source = scene::decode_script_source(&mut data)?;
+            let initial = scene::decode_edits(&mut data)?;
+            scene::check_initial(&targets, &initial)?;
+            Body::SceneProgram {
+                targets,
+                source,
+                initial,
+            }
+        }
         _ => return Err(Error::Invalid("unknown message kind")),
     };
     if data.pos != bytes.len() {
