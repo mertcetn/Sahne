@@ -216,7 +216,9 @@ On November 26, 2026, the D3D12 visual check of `52cd70a` recorded the initial p
 target/release/wallpaper-preview.exe --desktop --trusted-script-preview $folder --seconds 30
 ```
 
-This development command uses the existing Explorer desktop attachment. It is designed to display the trusted text-and-rectangle package behind desktop icons and run its one-shot callback after the initial frame. The preview keeps the latest accepted scene if the desktop surface is recreated. The callback runs once per preview session. The headless check and file-based retained scene remain separate commands. Visual verification behind Windows icons is pending.
+This development command uses the existing Explorer desktop attachment. It displays the trusted text-and-rectangle package behind desktop icons and runs its one-shot callback after the initial frame. The preview keeps the latest accepted scene if the desktop surface is recreated. The callback runs once per preview session. The headless check and file-based retained scene remain separate commands.
+
+On November 26, 2026, the user confirmed that the blue panel and `Worker update accepted` text appeared behind Windows desktop icons with `3d81fd4`. The 90-second run used a 3840×1080 desktop surface across two 1920×1080 displays. The log recorded the initial frame, the worker snapshot, the second frame and worker completion in one GPU generation. The preview stopped at its configured deadline. Local log at `target/m4-script-desktop-visual/8dc5185953ff4fd396e3943a87cb1619/stderr.log`.
 
 ## Content snapshots for presentation
 
