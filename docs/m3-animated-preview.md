@@ -10,7 +10,9 @@ Build with `cargo build --release -p wallpaper-preview --locked`. When window te
 target/release/wallpaper-preview.exe --example animated-shapes --seconds 30
 ```
 
-Space toggles manual pause/resume; key repeat does not toggle repeatedly. Escape closes the window. This literal currently rejects `--desktop` before event-loop creation. It cannot use the effects-only `--test-pixels` flag. Existing `--test-recreate` and `--test-device-loss` flags select the existing explicit reconstruction tests; both combinations passed in the local runs below. No arbitrary source/package/animation path is accepted.
+Space toggles manual pause/resume in window mode. Key repeat does not toggle repeatedly. Escape closes the window. The effects-only `--test-pixels` flag is unavailable for this example. The `--test-recreate` and `--test-device-loss` flags select the existing explicit reconstruction tests. Both combinations passed in the local window runs below.
+
+For the M4 desktop integration check, run `wallpaper-preview.exe --desktop --example animated-shapes --seconds 90`. It uses the same native animation and the existing Explorer attachment. The preview retains its playback state across GPU or desktop surface recreation. Visual motion and the 30 FPS cap on the attached desktop surface remain to be verified.
 
 The original `examples/animated-shapes/` package contains a manifest and static HTML/CSS for three clipped panels. Its fixed native program lives in `wallpaper_compiler::fixtures::animated_shapes_spec`; CSS `@keyframes`/`animation-*` remain unsupported. It has five linear tracks over two seconds, alternating forever (four seconds per full out-and-back cycle):
 

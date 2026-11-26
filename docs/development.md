@@ -1,6 +1,6 @@
 # Development and Release Guide
 
-The fixed `--example animated-shapes` preview, typed compiler binding and animation wire format are described in [Native animation integration](m3-animated-preview.md). Space toggles pause/resume in this window-only mode; local GPU/runtime validation passed. No CSS animation syntax is enabled.
+The fixed `--example animated-shapes` preview, typed compiler binding and animation wire format are described in [Native animation integration](m3-animated-preview.md). Space toggles pause/resume in window mode, where local GPU/runtime validation passed. The M4 desktop integration check uses `--desktop`.
 
 For the CPU-only native animation/clock foundation, run `cargo test -p wallpaper-scene --locked animation::tests`; see [Contract and remaining integration](m3-animation.md). This does not open a window or enable CSS animation in the preview.
 

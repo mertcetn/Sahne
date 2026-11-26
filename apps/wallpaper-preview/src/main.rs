@@ -60,7 +60,7 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--help" => {
                 println!(
-                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes|clock] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes requires window mode; Space pauses/resumes its fixed native program at a 30 FPS cap. --reference-pose freezes animated-shapes at exactly 1 s for visual reference; use it in window mode without other test flags. clock shows host-provided UTC time in window mode. --test-clock-rollover requires clock and --seconds 5..30; it demonstrates 23:59 to 00:00. --clock-worker-snapshot <run-folder> displays a retained worker value with --example clock. --check-clock-worker-snapshot <run-folder> verifies that value without opening a window. --clock-worker-live requires --example clock --seconds 8..30 and the sibling sandbox probe. --check-clock-worker-live runs the same bridge without a window. --clock-worker-utc uses current UTC minutes with --example clock. --check-clock-worker-utc verifies two live UTC updates without opening a window."
+                    "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes|clock] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes runs its fixed native program at a 30 FPS cap. Use --desktop to attach behind Windows icons or Space to pause/resume in window mode. --reference-pose freezes animated-shapes at exactly 1 s for visual reference; use it in window mode without other test flags. clock shows host-provided UTC time in window mode. --test-clock-rollover requires clock and --seconds 5..30; it demonstrates 23:59 to 00:00. --clock-worker-snapshot <run-folder> displays a retained worker value with --example clock. --check-clock-worker-snapshot <run-folder> verifies that value without opening a window. --clock-worker-live requires --example clock --seconds 8..30 and the sibling sandbox probe. --check-clock-worker-live runs the same bridge without a window. --clock-worker-utc uses current UTC minutes with --example clock. --check-clock-worker-utc verifies two live UTC updates without opening a window."
                 );
                 println!(
                     "--scene-worker-snapshot <run-folder> displays a retained flat scene. --check-scene-worker-snapshot <run-folder> validates it headlessly."
@@ -193,9 +193,6 @@ fn main() -> Result<()> {
         test_device_loss,
         seconds,
     )?;
-    if desktop_mode && compiled_example == Some(compiled::Example::Animated) {
-        return Err("animated-shapes currently requires window mode".into());
-    }
     if reference_pose
         && (compiled_example != Some(compiled::Example::Animated)
             || desktop_mode

@@ -725,3 +725,7 @@ The trusted flat package preview prepares one validated scene and a bounded work
 ## 95. M4 trusted package desktop attachment
 
 The direct trusted script preview can use the existing Windows desktop attachment and Explorer owner recovery. The same renderer presents the initial and accepted scenes. During window recreation, the preview retains the latest scene and preserves the one-shot worker lifecycle. See [Direct package preview on the desktop](m4-scene-transactions.md#direct-package-preview-on-the-desktop).
+
+## 96. M4 native animation desktop attachment
+
+The fixed animated-shapes example can use the Windows desktop surface. The application keeps its native animation program, monotonic playback clock and 30 FPS scheduler while the surface is recreated. Desktop playback uses the existing group renderer without script callbacks. See [Native animation commands](m3-animated-preview.md#commands-and-original-fixture).
