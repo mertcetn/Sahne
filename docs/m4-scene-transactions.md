@@ -168,7 +168,7 @@ Release checks exercised a throwing scene callback and a throwing resume callbac
 
 The one-shot scene callback can use Promise microtasks. The worker runs at most 64 queued jobs within the same 100 ms deadline as the synchronous callback. It collects the DOM edits only after the queue is empty. If the script returns a Promise, it must be fulfilled by then. A rejection reported as unhandled by QuickJS also fails the callback. These failures use the bounded diagnostic path and send no partial scene batch.
 
-For example, a trusted script run by `--run-trusted-script-package` can return `Promise.resolve().then(() => { document.getElementById("status").textContent = "Updated"; })` from its callback. The retained lifecycle context still uses its synchronous callback contract. [QuickJS pending job API](https://docs.rs/rquickjs/0.14.0/rquickjs/struct.Runtime.html#method.execute_pending_job)
+For example, a trusted script run by `--run-trusted-script-package` can return `Promise.resolve().then(() => { document.getElementById("status").textContent = "Updated"; })` from its callback. The [retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks) use the same bounds. [QuickJS pending job API](https://docs.rs/rquickjs/0.14.0/rquickjs/struct.Runtime.html#method.execute_pending_job)
 
 The release check acknowledged synchronous and Promise writes in one batch and accepted a write in the 64th queued job. A 65-job queue, an unhandled rejection and an unresolved returned Promise each failed before the host acknowledged any edit. Profile cleanup passed for each run. Four AppContainer regressions and headless rollover also passed. Local report at `target/sandbox-validation/483dafb7748640e6ae42586a1ee70e75/`.
 

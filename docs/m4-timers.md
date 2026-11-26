@@ -90,3 +90,11 @@ The manifest's script must evaluate to an object with three functions. `pause()`
 The worker sends `LifecycleReady` (empty message kind 19, sequence 3, base revision 0) after evaluating the callback object. The host waits for readiness and then sends its two scripted transitions in order. The worker acknowledges each transition only after the callback returns. The probe runs one tick, verifies terminal rollback and cleans up the worker. Package parsing runs in the host and requires trusted input. This headless command drives synthetic events. Windows session notifications and package timer registration remain open.
 
 The local release probe acknowledged pause, resume and one edit in that order. A replacement script that threw during resume stopped before the tick. Both runs verified profile cleanup. Four AppContainer regression cases and the headless live clock also passed. Local regression report at `target/sandbox-validation/3ce42ff9c71942e6bf5c5e7431327733/`.
+
+## Promise jobs in retained callbacks
+
+The registered and continuous clock callbacks and the trusted package lifecycle probe use the same bounded Promise job drain. A lifecycle callback runs at most 64 jobs within its own 100 ms deadline. It must finish with an empty queue and fulfill any Promise it returns before the worker acknowledges the event. A tick follows the same rules before its DOM writes are collected. A rejection reported as unhandled fails the invocation. The trusted package's initial callback object must be available synchronously with no queued jobs.
+
+A failed lifecycle callback sends a bounded rejection and terminates the worker session. Its pending jobs cannot run in a subsequent invocation. The host retains the last accepted scene and revision.
+
+In the trusted package release test, pause updated shared state through a Promise. Resume then changed that state in its 64th job, and tick read the result before publishing its edit. A 65-job resume, an unhandled rejection and an unresolved returned Promise each stopped before the resume acknowledgement and tick. Five AppContainer regressions and both headless clock checks passed. The continuous check observed 15:28 → 15:29 UTC with pause, resume and cleanup. Local report at `target/sandbox-validation/28bbb7457be641d7b3e9ead4af73bbdf/`.

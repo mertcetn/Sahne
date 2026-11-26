@@ -701,3 +701,7 @@ Scene callbacks check the monotonic deadline before returning staged edits and a
 ## 89. M4 bounded Promise jobs for scene updates
 
 The one-shot scene callback keeps its staged DOM state until its Promise jobs drain. The worker runs at most 64 jobs under the callback's existing monotonic deadline and collects edits only after successful completion. Failure discards the staged changes. See [Bounded Promise jobs](m4-scene-transactions.md#bounded-promise-jobs).
+
+## 90. M4 bounded Promise jobs for retained callbacks
+
+Retained pause, resume and tick callbacks share the scene callback's job drain and failure rules. Lifecycle acknowledgement waits for job completion. Each invocation has its own deadline and rejection tracking. Jobs cannot carry over to another callback. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).

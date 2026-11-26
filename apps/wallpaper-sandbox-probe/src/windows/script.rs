@@ -75,7 +75,7 @@ impl RegisteredClock {
             return Err("Interval fixture refuses non-AppContainer execution".into());
         }
         let (runtime, interrupted) = bounded_runtime()?;
-        let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
+        let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
         let cancelled = Rc::new(Cell::new(false));
         let delay = Rc::new(Cell::new(None));
         context.with(|ctx| -> rquickjs::Result<()> {
@@ -135,7 +135,8 @@ impl RetainedCallbacks {
             return Err("Lifecycle probe refuses non-AppContainer execution".into());
         }
         let (runtime, interrupted) = bounded_runtime()?;
-        let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
+        let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
+        let rejected = track_rejections(&runtime);
         context
             .with(|ctx| -> rquickjs::Result<()> {
                 let callbacks: Object = ctx.eval(source)?;
@@ -146,32 +147,42 @@ impl RetainedCallbacks {
             })
             .map_err(|_| "Expected an object with pause, resume and tick callbacks")?;
         check_callback_budget(&runtime, &interrupted)?;
+        check_rejections(&rejected)?;
         Ok(Self { context, runtime })
     }
 
     pub fn edits(&self, bindings: &[Binding], display_time: &str) -> Result<Vec<Edit>> {
         let interrupted = arm_deadline(&self.runtime);
+        let rejected = track_rejections(&self.runtime);
         let staged = self.context.with(|ctx| {
             let callbacks: Object = ctx.globals().get("registeredClock")?;
             let callback: Function = callbacks.get("tick")?;
             stage_scene_callback(&ctx, bindings, callback, display_time)
         })?;
-        check_callback_budget(&self.runtime, &interrupted)?;
-        let edits = self
-            .context
-            .with(|ctx| collect_scene_edits(&ctx, bindings, staged))?;
-        check_callback_budget(&self.runtime, &interrupted)?;
-        Ok(edits)
+        finish_scene_callback(
+            &self.context,
+            &self.runtime,
+            &interrupted,
+            &rejected,
+            bindings,
+            staged,
+        )
     }
 
     pub fn lifecycle(&self, paused: bool) -> Result<()> {
         let interrupted = arm_deadline(&self.runtime);
-        self.context.with(|ctx| -> rquickjs::Result<()> {
+        let rejected = track_rejections(&self.runtime);
+        let completion = self.context.with(|ctx| -> rquickjs::Result<_> {
             let callbacks: Object = ctx.globals().get("registeredClock")?;
             let callback: Function = callbacks.get(if paused { "pause" } else { "resume" })?;
-            callback.call(())
+            let value: Value = callback.call(())?;
+            Ok(Persistent::save(&ctx, value))
         })?;
-        check_callback_budget(&self.runtime, &interrupted)
+        drain_jobs(&self.runtime, &interrupted)?;
+        self.context
+            .with(|ctx| check_completion(completion.restore(&ctx)?))?;
+        check_callback_budget(&self.runtime, &interrupted)?;
+        check_rejections(&rejected)
     }
 }
 
@@ -186,6 +197,47 @@ fn check_callback_budget(runtime: &Runtime, deadline: &Deadline) -> Result<()> {
 fn check_deadline(deadline: &Deadline) -> Result<()> {
     if deadline.flag.load(Ordering::Relaxed) || Instant::now() >= deadline.at {
         return Err("Scene callback exceeded its execution budget".into());
+    }
+    Ok(())
+}
+
+fn track_rejections(runtime: &Runtime) -> Arc<AtomicBool> {
+    let rejected = Arc::new(AtomicBool::new(false));
+    let observed = Arc::clone(&rejected);
+    runtime.set_host_promise_rejection_tracker(Some(Box::new(move |_, _, _, handled| {
+        if !handled {
+            observed.store(true, Ordering::Relaxed);
+        }
+    })));
+    rejected
+}
+
+fn check_rejections(rejected: &AtomicBool) -> Result<()> {
+    if rejected.load(Ordering::Relaxed) {
+        return Err("Scene callback had an unhandled promise rejection".into());
+    }
+    Ok(())
+}
+
+fn drain_jobs(runtime: &Runtime, deadline: &Deadline) -> Result<()> {
+    for _ in 0..JOB_LIMIT {
+        check_deadline(deadline)?;
+        if !runtime
+            .execute_pending_job()
+            .map_err(|_| "Scene Promise job failed")?
+        {
+            break;
+        }
+    }
+    check_callback_budget(runtime, deadline)
+}
+
+fn check_completion(completion: Value<'_>) -> Result<()> {
+    if completion
+        .into_promise()
+        .is_some_and(|promise| promise.state() != PromiseState::Resolved)
+    {
+        return Err("Scene callback promise did not fulfill".into());
     }
     Ok(())
 }
@@ -355,34 +407,35 @@ pub fn scene_edits(
     }
     let (runtime, interrupted) = bounded_runtime()?;
     let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
-    let rejected = Arc::new(AtomicBool::new(false));
-    let observed = Arc::clone(&rejected);
-    runtime.set_host_promise_rejection_tracker(Some(Box::new(move |_, _, _, handled| {
-        if !handled {
-            observed.store(true, Ordering::Relaxed);
-        }
-    })));
+    let rejected = track_rejections(&runtime);
     let staged = context.with(|ctx| {
         let callback: Function = ctx
             .eval(package_source.unwrap_or(include_str!("clock_fixture.js")))
             .map_err(|_| "Scene source did not evaluate to a callback")?;
         stage_scene_callback(&ctx, bindings, callback, display_time)
     })?;
-    for _ in 0..JOB_LIMIT {
-        check_deadline(&interrupted)?;
-        if !runtime
-            .execute_pending_job()
-            .map_err(|_| "Scene Promise job failed")?
-        {
-            break;
-        }
-    }
-    check_callback_budget(&runtime, &interrupted)?;
+    finish_scene_callback(
+        &context,
+        &runtime,
+        &interrupted,
+        &rejected,
+        bindings,
+        staged,
+    )
+}
+
+fn finish_scene_callback(
+    context: &Context,
+    runtime: &Runtime,
+    deadline: &Deadline,
+    rejected: &AtomicBool,
+    bindings: &[Binding],
+    staged: StagedScene,
+) -> Result<Vec<Edit>> {
+    drain_jobs(runtime, deadline)?;
     let edits = context.with(|ctx| collect_scene_edits(&ctx, bindings, staged))?;
-    check_callback_budget(&runtime, &interrupted)?;
-    if rejected.load(Ordering::Relaxed) {
-        return Err("Scene callback had an unhandled promise rejection".into());
-    }
+    check_callback_budget(runtime, deadline)?;
+    check_rejections(rejected)?;
     Ok(edits)
 }
 
@@ -433,14 +486,7 @@ fn collect_scene_edits(
         MAX_TEXT_BYTES,
         transaction::{MAX_BATCH_TEXT_BYTES, MAX_EDITS},
     };
-    if staged
-        .completion
-        .restore(ctx)?
-        .into_promise()
-        .is_some_and(|promise| promise.state() != PromiseState::Resolved)
-    {
-        return Err("Scene callback promise did not fulfill".into());
-    }
+    check_completion(staged.completion.restore(ctx)?)?;
     let edits_array: Array = staged.collect.restore(ctx)?.call(())?;
     let count = edits_array.len();
     if !(1..=MAX_EDITS).contains(&count) {
