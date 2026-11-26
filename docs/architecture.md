@@ -803,3 +803,7 @@ The one-shot and live isolated script modes consume the validated preparation re
 ## 113. M4 retained callback identity
 
 The worker captures the three validated callback functions under the setup deadline and stores runtime-owned references in Rust. Callback dispatch restores the reference in its original context. The references are dropped before the context and runtime. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).
+
+## 114. M4 DOM adapter initialization
+
+The one-shot and retained script paths initialize the DOM adapter before evaluating package JavaScript. The adapter captures its validation and object-construction built-ins. Its private binding and staging lists have no inherited prototype. The host still validates the resulting edits before accepting a scene revision.

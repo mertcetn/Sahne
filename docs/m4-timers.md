@@ -139,6 +139,8 @@ The registered and continuous clock callbacks and the trusted package lifecycle 
 
 The worker reads `pause`, `resume` and `tick` once during setup. It keeps those function references for the session. A callback can still update shared script state. Replacing properties on the returned object after setup does not change which functions the worker invokes.
 
+The worker initializes the DOM adapter before evaluating package source. The adapter captures the built-ins it uses to build and validate bindings. A regression wrapped the package context's integer helper and verified that two ticks still applied valid color and text edits without invoking that wrapper.
+
 A failed lifecycle callback sends a bounded rejection and terminates the worker session. Its pending jobs cannot run in a subsequent invocation. The host retains the last accepted scene and revision.
 
 In the trusted package release test, pause updated shared state through a Promise. Resume then changed that state in its 64th job, and tick read the result before publishing its edit. A 65-job resume, an unhandled rejection and an unresolved returned Promise each stopped before the resume acknowledgement and tick. Five AppContainer regressions and both headless clock checks passed. The continuous check observed 15:28 → 15:29 UTC with pause, resume and cleanup. Local report at `target/sandbox-validation/28bbb7457be641d7b3e9ead4af73bbdf/`.

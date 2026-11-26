@@ -132,7 +132,8 @@ impl RegisteredClock {
         let (runtime, interrupted) = bounded_runtime()?;
         let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
         let controls = Rc::new(ClockControls::default());
-        let functions = context.with(|ctx| -> rquickjs::Result<_> {
+        let (adapter, functions) = context.with(|ctx| -> rquickjs::Result<_> {
+            let adapter = load_scene_adapter(&ctx)?;
             let register_state = Rc::clone(&controls);
             let register = Function::new(ctx.clone(), move |milliseconds: f64| {
                 register_state.register(milliseconds)
@@ -142,7 +143,10 @@ impl RegisteredClock {
             let clock: Function = ctx.eval(include_str!("clock_fixture.js"))?;
             let setup: Function = ctx.eval(include_str!("script/registered_clock.js"))?;
             let callbacks: Object = setup.call((register, clear, clock))?;
-            CallbackFunctions::capture(&ctx, &callbacks)
+            Ok((
+                Persistent::save(&ctx, adapter),
+                CallbackFunctions::capture(&ctx, &callbacks)?,
+            ))
         })?;
         check_callback_budget(&runtime, &interrupted)?;
         controls.check()?;
@@ -154,6 +158,7 @@ impl RegisteredClock {
         Ok((
             Self {
                 callbacks: RetainedCallbacks {
+                    adapter,
                     functions,
                     context,
                     runtime,
@@ -183,6 +188,7 @@ impl RegisteredClock {
 
 pub struct RetainedCallbacks {
     // Drop persistent handles before the context and runtime they belong to.
+    adapter: Persistent<Function<'static>>,
     functions: CallbackFunctions,
     context: Context,
     runtime: Runtime,
@@ -233,8 +239,9 @@ impl RetainedCallbacks {
         let (runtime, interrupted) = bounded_runtime()?;
         let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
         let rejected = track_rejections(&runtime);
-        let (functions, (delay, ticks)) = context
+        let (adapter, functions, (delay, ticks)) = context
             .with(|ctx| -> rquickjs::Result<_> {
+                let adapter = load_scene_adapter(&ctx)?;
                 let callbacks: Object = ctx.eval(source)?;
                 let functions = CallbackFunctions::capture(&ctx, &callbacks)?;
                 let delay: (Option<f64>, Option<f64>) = if read_interval {
@@ -242,7 +249,7 @@ impl RetainedCallbacks {
                 } else {
                     (None, None)
                 };
-                Ok((functions, delay))
+                Ok((Persistent::save(&ctx, adapter), functions, delay))
             })
             .map_err(|_| "Expected an object with pause, resume and tick callbacks")?;
         check_callback_budget(&runtime, &interrupted)?;
@@ -274,6 +281,7 @@ impl RetainedCallbacks {
         };
         Ok((
             Self {
+                adapter,
                 functions,
                 context,
                 runtime,
@@ -287,7 +295,8 @@ impl RetainedCallbacks {
         let rejected = track_rejections(&self.runtime);
         let staged = self.context.with(|ctx| {
             let callback = self.functions.tick.clone().restore(&ctx)?;
-            stage_scene_callback(&ctx, bindings, callback, display_time)
+            let adapter = self.adapter.clone().restore(&ctx)?;
+            stage_scene_callback(&ctx, adapter, bindings, callback, display_time)
         })?;
         finish_scene_callback(
             &self.context,
@@ -543,10 +552,11 @@ pub fn scene_edits(
     let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
     let rejected = track_rejections(&runtime);
     let staged = context.with(|ctx| {
+        let adapter = load_scene_adapter(&ctx)?;
         let callback: Function = ctx
             .eval(package_source.unwrap_or(include_str!("clock_fixture.js")))
             .map_err(|_| "Scene source did not evaluate to a callback")?;
-        stage_scene_callback(&ctx, bindings, callback, display_time)
+        stage_scene_callback(&ctx, adapter, bindings, callback, display_time)
     })?;
     finish_scene_callback(
         &context,
@@ -578,8 +588,13 @@ struct StagedScene {
     collect: Persistent<Function<'static>>,
 }
 
+fn load_scene_adapter<'js>(ctx: &Ctx<'js>) -> rquickjs::Result<Function<'js>> {
+    ctx.eval(include_str!("dom_adapter.js"))
+}
+
 fn stage_scene_callback<'js>(
     ctx: &rquickjs::Ctx<'js>,
+    adapter: Function<'js>,
     bindings: &[Binding],
     callback: Function<'js>,
     value: &str,
@@ -589,19 +604,23 @@ fn stage_scene_callback<'js>(
     if !(1..=MAX_EDITS).contains(&bindings.len()) {
         return Err("Scene binding count outside bounds".into());
     }
-    let input = Array::new(ctx.clone())?;
+    let private_array = || -> rquickjs::Result<_> {
+        let array = Array::new(ctx.clone())?;
+        array.as_object().set_prototype(None)?;
+        Ok(array)
+    };
+    let input = private_array()?;
     for (index, binding) in bindings.iter().enumerate() {
-        let entry = Array::new(ctx.clone())?;
+        let entry = private_array()?;
         entry.set(0, binding.name.as_str())?;
         entry.set(1, binding.text.as_deref())?;
-        let color = Array::new(ctx.clone())?;
+        let color = private_array()?;
         for (channel, value) in binding.color.0.into_iter().enumerate() {
             color.set(channel, value)?;
         }
         entry.set(2, color)?;
         input.set(index, entry)?;
     }
-    let adapter: Function = ctx.eval(include_str!("dom_adapter.js"))?;
     let staged: Array = adapter
         .call((input, callback, value))
         .map_err(|_| "Fixed clock callback failed")?;
@@ -726,7 +745,8 @@ mod tests {
         let run = |source| {
             context.with(|ctx| {
                 let callback = ctx.eval::<Function, _>(source).unwrap();
-                let staged = stage_scene_callback(&ctx, &bindings, callback, "").unwrap();
+                let adapter = load_scene_adapter(&ctx).unwrap();
+                let staged = stage_scene_callback(&ctx, adapter, &bindings, callback, "").unwrap();
                 collect_scene_edits(&ctx, &bindings, staged).unwrap()
             })
         };
