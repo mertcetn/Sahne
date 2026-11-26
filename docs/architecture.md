@@ -769,3 +769,7 @@ The static package preview can pass the verified scene and image data to the exi
 ## 106. M4 preview bridge for trusted lifecycle checks
 
 The headless preview can route a trusted package to the retained lifecycle worker. Its host bridge checks readiness and both synthetic lifecycle acknowledgements before admitting one tick through the existing scene transaction path. A failed callback ends the exchange and the host cleans up the worker profile. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).
+
+## 107. M4 interval host-call phase checks
+
+The retained registered-clock worker checks the active callback phase inside its native controls. Setup owns registration, and the tick plus its bounded microtasks owns cancellation. A call from another phase records a sticky failure before modifying the interval state. See [Native interval call limits](m4-timers.md#native-interval-call-limits).

@@ -114,4 +114,6 @@ In the trusted package release test, pause updated shared state through a Promis
 
 The retained registered-clock fixture accepts one native interval registration during setup and one cancellation during its final tick. The worker checks the delay before conversion to milliseconds. It must be an integer from 16 through 64, the fixed fixture's supported range. Cancellation requires the sole valid handle. Invalid and repeated calls leave a sticky failure that prevents the worker from sending the affected initialization response, lifecycle acknowledgement or scene batch. The host independently checks the interval request before scheduling it. General package timers remain outside this fixed fixture.
 
+The native controls check the active callback phase before changing timer state. Only setup can register and only a timer tick can cancel. The cancellation phase stays active through the bounded Promise job drain for that tick. A phase violation leaves the timer registration and cancellation state intact and records a failure for the exchange.
+
 The unit test covers valid controls, repeated operations, fractional and out-of-range delays, and invalid handles. Four AppContainer probes and the headless rollover check passed. Local report at `target/sandbox-validation/de0bebefa4484a91b7def857afb226e4/`.

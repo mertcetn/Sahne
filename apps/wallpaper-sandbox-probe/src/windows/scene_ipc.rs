@@ -581,9 +581,6 @@ pub fn worker(
         deliver_lifecycle(input, output, session, |paused| {
             callback.callbacks.lifecycle(paused)?;
             callback.check_controls()?;
-            if callback.cancelled() {
-                return Err("Interval cancelled outside its timer callback".into());
-            }
             Ok(())
         })?;
         Some(callback)
@@ -714,13 +711,7 @@ pub fn worker(
                 session,
                 sequence,
                 sequence - 1,
-                callback
-                    .callbacks
-                    .edits(&bindings, &display_time)
-                    .and_then(|edits| {
-                        callback.check_controls()?;
-                        Ok(edits)
-                    }),
+                callback.edits(&bindings, &display_time),
             )?;
             if callback.cancelled() != (sequence == updates) {
                 return Err("JavaScript interval did not cancel on its third callback".into());

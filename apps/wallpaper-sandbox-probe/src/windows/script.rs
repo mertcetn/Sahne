@@ -73,14 +73,24 @@ pub const MAX_FIXTURE_INTERVAL_MS: u32 = 64;
 
 #[derive(Default)]
 struct ClockControls {
+    phase: Cell<IntervalPhase>,
     delay: Cell<Option<u32>>,
     cancelled: Cell<bool>,
     invalid: Cell<bool>,
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum IntervalPhase {
+    #[default]
+    Setup,
+    Idle,
+    Tick,
+}
+
 impl ClockControls {
     fn register(&self, milliseconds: f64) -> u32 {
-        if self.delay.get().is_some()
+        if self.phase.get() != IntervalPhase::Setup
+            || self.delay.get().is_some()
             || milliseconds.fract() != 0.0
             || !(wallpaper_scene::timer::MIN_DELAY.as_secs_f64() * 1000.0
                 ..=f64::from(MAX_FIXTURE_INTERVAL_MS))
@@ -94,10 +104,15 @@ impl ClockControls {
     }
 
     fn clear(&self, handle: f64) -> bool {
-        if handle != 1.0 || self.delay.get().is_none() || self.cancelled.replace(true) {
+        if self.phase.get() != IntervalPhase::Tick
+            || handle != 1.0
+            || self.delay.get().is_none()
+            || self.cancelled.get()
+        {
             self.invalid.set(true);
             return false;
         }
+        self.cancelled.set(true);
         true
     }
 
@@ -131,6 +146,7 @@ impl RegisteredClock {
         })?;
         check_callback_budget(&runtime, &interrupted)?;
         controls.check()?;
+        controls.phase.set(IntervalPhase::Idle);
         let delay_ms = controls
             .delay
             .get()
@@ -150,6 +166,14 @@ impl RegisteredClock {
 
     pub fn check_controls(&self) -> Result<()> {
         self.controls.check()
+    }
+
+    pub fn edits(&self, bindings: &[Binding], display_time: &str) -> Result<Vec<Edit>> {
+        self.controls.phase.set(IntervalPhase::Tick);
+        let result = self.callbacks.edits(bindings, display_time);
+        self.controls.phase.set(IntervalPhase::Idle);
+        self.controls.check()?;
+        result
     }
 }
 
@@ -573,6 +597,7 @@ mod tests {
     fn interval_host_calls_reject_repeats_and_invalid_arguments() {
         let controls = ClockControls::default();
         assert_eq!(controls.register(32.0), 1);
+        controls.phase.set(IntervalPhase::Tick);
         assert!(controls.clear(1.0));
         assert!(controls.check().is_ok());
         assert!(!controls.clear(1.0));
@@ -590,9 +615,29 @@ mod tests {
         }
         let controls = ClockControls::default();
         assert_eq!(controls.register(32.0), 1);
+        controls.phase.set(IntervalPhase::Tick);
         assert!(!controls.clear(1.5));
         assert!(!controls.cancelled.get());
         assert!(controls.check().is_err());
+    }
+
+    #[test]
+    fn interval_host_calls_respect_callback_phase_without_changing_timer_state() {
+        for phase in [IntervalPhase::Setup, IntervalPhase::Idle] {
+            let controls = ClockControls::default();
+            assert_eq!(controls.register(32.0), 1);
+            controls.phase.set(phase);
+            assert!(!controls.clear(1.0));
+            assert!(!controls.cancelled.get());
+            assert!(controls.check().is_err());
+        }
+        for phase in [IntervalPhase::Idle, IntervalPhase::Tick] {
+            let controls = ClockControls::default();
+            controls.phase.set(phase);
+            assert_eq!(controls.register(32.0), 0);
+            assert_eq!(controls.delay.get(), None);
+            assert!(controls.check().is_err());
+        }
     }
 
     #[test]
