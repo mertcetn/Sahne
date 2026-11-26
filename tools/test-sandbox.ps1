@@ -20,7 +20,7 @@ $plan = [ordered]@{
     filesystem=1; registry=1; 'ipc-write-drain'=1; 'ipc-write-stall'=1; 'cpu-busy'=1
     hang=1; oversized=1; crash=1; 'ipc-flood'=1; 'ipc-stall'=1; 'ipc-truncated'=1
     'ipc-replay'=1; 'ipc-open'=1; 'js-basic'=1; 'js-interrupt'=1; 'js-memory'=1
-    'js-stack'=1; 'js-jobs'=1; 'restart-recover'=2; 'restart-exhaust'=3
+    'js-stack'=1; 'js-jobs'=1; 'js-timers'=1; 'restart-recover'=2; 'restart-exhaust'=3
     'restart-timeout'=2; 'restart-handshake'=2; 'restart-stale'=2; 'restart-protocol'=1
 }
 $fullSuite = -not $Cases -or $Cases.Count -eq 0

@@ -10,6 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 use wallpaper_scene::{Color, transaction::Edit};
+mod timers;
 
 pub const RESULT_BIT: u32 = 512;
 const HEAP_BYTES: usize = 16 * 1024 * 1024;
@@ -52,6 +53,7 @@ fn run_case(
     interrupted: &AtomicBool,
 ) -> Result<()> {
     match case {
+        "js-timers" => timers::check(context)?,
         "js-basic" => {
             let valid = context.with(|ctx| {
                 ctx.eval::<bool, _>(

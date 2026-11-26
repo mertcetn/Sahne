@@ -700,6 +700,7 @@ pub fn spawn_probe(
         "js-memory",
         "js-stack",
         "js-jobs",
+        "js-timers",
         "ipc-old-session",
         "no-hello",
     ]

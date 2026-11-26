@@ -657,3 +657,7 @@ The worker builds its DOM adapter inputs from the received author-ID table and i
 ## 78. M4 trusted local scene callbacks
 
 The Windows developer probe now runs one callback from a trusted flat package using its compiled author-ID bindings and initial node properties. The one-shot local scene path verifies the accepted transaction and preserves the resulting revision and snapshot after a terminal rollback check. It shares the existing AppContainer launch, deadlines and cleanup. See [Running a trusted local script package](m4-scene-transactions.md#running-a-trusted-local-script-package).
+
+## 79. M4 script timer registration probe
+
+An AppContainer test fixture registers and cancels JavaScript callbacks through native functions backed by the existing monotonic timer queue. The fixture drives controlled instants and checks one-shot dispatch and resume without interval replay. Production timer ownership and cross-process dispatch remain open. See [Script timer registration probe](m4-timers.md#script-timer-registration-probe).

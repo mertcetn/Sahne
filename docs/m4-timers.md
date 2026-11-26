@@ -21,3 +21,11 @@ The `scene-timer` case now runs three acknowledged clock callbacks after the pau
 The worker carries forward acknowledged clock text into the next callback. Each callback runs an isolated bounded context for the fixed script. Multiple ticks within the same minute may write identical display text, and this fixture verifies distinct commits rather than redraw frequency or a minute rollover. After revision 3, an invalid batch closes the session and the host verifies that revision 3 and its encoded scene survive intact. This is a bounded three-update IPC test. Continuous scheduling, redraw deduplication and renderer publication remain open.
 
 The timed, scripted and typed scene cases and three roundtrip controls passed with six verified profile cleanups. Local report: `target/sandbox-validation/e572dd6dfaf148c890e873d4abad464d/`.
+
+## Script timer registration probe
+
+Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case js-timers` on Windows. The embedded JavaScript uses scoped `setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` helpers. Native callbacks bridge registration and cancellation to the existing Rust timer queue and map script handles to queue IDs. The fixture rejects a delay below 16 ms, cancels a timeout before dispatch, runs another timeout once, and cancels a repeating timer from its first callback after resume.
+
+The restricted worker supplies controlled monotonic instants in this test. Callback execution stays under the existing QuickJS and AppContainer limits. The local package API still has no timer globals. Host-owned IPC registration, live deadlines and JavaScript lifecycle event delivery remain open. [QuickJS function bindings](https://docs.rs/rquickjs/0.14.0/rquickjs/struct.Function.html)
+
+The release `js-timers`, `js-basic`, `js-interrupt`, `js-jobs` and `scene-timer` probes passed with five verified profile cleanups. Local report at `target/sandbox-validation/f450c1931d0a43ed82d948f3562332dd/`.

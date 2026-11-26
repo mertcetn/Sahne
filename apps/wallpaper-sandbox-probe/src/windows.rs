@@ -257,7 +257,8 @@ fn worker(args: &[String]) -> Result<()> {
         | "js-interrupt"
         | "js-memory"
         | "js-stack"
-        | "js-jobs" => {}
+        | "js-jobs"
+        | "js-timers" => {}
         _ => return Err("Unknown probe case".into()),
     }
     let read_denied = fs::read(&marker).is_err_and(|e| e.raw_os_error() == Some(5));
@@ -511,7 +512,7 @@ fn host(args: &[String]) -> Result<()> {
             "Usage: wallpaper-sandbox-probe [--case CASE | --run-trusted-clock-package <absolute-folder>]\nCases: healthy, network, network-egress, memory, process, handles, hang, oversized, crash, ipc-flood, ipc-stall, ipc-truncated, ipc-replay, ipc-open.\nWindows AppContainer/Job/IPC development probe. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile.\nNetwork tests require explicit access denial; timeout is inconclusive and fails. network uses loopback; network-egress tries TEST-NET-1 192.0.2.1:9 without DNS or application payload.\nmemory checks a small allocation succeeds and an over-limit commit fails. process requires Job quota denial of a suspended child. handles checks an excluded host handle, including verified strict-policy termination after arming; WER is suppressed only for that intentional fault.\nIPC cases exercise unsolicited trailing-message flood, stalled partial body, truncated body at EOF, replayed sequence, and an open stream after a valid report. Every successful one-shot response requires EOF; a peer that keeps the stream open is stopped by the host deadline."
         );
         println!(
-            "JS cases: js-basic, js-interrupt, js-memory, js-stack, js-jobs. Fixed trusted source only, executed after the worker's AppContainer check. Heap=16 MiB, stack=256 KiB, cooperative deadline=100 ms, Promise job budget=64; the independent host watchdog remains enabled. No script path or external bytecode is accepted."
+            "JS cases: js-basic, js-interrupt, js-memory, js-stack, js-jobs, js-timers. Fixed trusted source only, executed after the worker's AppContainer check. Heap=16 MiB, stack=256 KiB, cooperative deadline=100 ms, Promise job budget=64; the independent host watchdog remains enabled. No script path or external bytecode is accepted."
         );
         println!(
             "Restart cases: restart-recover, restart-exhaust, restart-timeout, restart-handshake, restart-stale, restart-protocol. At most three attempts per run, 100 ms backoff, fresh identity/channel each time. Only crashes/timeouts are retry candidates; protocol or launch failures stop without retry. These are fixed supervisor fixtures, not automatic product recovery."
@@ -631,6 +632,7 @@ fn host(args: &[String]) -> Result<()> {
             "js-memory",
             "js-stack",
             "js-jobs",
+            "js-timers",
         ]
         .contains(&case)
     {
@@ -693,7 +695,8 @@ fn host(args: &[String]) -> Result<()> {
                 | "js-interrupt"
                 | "js-memory"
                 | "js-stack"
-                | "js-jobs",
+                | "js-jobs"
+                | "js-timers",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -718,9 +721,8 @@ fn host(args: &[String]) -> Result<()> {
                         "filesystem" => 4096,
                         "registry" => 32768,
                         "ipc-write-drain" => 8192,
-                        "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs" => {
-                            script::RESULT_BIT
-                        }
+                        "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs"
+                        | "js-timers" => script::RESULT_BIT,
                         _ => 0,
                     }) =>
             {
