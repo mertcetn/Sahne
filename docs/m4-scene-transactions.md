@@ -137,6 +137,25 @@ The embedded `scene-script` case binds the `panel` rectangle in addition to the 
 
 The release script, typed scene, timer and basic JavaScript probes passed. The local package and headless live rollover also passed. Local report at `target/sandbox-validation/4e3f5bd95be34a4f84778eff8317b1b3c0/`.
 
+### Running a trusted local script package
+
+```powershell
+cargo build --release -p wallpaper-sandbox-probe --locked
+target/release/wallpaper-sandbox-probe.exe --run-trusted-script-package $folder
+```
+
+Use the absolute path to a trusted native package folder on Windows. The manifest must name an HTML entry and a JavaScript source file. The flat compiler uses a 1920×1080 viewport. The callback can use any admitted author ID for named text and rectangle nodes. It receives `document` as its first argument and an empty string as its second argument. For an HTML text element named `status`, a minimal script is:
+
+```javascript
+(document) => {
+    document.getElementById("status").textContent = "Updated";
+}
+```
+
+Each run requires a nonempty batch of valid text or RGBA writes. The source is limited to 32 KiB, and the initialization frame accepts at most 64 property records. Text nodes use two records and rectangles use one. The probe reports the number of acknowledged edits, verifies rollback with a deliberately invalid follow-up and cleans up the worker. The command runs headlessly. Package parsing still runs in the host for trusted inputs. Timer registration, continuous execution and rendering of local scripted packages remain open.
+
+A local release run acknowledged two edits to `status` and `tile` and preserved the accepted scene after rejection. A separate run rejected an attempt to assign rectangle text. Profile cleanup passed for both runs. The trusted clock package, embedded script, typed scene, timer and headless live clock regressions passed. Local AppContainer regression report at `target/sandbox-validation/ef779655429d4bb7bb3014433b7db5a6/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

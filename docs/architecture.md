@@ -653,3 +653,7 @@ For both package clock probes, the host sends the initial text and foreground RG
 ## 77. M4 DOM bindings for text and rectangles
 
 The worker builds its DOM adapter inputs from the received author-ID table and initial properties. Text bindings expose text and RGBA, while rectangle bindings expose RGBA. The host grants only the nodes in its selected table. The embedded probe now supplies two text bindings and a named rectangle, verifying three changes in one transaction. See [Multiple initialized node types](m4-scene-transactions.md#multiple-initialized-node-types).
+
+## 78. M4 trusted local scene callbacks
+
+The Windows developer probe now runs one callback from a trusted flat package using its compiled author-ID bindings and initial node properties. The one-shot local scene path verifies the accepted transaction and preserves the resulting revision and snapshot after a terminal rollback check. It shares the existing AppContainer launch, deadlines and cleanup. See [Running a trusted local script package](m4-scene-transactions.md#running-a-trusted-local-script-package).

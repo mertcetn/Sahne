@@ -679,6 +679,7 @@ pub fn spawn_probe(
         "scene-transaction",
         "scene-script",
         "local-clock-package",
+        "local-script-package",
         "scene-timer",
         "preview-clock-utc",
         "ipc-write-stall",

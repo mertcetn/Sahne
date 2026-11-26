@@ -18,6 +18,7 @@ pub enum Mode {
     Typed,
     Script,
     LocalClock,
+    LocalScene,
     Timer,
     Utc,
 }
@@ -28,6 +29,7 @@ impl Mode {
             "scene-transaction" => Some(Self::Typed),
             "scene-script" => Some(Self::Script),
             "local-clock-package" => Some(Self::LocalClock),
+            "local-script-package" => Some(Self::LocalScene),
             "scene-timer" => Some(Self::Timer),
             "preview-clock-utc" => Some(Self::Utc),
             _ => None,
@@ -35,7 +37,7 @@ impl Mode {
     }
 
     fn loads_script(self) -> bool {
-        matches!(self, Self::Script | Self::LocalClock)
+        matches!(self, Self::Script | Self::LocalClock | Self::LocalScene)
     }
 
     fn updates(self) -> u64 {
@@ -117,8 +119,7 @@ fn update_message(session: u64, sequence: u64, body: Body) -> Message {
 
 pub(super) struct CompiledScriptScene {
     scene: ValidatedScene,
-    clock: u32,
-    accent: u32,
+    clock_bindings: Option<(u32, u32)>,
     source: String,
     targets: BTreeMap<String, u32>,
 }
@@ -134,7 +135,7 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
         "#.to_vec()),
         ("clock.js".into(), include_bytes!("clock_fixture.js").to_vec()),
     ])?;
-    let compiled = prepare_script_scene_inner(&package, true)?;
+    let compiled = prepare_script_scene(&package, Mode::Script)?;
     if !compiled.targets.contains_key("panel") {
         return Err("Missing embedded rectangle binding".into());
     }
@@ -149,19 +150,18 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
 
 pub(super) fn prepare_script_scene(
     package: &wallpaper_format::Package,
+    mode: Mode,
 ) -> Result<CompiledScriptScene> {
-    prepare_script_scene_inner(package, false)
-}
-
-fn prepare_script_scene_inner(
-    package: &wallpaper_format::Package,
-    include_panel: bool,
-) -> Result<CompiledScriptScene> {
+    let (width, height) = if mode == Mode::LocalScene {
+        (1920, 1080)
+    } else {
+        (100, 100)
+    };
     let compiled = wallpaper_compiler::compile(
         package,
         wallpaper_compiler::Viewport {
-            width: 100,
-            height: 100,
+            width,
+            height,
             background: Color([0; 4]),
         },
     )?;
@@ -171,18 +171,23 @@ fn prepare_script_scene_inner(
         .ok_or("Missing compiled script reference")?;
     let source = package.require_text(script, ".js", "script")?.to_owned();
     let mut targets = compiled.script_targets();
-    let (&clock, &accent) = targets
-        .get("clock")
-        .zip(targets.get("accent"))
-        .ok_or("Missing compiled clock bindings")?;
-    text_state(compiled.scene(), clock)?;
-    text_state(compiled.scene(), accent)?;
-    targets
-        .retain(|name, node| [clock, accent].contains(node) || (include_panel && name == "panel"));
+    let clock_bindings = if mode == Mode::LocalScene {
+        None
+    } else {
+        let (&clock, &accent) = targets
+            .get("clock")
+            .zip(targets.get("accent"))
+            .ok_or("Missing compiled clock bindings")?;
+        text_state(compiled.scene(), clock)?;
+        text_state(compiled.scene(), accent)?;
+        targets.retain(|name, node| {
+            [clock, accent].contains(node) || (mode == Mode::Script && name == "panel")
+        });
+        Some((clock, accent))
+    };
     Ok(CompiledScriptScene {
         scene: compiled.into_scene(),
-        clock,
-        accent,
+        clock_bindings,
         source,
         targets,
     })
@@ -222,23 +227,24 @@ pub fn read_response(
     if pong != envelope(session, 2, Body::Pong { nonce }) {
         return Err("Invalid scene Pong".into());
     }
-    let (scene, clock, accent, program) = if mode.loads_script() {
+    let (scene, clock_bindings, program) = if mode.loads_script() {
         let compiled = match mode {
-            Mode::LocalClock => local_script.ok_or("Missing prepared local clock package")?,
+            Mode::LocalClock | Mode::LocalScene => {
+                local_script.ok_or("Missing prepared local package")?
+            }
             _ => compiled_script_scene()?,
         };
         (
             compiled.scene,
-            compiled.clock,
-            compiled.accent,
+            compiled.clock_bindings,
             Some((compiled.source, compiled.targets)),
         )
     } else {
-        (fixed_scene()?, 1, 2, None)
+        (fixed_scene()?, Some((1, 2)), None)
     };
     let writable = match program.as_ref() {
         Some((_, targets)) => targets.values().copied().collect(),
-        None => BTreeSet::from([clock, accent]),
+        None => BTreeSet::from([1, 2]),
     };
     let panel = program
         .as_ref()
@@ -246,12 +252,21 @@ pub fn read_response(
         .copied();
     let mut host = HostScene::new(scene, session, &writable)
         .map_err(|_| "Could not initialize fixture host scene")?;
-    let (_, clock_color) = text_state(host.scene(), clock)?;
-    let accent_text = if mode.loads_script() {
-        Some(text_state(host.scene(), accent)?.0.to_owned())
-    } else {
-        None
-    };
+    let clock_state = clock_bindings
+        .map(|(clock, accent)| {
+            let (_, clock_color) = text_state(host.scene(), clock)?;
+            let accent_text = mode
+                .loads_script()
+                .then(|| text_state(host.scene(), accent).map(|(text, _)| text.to_owned()))
+                .transpose()?;
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>((
+                clock,
+                accent,
+                clock_color,
+                accent_text,
+            ))
+        })
+        .transpose()?;
     if let Some((source, targets)) = program {
         let mut initial = Vec::new();
         for &node in targets.values() {
@@ -296,6 +311,26 @@ pub fn read_response(
         .ok_or("Missing initial snapshot")?;
     let mut published = 0;
     for sequence in 1..=updates {
+        let Some((clock, accent, clock_color, accent_text)) = clock_state.as_ref() else {
+            let batch = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
+            let count = match &batch.body {
+                Body::SceneBatch { edits } => edits.len(),
+                _ => return Err("Expected scene edit batch".into()),
+            };
+            let ack = accept_scene_batch(&mut host, batch);
+            if ack != update_message(session, sequence, Body::SceneAck { revision: sequence }) {
+                return Err("Local script scene update rejected".into());
+            }
+            if let Some(updated) = host.snapshot_after(Some(snapshot.key)) {
+                snapshot = updated;
+            }
+            requests
+                .try_send(ack)
+                .map_err(|_| "Scene writer queue unavailable")?;
+            println!("Local script transaction acknowledged: {count} edits.");
+            continue;
+        };
+        let (clock, accent, clock_color) = (*clock, *accent, *clock_color);
         let display_time = if let Some((timers, id)) = timer.as_mut() {
             if sequence > 1 {
                 let received = read_frame(output)?.ok_or(MissingFrame("clock readiness"))?;
@@ -498,11 +533,18 @@ pub fn worker(
             None,
         )
     };
-    let clock = bindings
-        .iter()
-        .find(|binding| binding.name == "clock" && binding.text.is_some())
-        .ok_or("Missing clock text binding")?
-        .node;
+    let clock = if mode == Mode::LocalScene {
+        bindings
+            .first()
+            .ok_or("Missing local script bindings")?
+            .node
+    } else {
+        bindings
+            .iter()
+            .find(|binding| binding.name == "clock" && binding.text.is_some())
+            .ok_or("Missing clock text binding")?
+            .node
+    };
     let text = |value: &str| Edit::Text {
         node: clock,
         value: value.into(),
@@ -520,6 +562,8 @@ pub fn worker(
                 return Err("Expected host clock tick".into());
             };
             format_minute(utc_minute)
+        } else if mode == Mode::LocalScene {
+            String::new()
         } else {
             "12:34".into()
         };
@@ -539,9 +583,13 @@ pub fn worker(
         }
         sequence = sequence.checked_add(1).ok_or("Clock sequence exhausted")?;
     }
-    let terminal_edit = if mode == Mode::Script {
+    let terminal_edit = if matches!(mode, Mode::Script | Mode::LocalScene) {
         Edit::Color {
-            node: SCRIPT_BACKGROUND_PROBE,
+            node: if mode == Mode::Script {
+                SCRIPT_BACKGROUND_PROBE
+            } else {
+                0
+            },
             value: Color([255; 4]),
         }
     } else {
