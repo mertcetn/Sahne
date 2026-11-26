@@ -661,3 +661,7 @@ The Windows developer probe now runs one callback from a trusted flat package us
 ## 79. M4 script timer registration probe
 
 An AppContainer test fixture registers and cancels JavaScript callbacks through native functions backed by the existing monotonic timer queue. The fixture drives controlled instants and checks one-shot dispatch and resume without interval replay. Production timer ownership and cross-process dispatch remain open. See [Script timer registration probe](m4-timers.md#script-timer-registration-probe).
+
+## 80. M4 worker interval registration over IPC
+
+The registered clock fixture sends a bounded interval request from the AppContainer worker during initialization. The host validates the frame and owns all deadlines, pause state and clock dispatch. The worker receives each tick through the existing readiness and scene acknowledgement flow. See [Worker interval registration over IPC](m4-timers.md#worker-interval-registration-over-ipc).

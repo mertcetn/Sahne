@@ -681,6 +681,7 @@ pub fn spawn_probe(
         "local-clock-package",
         "local-script-package",
         "scene-timer",
+        "scene-timer-registration",
         "preview-clock-utc",
         "ipc-write-stall",
         "ipc-write-drain",

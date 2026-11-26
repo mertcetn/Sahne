@@ -76,6 +76,9 @@ pub enum Body {
         utc_minute: u16,
     },
     ClockReady,
+    RegisterInterval {
+        delay_ms: u32,
+    },
     SceneBindings {
         targets: BTreeMap<String, u32>,
     },
@@ -156,6 +159,11 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
             data.extend_from_slice(&utc_minute.to_le_bytes());
         }
         Body::ClockReady => data.push(9),
+        Body::RegisterInterval { delay_ms } => {
+            check_interval_delay(*delay_ms)?;
+            data.push(14);
+            data.extend_from_slice(&delay_ms.to_le_bytes());
+        }
         Body::SceneBindings { targets } => {
             data.push(11);
             scene::encode_bindings(&mut data, message.base_revision, targets)?;
@@ -255,6 +263,11 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
             Body::ClockTick { utc_minute }
         }
         9 => Body::ClockReady,
+        14 => {
+            let delay_ms = u32::from_le_bytes(data.array()?);
+            check_interval_delay(delay_ms)?;
+            Body::RegisterInterval { delay_ms }
+        }
         11 => Body::SceneBindings {
             targets: scene::decode_bindings(&mut data, base_revision)?,
         },
@@ -285,6 +298,15 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         base_revision,
         body,
     }))
+}
+
+fn check_interval_delay(delay_ms: u32) -> Result<()> {
+    use wallpaper_scene::timer::{MAX_DELAY, MIN_DELAY};
+    let delay = std::time::Duration::from_millis(u64::from(delay_ms));
+    if !(MIN_DELAY..=MAX_DELAY).contains(&delay) {
+        return Err(Error::Invalid("interval delay outside bounds"));
+    }
+    Ok(())
 }
 
 fn check_utc_minute(minute: u16) -> Result<()> {

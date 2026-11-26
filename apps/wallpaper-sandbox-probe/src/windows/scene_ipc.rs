@@ -20,6 +20,7 @@ pub enum Mode {
     LocalClock,
     LocalScene,
     Timer,
+    RegisteredTimer,
     Utc,
 }
 
@@ -31,6 +32,7 @@ impl Mode {
             "local-clock-package" => Some(Self::LocalClock),
             "local-script-package" => Some(Self::LocalScene),
             "scene-timer" => Some(Self::Timer),
+            "scene-timer-registration" => Some(Self::RegisteredTimer),
             "preview-clock-utc" => Some(Self::Utc),
             _ => None,
         }
@@ -41,7 +43,11 @@ impl Mode {
     }
 
     fn updates(self) -> u64 {
-        if self == Self::Timer { 3 } else { 1 }
+        if self.uses_host_timer() { 3 } else { 1 }
+    }
+
+    fn uses_host_timer(self) -> bool {
+        matches!(self, Self::Timer | Self::RegisteredTimer)
     }
 }
 
@@ -49,16 +55,16 @@ fn format_minute(minute: u16) -> String {
     format!("{:02}:{:02}", minute / 60, minute % 60)
 }
 
-fn resumed_timer() -> Result<(Timers, wallpaper_scene::timer::TimerId)> {
+fn resumed_timer(delay: Duration) -> Result<(Timers, wallpaper_scene::timer::TimerId)> {
     let start = Instant::now();
     let mut timers = Timers::new(start);
     let id = timers
-        .schedule(start, MIN_DELAY, true)
+        .schedule(start, delay, true)
         .map_err(|_| "Could not register timer")?;
     timers
         .set_paused(start, true)
         .map_err(|_| "Could not pause timer")?;
-    std::thread::sleep(MIN_DELAY * 4);
+    std::thread::sleep(delay * 4);
     let resumed = Instant::now();
     if timers.next_wake().is_some()
         || timers
@@ -79,7 +85,7 @@ fn resumed_timer() -> Result<(Timers, wallpaper_scene::timer::TimerId)> {
             .take_due(resumed)
             .map_err(|_| "Could not check pending timer")?
             .is_some()
-        || timers.next_wake() != resumed.checked_add(MIN_DELAY)
+        || timers.next_wake() != resumed.checked_add(delay)
     {
         return Err("Timer did not dispatch exactly once after resume".into());
     }
@@ -300,10 +306,22 @@ pub fn read_response(
     } else {
         Color([255; 4])
     };
-    let mut timer = if mode == Mode::Timer {
-        Some(resumed_timer()?)
-    } else {
-        None
+    let mut timer = match mode {
+        Mode::Timer => Some(resumed_timer(MIN_DELAY)?),
+        Mode::RegisteredTimer => {
+            let registration = read_frame(output)?.ok_or(MissingFrame("interval registration"))?;
+            registration.check_context(session, 3, 0)?;
+            let Body::RegisterInterval { delay_ms } = registration.body else {
+                return Err("Unexpected interval registration for clock fixture".into());
+            };
+            if delay_ms > 64 {
+                return Err("Interval exceeds the fixed probe's duration budget".into());
+            }
+            let timer = resumed_timer(Duration::from_millis(u64::from(delay_ms)))?;
+            println!("Worker interval registered with host: {delay_ms} ms.");
+            Some(timer)
+        }
+        _ => None,
     };
     let updates = mode.updates();
     let mut snapshot = host
@@ -428,7 +446,7 @@ pub fn read_response(
         return Err("Invalid scene transaction result".into());
     }
     require_eof(output)?;
-    if mode == Mode::Timer {
+    if mode.uses_host_timer() {
         println!(
             "Clock timer verified: paused dispatch suppressed, {updates} sequential UTC ticks acknowledged after resume."
         );
@@ -499,6 +517,13 @@ pub fn worker(
     mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
+    if mode == Mode::RegisteredTimer {
+        let delay_ms = script::clock_interval_request()?;
+        send(
+            output,
+            envelope(session, 3, Body::RegisterInterval { delay_ms }),
+        )?;
+    }
     let (mut bindings, source) = if mode.loads_script() {
         let program = read_frame(input)?.ok_or(MissingFrame("scene program"))?;
         program.check_context(session, 2, 0)?;
@@ -552,7 +577,7 @@ pub fn worker(
     let updates = mode.updates();
     let mut sequence = 1u64;
     while mode == Mode::Utc || sequence <= updates {
-        let display_time = if matches!(mode, Mode::Timer | Mode::Utc) {
+        let display_time = if mode.uses_host_timer() || mode == Mode::Utc {
             if sequence > 1 {
                 send(output, update_message(session, sequence, Body::ClockReady))?;
             }

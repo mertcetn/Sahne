@@ -46,6 +46,26 @@ fn bounded_runtime() -> Result<(Runtime, Arc<AtomicBool>)> {
     Ok((runtime, interrupted))
 }
 
+pub fn clock_interval_request() -> Result<u32> {
+    if !wallpaper_sandbox::is_appcontainer()? {
+        return Err("Interval fixture refuses non-AppContainer execution".into());
+    }
+    let (runtime, interrupted) = bounded_runtime()?;
+    let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
+    let delay = context.with(|ctx| {
+        let register =
+            rquickjs::Function::new(ctx.clone(), |_: rquickjs::Function<'_>, delay: u32| delay)?;
+        let clock: rquickjs::Function = ctx.eval(include_str!("clock_fixture.js"))?;
+        let setup: rquickjs::Function =
+            ctx.eval("(setInterval, clock) => setInterval(clock, 32)")?;
+        setup.call::<_, u32>((register, clock))
+    })?;
+    if interrupted.load(Ordering::Relaxed) || runtime.is_job_pending() {
+        return Err("Interval fixture exceeded its execution budget".into());
+    }
+    Ok(delay)
+}
+
 fn run_case(
     case: &str,
     runtime: &Runtime,

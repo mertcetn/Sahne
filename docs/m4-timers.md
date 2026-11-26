@@ -29,3 +29,11 @@ Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case js-timers
 The restricted worker supplies controlled monotonic instants in this test. Callback execution stays under the existing QuickJS and AppContainer limits. The local package API still has no timer globals. Host-owned IPC registration, live deadlines and JavaScript lifecycle event delivery remain open. [QuickJS function bindings](https://docs.rs/rquickjs/0.14.0/rquickjs/struct.Function.html)
 
 The release `js-timers`, `js-basic`, `js-interrupt`, `js-jobs` and `scene-timer` probes passed with five verified profile cleanups. Local report at `target/sandbox-validation/f450c1931d0a43ed82d948f3562332dd/`.
+
+## Worker interval registration over IPC
+
+Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case scene-timer-registration`. In this fixture an embedded JavaScript setup requests a 32 ms interval inside AppContainer. The worker sends message kind 14 with one little-endian u32 delay in milliseconds after Pong. The host checks the session, sequence 3, base revision 0 and a fixture-specific upper limit of 64 ms. The codec accepts the scheduler's 16 ms to 24 hour range.
+
+The host starts the monotonic schedule from the received delay, pauses it for four intervals, verifies dispatch remains suppressed and resumes with one immediately due callback. Three clock ticks and scene acknowledgements follow, with one tick outstanding at a time. The host checks the schedule after resume and verifies terminal rollback. This fixture evaluates the embedded clock callback afresh on each dispatch. Retention of user callbacks, timer cancellation across IPC and lifecycle event delivery remain open.
+
+The registered timer, existing timer, JavaScript timer and scripted scene probes passed with four verified profile cleanups. The headless live clock regression also passed. Local report at `target/sandbox-validation/17f4dca9fc414204a83d4affc68c1202/`.

@@ -26,6 +26,26 @@ fn encode(message: &Message) -> Vec<u8> {
 }
 
 #[test]
+fn interval_registration_enforces_scheduler_delay_limits() {
+    for delay_ms in [16, 32, 86_400_000] {
+        let request = message(Body::RegisterInterval { delay_ms }, 3, 0);
+        assert_eq!(
+            read_frame(&mut encode(&request).as_slice()).unwrap(),
+            Some(request)
+        );
+    }
+    for delay_ms in [0u32, 15, 86_400_001, u32::MAX] {
+        let invalid = message(Body::RegisterInterval { delay_ms }, 3, 0);
+        let mut output = Vec::new();
+        assert!(write_frame(&mut output, &invalid).is_err());
+        assert!(output.is_empty());
+        let mut frame = encode(&message(Body::RegisterInterval { delay_ms: 32 }, 3, 0));
+        frame[31..].copy_from_slice(&delay_ms.to_le_bytes());
+        assert!(read_frame(&mut frame.as_slice()).is_err());
+    }
+}
+
+#[test]
 fn scene_program_checks_source_bounds_and_encoding() {
     let program = |source: String| {
         message(

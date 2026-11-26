@@ -247,6 +247,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "local-clock-package"
         | "local-script-package"
         | "scene-timer"
+        | "scene-timer-registration"
         | "preview-clock-utc"
         | "ipc-write-drain"
         | "filesystem"
@@ -615,6 +616,7 @@ fn host(args: &[String]) -> Result<()> {
             "scene-transaction",
             "scene-script",
             "scene-timer",
+            "scene-timer-registration",
             "ipc-write-stall",
             "ipc-write-drain",
             "filesystem",
@@ -688,6 +690,7 @@ fn host(args: &[String]) -> Result<()> {
                 | "local-clock-package"
                 | "local-script-package"
                 | "scene-timer"
+                | "scene-timer-registration"
                 | "ipc-write-drain"
                 | "filesystem"
                 | "registry"
@@ -713,7 +716,8 @@ fn host(args: &[String]) -> Result<()> {
                         | "scene-script"
                         | "local-clock-package"
                         | "local-script-package"
-                        | "scene-timer" => scene_ipc::RESULT_BIT,
+                        | "scene-timer"
+                        | "scene-timer-registration" => scene_ipc::RESULT_BIT,
                         "process" => 64,
                         "handles" => 128,
                         "endpoint" => 1024,
