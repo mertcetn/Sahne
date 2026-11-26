@@ -120,6 +120,21 @@ impl Bridge {
         self.state.mode == Mode::Utc
     }
     pub fn start(mode: Mode, notify: impl Fn() + Send + Sync + 'static) -> Result<Self> {
+        Self::start_inner(mode, None, notify)
+    }
+
+    pub fn start_package(
+        package: script_package::Prepared,
+        notify: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Self> {
+        Self::start_inner(Mode::Fixture, Some(package), notify)
+    }
+
+    fn start_inner(
+        mode: Mode,
+        package: Option<script_package::Prepared>,
+        notify: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Self> {
         let (signal, receiver) = mpsc::sync_channel(2);
         let state = Arc::new(ChannelState {
             update: Mutex::new(Update::default()),
@@ -134,7 +149,8 @@ impl Bridge {
         let supervisor = thread::Builder::new()
             .name("clock-supervisor".into())
             .spawn(move || {
-                let result = supervise(&shared, receiver).map_err(|error| error.to_string());
+                let result =
+                    supervise(&shared, receiver, package).map_err(|error| error.to_string());
                 if let Ok(mut pending) = shared.update.lock() {
                     pending.terminal = Some(result);
                 }
@@ -181,26 +197,45 @@ impl Drop for Bridge {
     }
 }
 
-fn supervise(state: &Arc<ChannelState>, receiver: mpsc::Receiver<Signal>) -> WorkerResult<()> {
+fn supervise(
+    state: &Arc<ChannelState>,
+    receiver: mpsc::Receiver<Signal>,
+    package: Option<script_package::Prepared>,
+) -> WorkerResult<()> {
     let exe = std::env::current_exe()?.with_file_name("wallpaper-sandbox-probe.exe");
     if !exe.metadata()?.is_file() {
         return Err("Missing sibling sandbox probe executable".into());
     }
     let session = wallpaper_sandbox::random_id()?;
     let nonce = wallpaper_sandbox::random_id()?;
-    let initial = clock::initial_scene().map_err(|error| error.to_string())?;
-    let scene = HostScene::new(
-        initial,
-        session,
-        &BTreeSet::from([clock::CLOCK_ID, clock::ACCENT_ID]),
-    )
-    .map_err(|_| "Could not initialize worker clock scene")?;
+    let (initial, writable, program) = if let Some(package) = package {
+        let Body::SceneProgram { targets, .. } = &package.program else {
+            return Err("Expected package scene program".into());
+        };
+        (
+            wallpaper_scene::decode(&package.scene.encode())?,
+            targets.values().copied().collect(),
+            Some(package.program),
+        )
+    } else {
+        (
+            clock::initial_scene().map_err(|error| error.to_string())?,
+            BTreeSet::from([clock::CLOCK_ID, clock::ACCENT_ID]),
+            None,
+        )
+    };
+    let scene = HostScene::new(initial, session, &writable)
+        .map_err(|_| "Could not initialize worker scene")?;
     let base = std::env::current_dir()?.join("target/sandbox-runs");
     fs::create_dir_all(&base)?;
     let root = base.join(format!("preview-{}-{session:016x}", std::process::id()));
-    let case = match state.mode {
-        Mode::Fixture => "scene-timer",
-        Mode::Utc => "preview-clock-utc",
+    let case = if program.is_some() {
+        "local-script-package"
+    } else {
+        match state.mode {
+            Mode::Fixture => "scene-timer",
+            Mode::Utc => "preview-clock-utc",
+        }
     };
     let wallpaper_sandbox::Channel {
         mut sandbox,
@@ -212,7 +247,7 @@ fn supervise(state: &Arc<ChannelState>, receiver: mpsc::Receiver<Signal>) -> Wor
         .name("clock-channel".into())
         .spawn(move || {
             let _ = shared.channel_thread.set(thread::current());
-            let result = exchange(input, output, session, nonce, scene, &shared);
+            let result = exchange(input, output, session, nonce, scene, &shared, program);
             let _ = shared.signal.send(Signal::Finished(result));
         });
     let io_thread = match io_thread {
@@ -298,6 +333,7 @@ fn exchange(
     nonce: u64,
     mut host: HostScene,
     state: &ChannelState,
+    program: Option<Body>,
 ) -> WorkerResult<()> {
     let mut key = host
         .snapshot_after(None)
@@ -310,6 +346,9 @@ fn exchange(
     send(&mut input, frame(session, 1, 0, Body::Ping { nonce }))?;
     if read_frame(&mut output)? != Some(frame(session, 2, 0, Body::Pong { nonce })) {
         return Err("Invalid clock worker pong".into());
+    }
+    if let Some(program) = program {
+        return exchange_package(input, output, session, host, state, program);
     }
     let mut sequence = 1u64;
     let mut lifecycle_sequence = 1u64;
@@ -570,4 +609,91 @@ pub fn check(mode: Mode) -> Result<()> {
         thread::sleep(POLL_INTERVAL);
     }
     Err("Live worker clock check timed out".into())
+}
+
+fn exchange_package(
+    mut input: File,
+    mut output: File,
+    session: u64,
+    mut host: HostScene,
+    state: &ChannelState,
+    program: Body,
+) -> WorkerResult<()> {
+    let before = host
+        .snapshot_after(None)
+        .ok_or("Missing initial package scene")?
+        .key;
+    send(&mut input, frame(session, 2, 0, program))?;
+    let batch = read_frame(&mut output)?.ok_or("Missing package scene batch")?;
+    let ack = accept_scene_batch(&mut host, batch);
+    if ack != frame(session, 1, 0, Body::SceneAck { revision: 1 }) {
+        if matches!(ack.body, Body::Reject { .. }) {
+            send(&mut input, ack)?;
+        }
+        return Err("Package scene batch rejected".into());
+    }
+    send(&mut input, ack)?;
+    let accepted = host
+        .snapshot_after(None)
+        .ok_or("Missing accepted package scene")?;
+    let accepted_key = accepted.key;
+    if accepted_key != before {
+        state
+            .update
+            .lock()
+            .map_err(|_| "Package scene mailbox unavailable")?
+            .snapshot = Some(accepted);
+        (state.notify)();
+    }
+    let invalid = read_frame(&mut output)?.ok_or("Missing terminal package batch")?;
+    invalid.check_context(session, 2, 1)?;
+    let rejection = accept_scene_batch(&mut host, invalid);
+    if !matches!(
+        rejection.body,
+        Body::Reject {
+            code: SCENE_REJECT_CODE,
+            ..
+        }
+    ) || !host.is_closed()
+        || host.revision() != 1
+        || host.snapshot_after(Some(accepted_key)).is_some()
+    {
+        return Err("Package snapshot changed during terminal rejection".into());
+    }
+    send(&mut input, rejection)?;
+    drop(input);
+    const FIXTURE_RESULT: u32 = 23 | (1 << 23);
+    if read_frame(&mut output)?
+        != Some(frame(
+            session,
+            3,
+            0,
+            Body::ProbeResult {
+                denied: FIXTURE_RESULT,
+            },
+        ))
+        || output.read(&mut [0])? != 0
+    {
+        return Err("Invalid package worker completion".into());
+    }
+    Ok(())
+}
+
+pub fn check_package(package: script_package::Prepared) -> Result<()> {
+    let bridge = Bridge::start_package(package, || {})?;
+    let mut changed = false;
+    let until = Instant::now() + RESPONSE_LIMIT + Duration::from_secs(3);
+    while Instant::now() < until {
+        let update = bridge.poll()?;
+        changed |= update.snapshot.is_some();
+        if let Some(result) = update.terminal {
+            result?;
+            println!(
+                "Live package transaction verified; scene changed={changed}; worker cleaned up."
+            );
+            return Ok(());
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
+    Err("Live package worker check timed out".into())
 }

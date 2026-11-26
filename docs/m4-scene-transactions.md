@@ -194,6 +194,20 @@ The release check exported a two-node scene after the host acknowledged text and
 
 The Windows D3D12 visual check of `ee40396` displayed `Worker update accepted` on the updated blue panel in a 960×600 client. The preview recorded one presented frame in one GPU generation. Escape closed the window. Local log at `target/m4-retained-scene-visual/2778d3cdf1f44ff9a952aad33cc27b7c/stderr.log`.
 
+### Direct trusted package preview
+
+Build the preview and sibling probe and pass an absolute native package folder. Use a trusted text-and-rectangle package with a manifest-selected callback.
+
+```powershell
+cargo build --release -p wallpaper-preview -p wallpaper-sandbox-probe --locked
+target/release/wallpaper-preview.exe --check-trusted-script-preview $folder
+target/release/wallpaper-preview.exe --trusted-script-preview $folder --seconds 20
+```
+
+The headless check performs the same AppContainer exchange without starting D3D12. Window mode presents the compiled initial scene, then starts the worker. The worker runs one callback. The host validates and acknowledges its batch and publishes only changed content. A subsequent deliberate invalid batch tests rollback. The preview continues to display its last accepted scene after worker exit. The input is compiled in the host, and image resources and desktop attachment are outside this mode. Visual verification of the live window remains open.
+
+Release checks verified changed content, an acknowledged identical write and rejection of an invalid first batch. The original headless clock and three AppContainer regression cases passed. The local visual fixture is at `target/m4-retained-scene-package/f7a0e767866745b789a6e91df306833a/`. Local regression report at `target/sandbox-validation/bc9c435b92734305ac1c1b8820771c49/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

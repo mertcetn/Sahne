@@ -5,6 +5,7 @@ mod lifecycle;
 mod live_clock;
 mod motion;
 mod pixels;
+mod script_package;
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
     TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
@@ -49,6 +50,8 @@ fn main() -> Result<()> {
     let mut check_worker_snapshot = false;
     let mut retained_scene_folder = None;
     let mut check_retained_scene = false;
+    let mut script_package_folder = None;
+    let mut check_script_package = false;
     let mut worker_live = None;
     let mut check_worker_live = false;
     let mut compiled_example = None;
@@ -61,6 +64,9 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--scene-worker-snapshot <run-folder> displays a retained flat scene. --check-scene-worker-snapshot <run-folder> validates it headlessly."
+                );
+                println!(
+                    "--trusted-script-preview <absolute-folder> displays a trusted flat package and its AppContainer update. --check-trusted-script-preview <absolute-folder> checks that exchange without a window."
                 );
                 return Ok(());
             }
@@ -113,6 +119,14 @@ fn main() -> Result<()> {
                 retained_scene_folder =
                     Some(args.next().ok_or("Missing scene snapshot run folder")?);
             }
+            "--trusted-script-preview" | "--check-trusted-script-preview" => {
+                if script_package_folder.is_some() {
+                    return Err("Choose one script preview input".into());
+                }
+                check_script_package = arg.starts_with("--check-");
+                script_package_folder =
+                    Some(args.next().ok_or("Missing trusted script package folder")?);
+            }
             "--seconds" => {
                 let n = args.next().ok_or("Missing seconds")?.parse::<u64>()?;
                 if !(1..=3600).contains(&n) {
@@ -129,8 +143,8 @@ fn main() -> Result<()> {
             _ => return Err(format!("Unsupported argument: {arg}").into()),
         }
     }
-    let retained_scene = if let Some(folder) = retained_scene_folder.as_deref() {
-        if compiled_example.is_some()
+    if (retained_scene_folder.is_some() || script_package_folder.is_some())
+        && (compiled_example.is_some()
             || worker_snapshot.is_some()
             || worker_live.is_some()
             || desktop_mode
@@ -139,10 +153,19 @@ fn main() -> Result<()> {
             || test_pixels
             || test_clock_rollover
             || reference_pose
-            || (check_retained_scene && seconds.is_some())
-        {
-            return Err("Retained scene requires its own window or headless mode".into());
-        }
+            || ((check_retained_scene || check_script_package) && seconds.is_some())
+            || (retained_scene_folder.is_some() && script_package_folder.is_some()))
+    {
+        return Err("Scripted or retained scene requires its own window or headless mode".into());
+    }
+    let script_package = script_package_folder
+        .as_deref()
+        .map(script_package::prepare)
+        .transpose()?;
+    if check_script_package {
+        return live_clock::check_package(script_package.ok_or("Missing script preview package")?);
+    }
+    let retained_scene = if let Some(folder) = retained_scene_folder.as_deref() {
         let scene = compiled::load_retained(folder)?;
         if check_retained_scene {
             println!(
@@ -155,7 +178,9 @@ fn main() -> Result<()> {
         }
         Some(scene)
     } else {
-        None
+        script_package
+            .as_ref()
+            .map(|package| Arc::clone(&package.scene))
     };
     if test_device_loss && recreate > 0 {
         return Err("Choose one test mode per run".into());
@@ -270,6 +295,7 @@ fn main() -> Result<()> {
         desktop_mode,
         compiled_example,
         retained_scene,
+        start_script_package: script_package,
         test_pixels,
         pixels_passed: false,
         next_probe: Instant::now() + Duration::from_secs(2),
@@ -338,6 +364,7 @@ struct App {
     desktop_mode: bool,
     compiled_example: Option<compiled::Example>,
     retained_scene: Option<Arc<wallpaper_scene::ValidatedScene>>,
+    start_script_package: Option<script_package::Prepared>,
     test_pixels: bool,
     pixels_passed: bool,
     next_probe: Instant,
@@ -354,6 +381,44 @@ struct App {
     next_device_test: Option<Instant>,
 }
 impl App {
+    fn apply_package_update(&mut self, events: &ActiveEventLoop) {
+        let Some(bridge) = &self.live_clock else {
+            return;
+        };
+        let update = match bridge.poll() {
+            Ok(update) => update,
+            Err(error) => {
+                self.live_clock = None;
+                self.fail(events, error);
+                return;
+            }
+        };
+        if let Some(snapshot) = update.snapshot {
+            let scene = Arc::clone(&snapshot.scene);
+            if let Some(state) = &mut self.state {
+                let result = state
+                    .compiled
+                    .as_mut()
+                    .ok_or_else(|| "Missing package renderer".into())
+                    .and_then(|renderer| renderer.sync_snapshot(snapshot, &mut state.fonts));
+                if let Err(error) = result {
+                    self.fail(events, error);
+                    return;
+                }
+                state.window.request_redraw();
+            }
+            self.retained_scene = Some(scene);
+            eprintln!("Accepted worker package snapshot");
+        }
+        if let Some(terminal) = update.terminal {
+            self.live_clock = None;
+            match terminal {
+                Ok(()) => eprintln!("Package worker completed; scene retained"),
+                Err(error) => eprintln!("Package worker stopped: {error}; scene retained"),
+            }
+        }
+    }
+
     fn apply_live_update(&mut self) {
         if let (Some(bridge), Some(clock)) = (self.live_clock.as_ref(), self.clock.as_mut()) {
             match bridge.poll() {
@@ -547,7 +612,8 @@ impl ApplicationHandler<AppEvent> for App {
     }
     fn user_event(&mut self, events: &ActiveEventLoop, event: AppEvent) {
         match event {
-            AppEvent::ClockUpdate => self.apply_live_update(),
+            AppEvent::ClockUpdate if self.clock.is_some() => self.apply_live_update(),
+            AppEvent::ClockUpdate => self.apply_package_update(events),
             AppEvent::WindowsLifecycle { generation, event }
                 if generation == self.generation && self.state.is_some() =>
             {
@@ -762,6 +828,15 @@ impl ApplicationHandler<AppEvent> for App {
                                     self.live_clock = Some(bridge);
                                 }
                                 Err(error) => eprintln!("Clock worker could not start: {error}"),
+                            }
+                        }
+                        if let Some(package) = self.start_script_package.take() {
+                            let proxy = self.proxy.clone();
+                            match live_clock::Bridge::start_package(package, move || {
+                                let _ = proxy.send_event(AppEvent::ClockUpdate);
+                            }) {
+                                Ok(bridge) => self.live_clock = Some(bridge),
+                                Err(error) => eprintln!("Package worker could not start: {error}"),
                             }
                         }
                         self.frames += 1;

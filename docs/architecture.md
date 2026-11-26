@@ -717,3 +717,7 @@ The retained interval fixture admits one native registration and one cancellatio
 ## 93. M4 retained local script scene preview
 
 The trusted local script and lifecycle probes export the final host-validated flat scene after terminal rejection and verified worker cleanup when the scene has no image resources. The preview opens the fixed export file using the existing bounded Windows folder loader, independently decodes it and can display it with the flat renderer. See [Retained local script scene](m4-scene-transactions.md#retained-local-script-scene).
+
+## 94. M4 direct local package preview
+
+The trusted flat package preview prepares one validated scene and a bounded worker program. After the initial frame, its supervisor launches the existing AppContainer worker and supplies the program through inherited IPC. The renderer receives changed snapshots through the event loop and retains the last accepted scene after rejection. See [Direct trusted package preview](m4-scene-transactions.md#direct-trusted-package-preview).

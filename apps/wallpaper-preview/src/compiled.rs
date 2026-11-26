@@ -379,10 +379,18 @@ impl Renderer {
         let Some(snapshot) = clock.snapshot_after(self.snapshot_key) else {
             return Ok(());
         };
+        self.sync_snapshot(snapshot, fonts)
+    }
+
+    pub fn sync_snapshot(
+        &mut self,
+        snapshot: wallpaper_scene::transaction::Snapshot,
+        fonts: &mut FontSystem,
+    ) -> Result<()> {
         let before = self.scene.scene();
         let next = snapshot.scene.scene();
         if !same_topology(before, next) {
-            return Err("Clock snapshot changed renderer topology".into());
+            return Err("Worker snapshot changed renderer topology".into());
         }
         for item in &mut self.items {
             if let Item::Text(item) = item
