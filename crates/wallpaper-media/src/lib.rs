@@ -1,6 +1,7 @@
 //! Bounded native image data for fixed fixtures; no filesystem, network or GPU access.
 use std::{collections::BTreeMap, fmt, io::Cursor};
 use wallpaper_scene::{MAX_DECODED_IMAGE_BYTES, MAX_IMAGE_DIMENSION, ValidatedScene};
+pub mod flat_output;
 
 pub const MAX_ENCODED_IMAGE_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_PNG_CHUNKS: usize = 4096;

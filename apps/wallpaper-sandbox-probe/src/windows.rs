@@ -170,27 +170,34 @@ fn worker(args: &[String]) -> Result<()> {
     if case == "package-snapshot" {
         let snapshot = wallpaper_format::PackageSnapshot::read_from(&mut input)?;
         require_eof(&mut input)?;
-        let body = match snapshot.parse() {
-            Err(_) => Body::Reject {
+        let compiled = match snapshot.parse() {
+            Err(_) => Err(Body::Reject {
                 code: 1,
                 message: "Package validation failed".into(),
-            },
+            }),
             Ok(package) => {
                 let viewport = wallpaper_compiler::Viewport {
                     width: 1920,
                     height: 1080,
                     background: wallpaper_scene::Color([0; 4]),
                 };
-                match wallpaper_compiler::compile(&package, viewport) {
-                    Ok(_) => Body::Pong { nonce },
-                    Err(_) => Body::Reject {
-                        code: 2,
-                        message: "Package compilation failed".into(),
-                    },
-                }
+                wallpaper_compiler::compile(&package, viewport).map_err(|_| Body::Reject {
+                    code: 2,
+                    message: "Package compilation failed".into(),
+                })
             }
         };
-        write_frame(&mut output, &envelope(session, 2, body))?;
+        match compiled {
+            Ok(compiled) => {
+                write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
+                wallpaper_media::flat_output::write(
+                    &mut output,
+                    compiled.scene(),
+                    compiled.images(),
+                )?;
+            }
+            Err(body) => write_frame(&mut output, &envelope(session, 2, body))?,
+        }
         output.flush()?;
         return Ok(());
     }

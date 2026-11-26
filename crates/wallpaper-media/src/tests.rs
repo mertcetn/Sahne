@@ -191,6 +191,29 @@ fn adjacent_idat_chunks_preserve_pixels() {
 }
 
 #[test]
+fn flat_output_round_trip_rejects_truncation_and_wrong_resource_identity() {
+    let scene = scene(vec![ImageResource {
+        id: 7,
+        width: 2,
+        height: 1,
+    }]);
+    let images = BTreeMap::from([(7, RgbaImage::from_rgba8(2, 1, vec![42; 8]).unwrap())]);
+    let mut wire = Vec::new();
+    flat_output::write(&mut wire, &scene, &images).unwrap();
+    let received = flat_output::read(wire.as_slice()).unwrap();
+    assert_eq!(received.scene, scene);
+    assert_eq!(received.images, images);
+    for end in 0..wire.len() {
+        assert!(flat_output::read(&wire[..end]).is_err());
+    }
+    wire[8 + scene.encode().len()] = 8;
+    assert_eq!(
+        flat_output::read(wire.as_slice()).err().unwrap().kind(),
+        std::io::ErrorKind::InvalidData
+    );
+}
+
+#[test]
 fn raw_pixels_and_exact_scene_asset_matching() {
     assert_eq!(
         RgbaImage::from_rgba8(0, 1, vec![]),

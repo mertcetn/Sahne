@@ -1,6 +1,18 @@
 use super::Result;
-use std::{fs, io::Write, sync::mpsc, thread, time::Duration};
+use std::{
+    fs,
+    io::{self, Read, Write},
+    sync::mpsc,
+    thread,
+    time::Duration,
+};
+use wallpaper_media::flat_output::{self, FlatOutput};
 use wallpaper_protocol::{Body, Message, read_frame, write_frame};
+
+enum IntakeReply {
+    Compiled(FlatOutput),
+    Rejected(&'static str),
+}
 
 pub fn check(folder: &str) -> Result<()> {
     let snapshot = wallpaper_platform::package_directory::collect_snapshot(folder)?;
@@ -20,7 +32,7 @@ pub fn check(folder: &str) -> Result<()> {
     let channel = thread::Builder::new()
         .name("package-intake-channel".into())
         .spawn(move || {
-            let result = (|| -> Result<Option<&'static str>> {
+            let result = (|| -> Result<IntakeReply> {
                 let hello = read_frame(&mut output)?.ok_or("Missing package helper Hello")?;
                 hello.check_context(session, 1, 0)?;
                 if hello.body != (Body::Hello { api_version: 1 }) {
@@ -40,22 +52,26 @@ pub fn check(folder: &str) -> Result<()> {
                 drop(input);
                 let reply = read_frame(&mut output)?.ok_or("Missing package helper reply")?;
                 reply.check_context(session, 2, 0)?;
-                let rejection = match reply.body {
-                    Body::Pong { nonce: echoed } if echoed == nonce => None,
+                let result = match reply.body {
+                    Body::Pong { nonce: echoed } if echoed == nonce => {
+                        IntakeReply::Compiled(flat_output::read(&mut output)?)
+                    }
                     Body::Reject { code: 1, message } if message == "Package validation failed" => {
-                        Some("Package rejected by AppContainer validation")
+                        IntakeReply::Rejected("Package rejected by AppContainer validation")
                     }
                     Body::Reject { code: 2, message }
                         if message == "Package compilation failed" =>
                     {
-                        Some("Package rejected by AppContainer compilation")
+                        IntakeReply::Rejected("Package rejected by AppContainer compilation")
                     }
                     _ => return Err("Unexpected package helper reply".into()),
                 };
-                if read_frame(&mut output)?.is_some() {
-                    return Err("Extra package helper reply".into());
+                match output.read_exact(&mut [0]) {
+                    Ok(()) => return Err("Extra package helper data".into()),
+                    Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {}
+                    Err(error) => return Err(error.into()),
                 }
-                Ok(rejection)
+                Ok(result)
             })()
             .map_err(|error| error.to_string());
             let _ = sender.send(result);
@@ -83,13 +99,19 @@ pub fn check(folder: &str) -> Result<()> {
     sandbox.cleanup_profile()?;
     joined.map_err(|_| "Package intake channel panicked")?;
     println!("Package helper profile cleanup verified.");
-    let rejection = reply??;
+    let result = reply??;
     if exit? != Some(0) {
         return Err("Package helper did not exit cleanly".into());
     }
-    if let Some(reason) = rejection {
-        return Err(reason.into());
-    }
+    let compiled = match result {
+        IntakeReply::Compiled(compiled) => compiled,
+        IntakeReply::Rejected(reason) => return Err(reason.into()),
+    };
     println!("Package validated and compiled in AppContainer.");
+    println!(
+        "Host independently validated flat output. Nodes: {}. Images: {}.",
+        compiled.scene.scene().nodes.len(),
+        compiled.images.len()
+    );
     Ok(())
 }

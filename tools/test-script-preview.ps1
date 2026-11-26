@@ -85,7 +85,10 @@ $results = foreach ($case in $cases) {
                 $stderr.Contains("Package rejected by AppContainer $($case.Reject)")
         }
         else {
-            $passed = $passed -and $result.ExitCode -eq 0 -and $validated -and [string]::IsNullOrWhiteSpace($stderr)
+            $imageCount = if ($case.ContainsKey('Image')) { 1 } else { 0 }
+            $outputVerified = $stdout -match "(?m)^Host independently validated flat output\. Nodes: [1-9][0-9]*\. Images: $imageCount\.\r?$"
+            $passed = $passed -and $result.ExitCode -eq 0 -and $validated -and $outputVerified -and
+                [string]::IsNullOrWhiteSpace($stderr)
         }
     }
     elseif ($case.ContainsKey('Changed')) {

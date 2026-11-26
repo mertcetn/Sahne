@@ -753,3 +753,7 @@ The host captures the package without parsing its sources and sends the snapshot
 ## 102. M4 flat package compilation in AppContainer
 
 After package validation, the intake helper compiles the existing flat HTML/CSS subset for a fixed viewport and decodes supported PNG resources under the existing compiler, decoder and sandbox budgets. It discards the resulting scene and pixel buffers and sends a fixed compilation status to the host. Font processing and transport of validated scene output remain pending.
+
+## 103. M4 flat compilation output stream
+
+After a nonce acknowledgement, the intake helper sends a versioned stream containing the encoded flat scene and raw RGBA8 image data in scene declaration order. The host checks the scene length before allocation, independently decodes and validates the scene, and derives pixel lengths from the validated dimensions and aggregate budget. It verifies each image ID and requires end of stream and clean worker exit before reporting success. The existing watchdog covers both directions. Font processing and renderer integration remain pending. See [Windows AppContainer intake check](m3-manifest.md#windows-appcontainer-intake-check).
