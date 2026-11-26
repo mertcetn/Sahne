@@ -1,7 +1,7 @@
 //! Fixed trusted fixtures only. The caller must already be a verified AppContainer worker.
 use super::Result;
 use rquickjs::{
-    Array, Context, Error, Function, Object, Persistent, Runtime, Value, context::intrinsic,
+    Array, Context, Ctx, Error, Function, Object, Persistent, Runtime, Value, context::intrinsic,
     promise::PromiseState,
 };
 use std::{
@@ -132,7 +132,7 @@ impl RegisteredClock {
         let (runtime, interrupted) = bounded_runtime()?;
         let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
         let controls = Rc::new(ClockControls::default());
-        context.with(|ctx| -> rquickjs::Result<()> {
+        let functions = context.with(|ctx| -> rquickjs::Result<_> {
             let register_state = Rc::clone(&controls);
             let register = Function::new(ctx.clone(), move |milliseconds: f64| {
                 register_state.register(milliseconds)
@@ -142,7 +142,7 @@ impl RegisteredClock {
             let clock: Function = ctx.eval(include_str!("clock_fixture.js"))?;
             let setup: Function = ctx.eval(include_str!("script/registered_clock.js"))?;
             let callbacks: Object = setup.call((register, clear, clock))?;
-            ctx.globals().set("registeredClock", callbacks)
+            CallbackFunctions::capture(&ctx, &callbacks)
         })?;
         check_callback_budget(&runtime, &interrupted)?;
         controls.check()?;
@@ -153,7 +153,11 @@ impl RegisteredClock {
             .ok_or("Missing JavaScript interval registration")?;
         Ok((
             Self {
-                callbacks: RetainedCallbacks { context, runtime },
+                callbacks: RetainedCallbacks {
+                    functions,
+                    context,
+                    runtime,
+                },
                 controls,
             },
             delay_ms,
@@ -178,8 +182,26 @@ impl RegisteredClock {
 }
 
 pub struct RetainedCallbacks {
+    // Drop persistent handles before the context and runtime they belong to.
+    functions: CallbackFunctions,
     context: Context,
     runtime: Runtime,
+}
+
+struct CallbackFunctions {
+    pause: Persistent<Function<'static>>,
+    resume: Persistent<Function<'static>>,
+    tick: Persistent<Function<'static>>,
+}
+
+impl CallbackFunctions {
+    fn capture<'js>(ctx: &Ctx<'js>, callbacks: &Object<'js>) -> rquickjs::Result<Self> {
+        Ok(Self {
+            pause: Persistent::save(ctx, callbacks.get::<_, Function>("pause")?),
+            resume: Persistent::save(ctx, callbacks.get::<_, Function>("resume")?),
+            tick: Persistent::save(ctx, callbacks.get::<_, Function>("tick")?),
+        })
+    }
 }
 
 pub struct PackageTimer {
@@ -211,19 +233,16 @@ impl RetainedCallbacks {
         let (runtime, interrupted) = bounded_runtime()?;
         let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
         let rejected = track_rejections(&runtime);
-        let (delay, ticks) = context
-            .with(|ctx| -> rquickjs::Result<(Option<f64>, Option<f64>)> {
+        let (functions, (delay, ticks)) = context
+            .with(|ctx| -> rquickjs::Result<_> {
                 let callbacks: Object = ctx.eval(source)?;
-                for name in ["pause", "resume", "tick"] {
-                    let _: Function = callbacks.get(name)?;
-                }
-                let delay = if read_interval {
+                let functions = CallbackFunctions::capture(&ctx, &callbacks)?;
+                let delay: (Option<f64>, Option<f64>) = if read_interval {
                     (callbacks.get("intervalMs")?, callbacks.get("tickCount")?)
                 } else {
                     (None, None)
                 };
-                ctx.globals().set("registeredClock", callbacks)?;
-                Ok(delay)
+                Ok((functions, delay))
             })
             .map_err(|_| "Expected an object with pause, resume and tick callbacks")?;
         check_callback_budget(&runtime, &interrupted)?;
@@ -253,15 +272,21 @@ impl RetainedCallbacks {
             None if ticks.is_none() => None,
             None => return Err("Package tick count requires an interval".into()),
         };
-        Ok((Self { context, runtime }, timer))
+        Ok((
+            Self {
+                functions,
+                context,
+                runtime,
+            },
+            timer,
+        ))
     }
 
     pub fn edits(&self, bindings: &[Binding], display_time: &str) -> Result<Vec<Edit>> {
         let interrupted = arm_deadline(&self.runtime);
         let rejected = track_rejections(&self.runtime);
         let staged = self.context.with(|ctx| {
-            let callbacks: Object = ctx.globals().get("registeredClock")?;
-            let callback: Function = callbacks.get("tick")?;
+            let callback = self.functions.tick.clone().restore(&ctx)?;
             stage_scene_callback(&ctx, bindings, callback, display_time)
         })?;
         finish_scene_callback(
@@ -278,8 +303,12 @@ impl RetainedCallbacks {
         let interrupted = arm_deadline(&self.runtime);
         let rejected = track_rejections(&self.runtime);
         let completion = self.context.with(|ctx| -> rquickjs::Result<_> {
-            let callbacks: Object = ctx.globals().get("registeredClock")?;
-            let callback: Function = callbacks.get(if paused { "pause" } else { "resume" })?;
+            let function = if paused {
+                &self.functions.pause
+            } else {
+                &self.functions.resume
+            };
+            let callback = function.clone().restore(&ctx)?;
             let value: Value = callback.call(())?;
             Ok(Persistent::save(&ctx, value))
         })?;

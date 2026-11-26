@@ -137,6 +137,8 @@ On November 26, 2026, the user locked and unlocked Windows, then suspended and r
 
 The registered and continuous clock callbacks and the trusted package lifecycle probe use the same bounded Promise job drain. A lifecycle callback runs at most 64 jobs within its own 100 ms deadline. It must finish with an empty queue and fulfill any Promise it returns before the worker acknowledges the event. A tick follows the same rules before its DOM writes are collected. A rejection reported as unhandled fails the invocation. The trusted package's initial callback object must be available synchronously with no queued jobs.
 
+The worker reads `pause`, `resume` and `tick` once during setup. It keeps those function references for the session. A callback can still update shared script state. Replacing properties on the returned object after setup does not change which functions the worker invokes.
+
 A failed lifecycle callback sends a bounded rejection and terminates the worker session. Its pending jobs cannot run in a subsequent invocation. The host retains the last accepted scene and revision.
 
 In the trusted package release test, pause updated shared state through a Promise. Resume then changed that state in its 64th job, and tick read the result before publishing its edit. A 65-job resume, an unhandled rejection and an unresolved returned Promise each stopped before the resume acknowledgement and tick. Five AppContainer regressions and both headless clock checks passed. The continuous check observed 15:28 → 15:29 UTC with pause, resume and cleanup. Local report at `target/sandbox-validation/28bbb7457be641d7b3e9ead4af73bbdf/`.

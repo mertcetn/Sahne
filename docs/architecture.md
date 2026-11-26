@@ -799,3 +799,7 @@ Package preparation checks the script source's transport limit before copying it
 ## 112. M4 isolated package preparation for visible script modes
 
 The one-shot and live isolated script modes consume the validated preparation result before creating the event loop. The preview retains the initial scene and starts the separate execution worker after the first presentation. The live mode uses the same Windows lifecycle and host timer bridge as the trusted live preview. See [Isolated script package preview](m4-scene-transactions.md#isolated-script-package-preview).
+
+## 113. M4 retained callback identity
+
+The worker captures the three validated callback functions under the setup deadline and stores runtime-owned references in Rust. Callback dispatch restores the reference in its original context. The references are dropped before the context and runtime. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).
