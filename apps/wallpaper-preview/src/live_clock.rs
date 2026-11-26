@@ -790,7 +790,12 @@ fn exchange_package(
                 {
                     return Err("Live package rejection changed the accepted scene".into());
                 }
-                println!("Live package revision {base} preserved after rejection.");
+                let rejection = if worker_rejected {
+                    "worker callback rejection"
+                } else {
+                    "host scene rejection"
+                };
+                println!("Live package revision {base} preserved after {rejection}.");
             }
             // A worker reporting callback failure exits without waiting for a reply.
             if !worker_rejected && matches!(ack.body, Body::Reject { .. }) {

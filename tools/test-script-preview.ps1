@@ -44,7 +44,9 @@ $cases = @(
     @{ Name = 'lifecycle-invalid-delay'; Lifecycle = $true; InvalidDelay = $true; Script = '({ intervalMs: 32.5, pause() {}, resume() {}, tick() {} })' }
     @{ Name = 'lifecycle-invalid-count'; Lifecycle = $true; InvalidDelay = $true; Script = '({ intervalMs: 16, tickCount: 4, pause() {}, resume() {}, tick() {} })' }
     @{ Name = 'lifecycle-live'; Live = $true; Script = '(() => { let phase = 0, calls = 0; return { intervalMs: 32, pause() { phase = 1; }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Tick " + (++calls); } }; })()' }
-    @{ Name = 'lifecycle-live-rejected'; Live = $true; RejectTick = $true; Script = '(() => { let calls = 0; return { intervalMs: 32, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Tick " + (++calls); if (calls === 2) throw new Error("private-fixture-error"); } }; })()' }
+    @{ Name = 'lifecycle-live-rejected'; Live = $true; Preserved = '1 preserved after worker callback rejection'; Script = '(() => { let calls = 0; return { intervalMs: 32, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Tick " + (++calls); if (calls === 2) throw new Error("private-fixture-error"); } }; })()' }
+    @{ Name = 'lifecycle-live-unresolved'; Live = $true; Preserved = '1 preserved after worker callback rejection'; Script = '(() => { let calls = 0; return { intervalMs: 32, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Tick " + (++calls); if (calls === 2) return new Promise(() => {}); } }; })()' }
+    @{ Name = 'lifecycle-live-invalid-edit'; Live = $true; Preserved = '2 preserved after host scene rejection'; Script = '(() => { let calls = 0; return { intervalMs: 32, pause() {}, resume() {}, tick(document) { const element = document.getElementById("status"); element.textContent = "Accepted"; if (++calls === 3) { element.style.color = [1, 2, 3, 255]; element.textContent = String.fromCharCode(0); } } }; })()' }
     @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; HtmlBytes = 128 * 1024 }
     @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = 'validation' }
     @{ Name = 'intake-missing-script'; Intake = $true; Reject = 'validation' }
@@ -116,9 +118,9 @@ $results = foreach ($case in $cases) {
     elseif ($case.ContainsKey('Live')) {
         $verified = $stdout.Contains('Live package pause, resume and two updates verified.')
         $passed = $passed -and $cleanupCount -eq 1
-        if ($case.ContainsKey('RejectTick')) {
+        if ($case.ContainsKey('Preserved')) {
             $passed = $passed -and $result.ExitCode -ne 0 -and -not $verified -and
-                $stdout.Contains('Live package revision 1 preserved after rejection.') -and
+                $stdout.Contains("Live package revision $($case.Preserved).") -and
                 $stderr.Contains('Package scene batch rejected')
         }
         else {
