@@ -729,3 +729,7 @@ The direct trusted script preview can use the existing Windows desktop attachmen
 ## 96. M4 native animation desktop attachment
 
 The fixed animated-shapes example can use the Windows desktop surface. The application keeps its native animation program, monotonic playback clock and 30 FPS scheduler while the surface is recreated. Desktop playback uses the existing group renderer without script callbacks. See [Native animation commands](m3-animated-preview.md#commands-and-original-fixture).
+
+## 97. M4 sandboxed UTC clock desktop attachment
+
+The continuous UTC clock can use the Explorer-owned desktop surface while the AppContainer worker supplies its updates. A hidden top-level window owned by the application receives session and power notifications and remains alive across desktop surface recreation. Worker and snapshot state remain application-owned. See [Continuous UTC clock on the desktop](m4-clock-preview.md#continuous-utc-clock-on-the-desktop).

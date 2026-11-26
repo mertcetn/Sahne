@@ -35,7 +35,7 @@ enum AppEvent {
     DeviceLost(DeviceLost),
     ClockUpdate,
     WindowsLifecycle {
-        generation: u64,
+        generation: Option<u64>,
         event: wallpaper_platform::session_lifecycle::Event,
     },
 }
@@ -206,8 +206,8 @@ fn main() -> Result<()> {
         );
     }
     let clock_mode = compiled_example == Some(compiled::Example::Clock);
-    if clock_mode && desktop_mode {
-        return Err("clock currently requires window mode".into());
+    if clock_mode && desktop_mode && worker_live != Some(live_clock::Mode::Utc) {
+        return Err("Desktop clock requires --clock-worker-utc".into());
     }
     if test_clock_rollover
         && (!clock_mode
@@ -229,7 +229,7 @@ fn main() -> Result<()> {
             || test_device_loss
             || test_pixels
             || reference_pose
-            || desktop_mode
+            || (desktop_mode && (mode != live_clock::Mode::Utc || check_worker_live))
             || (check_worker_live && (compiled_example.is_some() || seconds.is_some()))
             || (!check_worker_live
                 && (!clock_mode
@@ -286,6 +286,7 @@ fn main() -> Result<()> {
         clock,
         live_clock: None,
         clock_pause: live_clock::PauseState::default(),
+        desktop_lifecycle: None,
         start_live_clock: worker_live,
         state: None,
         desktop: None,
@@ -355,6 +356,7 @@ struct App {
     clock: Option<clock::Clock>,
     live_clock: Option<live_clock::Bridge>,
     clock_pause: live_clock::PauseState,
+    desktop_lifecycle: Option<wallpaper_platform::session_lifecycle::Subscription>,
     start_live_clock: Option<live_clock::Mode>,
     state: Option<State>,
     desktop: Option<wallpaper_platform::Desktop>,
@@ -495,6 +497,31 @@ impl App {
         self.next_retry = None;
         self.generation += 1;
         let result = (|| -> Result<State> {
+            let utc_worker = self.start_live_clock == Some(live_clock::Mode::Utc)
+                || self
+                    .live_clock
+                    .as_ref()
+                    .is_some_and(live_clock::Bridge::is_utc);
+            if self.desktop_mode && utc_worker && self.desktop_lifecycle.is_none() {
+                let window = Arc::new(
+                    events.create_window(
+                        Window::default_attributes()
+                            .with_visible(false)
+                            .with_title("Sahne session observer"),
+                    )?,
+                );
+                let proxy = self.proxy.clone();
+                self.desktop_lifecycle =
+                    Some(wallpaper_platform::session_lifecycle::Subscription::new(
+                        window,
+                        move |event| {
+                            let _ = proxy.send_event(AppEvent::WindowsLifecycle {
+                                generation: None,
+                                event,
+                            });
+                        },
+                    )?);
+            }
             let desktop = if self.desktop_mode {
                 Some(wallpaper_platform::Desktop::connect()?)
             } else {
@@ -528,20 +555,17 @@ impl App {
                 (self.compiled_example, self.retained_scene.as_ref()),
                 self.test_pixels,
             ))?;
-            if self.start_live_clock == Some(live_clock::Mode::Utc)
-                || self
-                    .live_clock
-                    .as_ref()
-                    .is_some_and(live_clock::Bridge::is_utc)
-            {
+            if utc_worker && !self.desktop_mode {
                 let proxy = self.proxy.clone();
                 let generation = self.generation;
                 state._session_lifecycle =
                     Some(wallpaper_platform::session_lifecycle::Subscription::new(
                         Arc::clone(&state.window),
                         move |event| {
-                            let _ =
-                                proxy.send_event(AppEvent::WindowsLifecycle { generation, event });
+                            let _ = proxy.send_event(AppEvent::WindowsLifecycle {
+                                generation: Some(generation),
+                                event,
+                            });
                         },
                     )?);
             }
@@ -612,7 +636,8 @@ impl ApplicationHandler<AppEvent> for App {
             AppEvent::ClockUpdate if self.clock.is_some() => self.apply_live_update(),
             AppEvent::ClockUpdate => self.apply_package_update(events),
             AppEvent::WindowsLifecycle { generation, event }
-                if generation == self.generation && self.state.is_some() =>
+                if generation.is_none()
+                    || (generation == Some(self.generation) && self.state.is_some()) =>
             {
                 self.clock_pause.apply(event);
                 if let Some(bridge) = &self.live_clock {

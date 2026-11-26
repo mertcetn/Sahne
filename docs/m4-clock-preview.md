@@ -8,7 +8,7 @@ target/release/wallpaper-preview.exe --example clock --seconds 90
 target/release/wallpaper-preview.exe --example clock --test-clock-rollover --seconds 10
 ```
 
-The reference mode samples 23:59, changes to 00:00 at the next two-second scheduled tick, and leaves the displayed value at 00:00. Escape closes the preview. The reference command requires window mode, a duration of 5–30 seconds and no other test flag. Desktop mode is unavailable for this example.
+The reference mode samples 23:59, changes to 00:00 at the next two-second scheduled tick, and leaves the displayed value at 00:00. Escape closes the preview. The reference command requires window mode, a duration of 5–30 seconds and no other test flag.
 
 The renderer checks stable scene topology, including bounds, node IDs, fonts and resources, before accepting a snapshot. It reshapes changed text in the bundled font and keeps the accepted scene in the application across renderer reconstruction. It uses the same snapshot interface tested by the separate AppContainer fixture. This preview generates its ticks and edits in the host. Worker-to-window publication remains open.
 
@@ -79,7 +79,7 @@ The host samples UTC on startup and schedules each next sample with a monotonic 
 
 On November 25, 2026, the headless release check observed 20:09 → 20:10 UTC in one AppContainer session and verified cleanup after cancellation. The deterministic rollover and the `scene-timer`, `scene-script` and `ipc-roundtrip` probes also passed.
 
-The continuous mode uses a fixed development script. Product worker packaging and desktop attachment remain open.
+The continuous mode uses a fixed development script. Product worker packaging remains open.
 
 ### Continuous UTC visual result
 
@@ -114,3 +114,11 @@ The headless release check passed both the deterministic rollover and the 15:06 
 To reproduce the Modern Standby test, start the preview with `--example clock --clock-worker-utc --seconds 300`. Sleep and wake while it runs, then check for `SessionDisplayOff(true)` and `SessionDisplayOff(false)` in the log. If the session is locked on wake, the worker should stay paused until unlock. Confirm the current UTC minute after resume.
 
 On November 26, 2026, the live retest of `11ca78a` recorded two Modern Standby entry and exit pairs in the Windows Kernel-Power log. The preview log recorded two display-off/on pairs, each with matching worker pause and resume acknowledgements. The clock advanced from 15:14 to 15:15 UTC after wake, and 15:15 was visible in the D3D12 window. Escape closed the preview, and both processes were absent afterward. Local log at `target/m4-utc-standby-visual/bdef7346aee84d9b9954047b8bfd3466/stderr.log`.
+
+### Continuous UTC clock on the desktop
+
+```powershell
+target/release/wallpaper-preview.exe --desktop --example clock --clock-worker-utc --seconds 90
+```
+
+The continuous AppContainer clock uses the existing Explorer attachment. Its hidden top-level window receives session and power notifications independently of the desktop renderer's window. The worker and accepted scene persist across renderer recreation. The configured deadline stops the preview. The 90-second visual check should verify at least one minute change behind desktop icons. Desktop session and power behavior still needs live verification. [Power message delivery](https://learn.microsoft.com/en-us/windows/win32/power/wm-powerbroadcast)
