@@ -66,7 +66,7 @@ fn main() -> Result<()> {
                     "--scene-worker-snapshot <run-folder> displays a retained flat scene. --check-scene-worker-snapshot <run-folder> validates it headlessly."
                 );
                 println!(
-                    "--trusted-script-preview <absolute-folder> displays a trusted flat package and its AppContainer update. --check-trusted-script-preview <absolute-folder> checks that exchange without a window."
+                    "--trusted-script-preview <absolute-folder> displays a trusted flat package and its AppContainer update. Add --desktop to attach it behind Windows icons. --check-trusted-script-preview <absolute-folder> checks that exchange without a window."
                 );
                 return Ok(());
             }
@@ -147,7 +147,7 @@ fn main() -> Result<()> {
         && (compiled_example.is_some()
             || worker_snapshot.is_some()
             || worker_live.is_some()
-            || desktop_mode
+            || (desktop_mode && (script_package_folder.is_none() || check_script_package))
             || recreate != 0
             || test_device_loss
             || test_pixels
@@ -156,7 +156,7 @@ fn main() -> Result<()> {
             || ((check_retained_scene || check_script_package) && seconds.is_some())
             || (retained_scene_folder.is_some() && script_package_folder.is_some()))
     {
-        return Err("Scripted or retained scene requires its own window or headless mode".into());
+        return Err("Conflicting options for scripted or retained scene preview".into());
     }
     let script_package = script_package_folder
         .as_deref()

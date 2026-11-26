@@ -721,3 +721,7 @@ The trusted local script and lifecycle probes export the final host-validated fl
 ## 94. M4 direct local package preview
 
 The trusted flat package preview prepares one validated scene and a bounded worker program. After the initial frame, its supervisor launches the existing AppContainer worker and supplies the program through inherited IPC. The renderer receives changed snapshots through the event loop and retains the last accepted scene after rejection. See [Direct trusted package preview](m4-scene-transactions.md#direct-trusted-package-preview).
+
+## 95. M4 trusted package desktop attachment
+
+The direct trusted script preview can use the existing Windows desktop attachment and Explorer owner recovery. The same renderer presents the initial and accepted scenes. During window recreation, the preview retains the latest scene and preserves the one-shot worker lifecycle. See [Direct package preview on the desktop](m4-scene-transactions.md#direct-package-preview-on-the-desktop).
