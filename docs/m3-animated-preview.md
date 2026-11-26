@@ -12,7 +12,9 @@ target/release/wallpaper-preview.exe --example animated-shapes --seconds 30
 
 Space toggles manual pause/resume in window mode. Key repeat does not toggle repeatedly. Escape closes the window. The effects-only `--test-pixels` flag is unavailable for this example. The `--test-recreate` and `--test-device-loss` flags select the existing explicit reconstruction tests. Both combinations passed in the local window runs below.
 
-For the M4 desktop integration check, run `wallpaper-preview.exe --desktop --example animated-shapes --seconds 90`. It uses the same native animation and the existing Explorer attachment. The preview retains its playback state across GPU or desktop surface recreation. Visual motion and the 30 FPS cap on the attached desktop surface remain to be verified.
+For the M4 desktop integration check, run `wallpaper-preview.exe --desktop --example animated-shapes --seconds 90`. It uses the same native animation and the existing Explorer attachment. The preview retains its playback state across GPU or desktop surface recreation.
+
+On November 26, 2026, the user observed motion behind Windows desktop icons with `f3e2675`. The 3840×1080 desktop surface spanned two 1920×1080 displays. The preview stopped at its configured 90-second deadline with 2,457 presentations in one GPU generation, averaging 27.3 frames per second over the run. Local log at `target/m4-animation-desktop-visual/567a02d12d0742318e81bafec06e1285/stderr.log`.
 
 The original `examples/animated-shapes/` package contains a manifest and static HTML/CSS for three clipped panels. Its fixed native program lives in `wallpaper_compiler::fixtures::animated_shapes_spec`; CSS `@keyframes`/`animation-*` remain unsupported. It has five linear tracks over two seconds, alternating forever (four seconds per full out-and-back cycle):
 
