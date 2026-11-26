@@ -122,3 +122,5 @@ target/release/wallpaper-preview.exe --desktop --example clock --clock-worker-ut
 ```
 
 The continuous AppContainer clock uses the existing Explorer attachment. Its hidden top-level window receives session and power notifications independently of the desktop renderer's window. The worker and accepted scene persist across renderer recreation. The configured deadline stops the preview. The 90-second visual check should verify at least one minute change behind desktop icons. Desktop session and power behavior still needs live verification. [Power message delivery](https://learn.microsoft.com/en-us/windows/win32/power/wm-powerbroadcast)
+
+On November 26, 2026, the user confirmed that the UTC clock appeared behind the Windows desktop icons with `9d7608e`. The 3840×1080 surface spanned two displays. The hidden observer received the initial display-on notification, and the worker's 16:09 → 16:10 UTC transition produced the third and final presentation. The preview stopped at the 90-second deadline in the same GPU generation. Local log at `target/m4-clock-desktop-visual/fbdf1b4bd1cc4f67a52b1474109516a0/stderr.log`.
