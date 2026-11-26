@@ -87,6 +87,7 @@ pub enum Body {
     LifecycleAck {
         paused: bool,
     },
+    LifecycleReady,
     SceneBindings {
         targets: BTreeMap<String, u32>,
     },
@@ -176,6 +177,7 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
         Body::IntervalCancelled => data.push(16),
         Body::Lifecycle { paused } => data.extend_from_slice(&[17, u8::from(*paused)]),
         Body::LifecycleAck { paused } => data.extend_from_slice(&[18, u8::from(*paused)]),
+        Body::LifecycleReady => data.push(19),
         Body::SceneBindings { targets } => {
             data.push(11);
             scene::encode_bindings(&mut data, message.base_revision, targets)?;
@@ -288,6 +290,7 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         18 => Body::LifecycleAck {
             paused: decode_paused(&mut data)?,
         },
+        19 => Body::LifecycleReady,
         11 => Body::SceneBindings {
             targets: scene::decode_bindings(&mut data, base_revision)?,
         },

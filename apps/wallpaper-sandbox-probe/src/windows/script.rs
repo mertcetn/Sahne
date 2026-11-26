@@ -54,8 +54,7 @@ fn arm_deadline(runtime: &Runtime) -> Arc<AtomicBool> {
 }
 
 pub struct RegisteredClock {
-    context: Context,
-    runtime: Runtime,
+    pub callbacks: RetainedCallbacks,
     cancelled: Rc<Cell<bool>>,
 }
 
@@ -94,12 +93,41 @@ impl RegisteredClock {
             .ok_or("Missing JavaScript interval registration")?;
         Ok((
             Self {
-                context,
-                runtime,
+                callbacks: RetainedCallbacks { context, runtime },
                 cancelled,
             },
             delay_ms,
         ))
+    }
+
+    pub fn cancelled(&self) -> bool {
+        self.cancelled.get()
+    }
+}
+
+pub struct RetainedCallbacks {
+    context: Context,
+    runtime: Runtime,
+}
+
+impl RetainedCallbacks {
+    pub fn from_source(source: &str) -> Result<Self> {
+        if !wallpaper_sandbox::is_appcontainer()? {
+            return Err("Lifecycle probe refuses non-AppContainer execution".into());
+        }
+        let (runtime, interrupted) = bounded_runtime()?;
+        let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
+        context
+            .with(|ctx| -> rquickjs::Result<()> {
+                let callbacks: Object = ctx.eval(source)?;
+                for name in ["pause", "resume", "tick"] {
+                    let _: Function = callbacks.get(name)?;
+                }
+                ctx.globals().set("registeredClock", callbacks)
+            })
+            .map_err(|_| "Expected an object with pause, resume and tick callbacks")?;
+        check_callback_budget(&runtime, &interrupted)?;
+        Ok(Self { context, runtime })
     }
 
     pub fn edits(&self, bindings: &[Binding], display_time: &str) -> Result<Vec<Edit>> {
@@ -121,10 +149,6 @@ impl RegisteredClock {
             callback.call(())
         })?;
         check_callback_budget(&self.runtime, &interrupted)
-    }
-
-    pub fn cancelled(&self) -> bool {
-        self.cancelled.get()
     }
 }
 

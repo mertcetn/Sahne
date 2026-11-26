@@ -677,3 +677,7 @@ The registered interval fixture retains its JavaScript callback in one worker co
 ## 83. M4 JavaScript pause and resume delivery
 
 The registered interval fixture sends host pause and resume transitions to the retained worker context. The worker acknowledges each transition after its bounded callback completes. The host dispatches the first overdue tick after the resume acknowledgement, then schedules from the actual dispatch instant. See [Pause and resume callbacks over IPC](m4-timers.md#pause-and-resume-callbacks-over-ipc).
+
+## 84. M4 trusted package lifecycle callbacks
+
+The Windows developer probe can retain a callback object from a trusted flat package. It waits for the worker's readiness message, delivers pause then resume, and verifies one subsequent scene update. Each callback uses the existing QuickJS execution deadline. See [Trusted package lifecycle probe](m4-timers.md#trusted-package-lifecycle-probe).

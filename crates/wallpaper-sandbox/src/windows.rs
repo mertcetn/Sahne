@@ -680,6 +680,7 @@ pub fn spawn_probe(
         "scene-script",
         "local-clock-package",
         "local-script-package",
+        "local-lifecycle-package",
         "scene-timer",
         "scene-timer-registration",
         "preview-clock-utc",

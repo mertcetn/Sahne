@@ -246,6 +246,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "scene-script"
         | "local-clock-package"
         | "local-script-package"
+        | "local-lifecycle-package"
         | "scene-timer"
         | "scene-timer-registration"
         | "preview-clock-utc"
@@ -510,6 +511,9 @@ fn host(args: &[String]) -> Result<()> {
             "--run-trusted-script-package <absolute-folder> runs one callback from a trusted flat package in AppContainer."
         );
         println!(
+            "--run-trusted-lifecycle-package <absolute-folder> runs pause, resume and tick from a trusted flat package in AppContainer."
+        );
+        println!(
             "Usage: wallpaper-sandbox-probe [--case CASE | --run-trusted-clock-package <absolute-folder>]\nCases: healthy, network, network-egress, memory, process, handles, hang, oversized, crash, ipc-flood, ipc-stall, ipc-truncated, ipc-replay, ipc-open.\nWindows AppContainer/Job/IPC development probe. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile.\nNetwork tests require explicit access denial; timeout is inconclusive and fails. network uses loopback; network-egress tries TEST-NET-1 192.0.2.1:9 without DNS or application payload.\nmemory checks a small allocation succeeds and an over-limit commit fails. process requires Job quota denial of a suspended child. handles checks an excluded host handle, including verified strict-policy termination after arming; WER is suppressed only for that intentional fault.\nIPC cases exercise unsolicited trailing-message flood, stalled partial body, truncated body at EOF, replayed sequence, and an open stream after a valid report. Every successful one-shot response requires EOF; a peer that keeps the stream open is stopped by the host deadline."
         );
         println!(
@@ -562,15 +566,21 @@ fn host(args: &[String]) -> Result<()> {
         [flag, folder]
             if matches!(
                 flag.as_str(),
-                "--run-trusted-clock-package" | "--run-trusted-script-package"
+                "--run-trusted-clock-package"
+                    | "--run-trusted-script-package"
+                    | "--run-trusted-lifecycle-package"
             ) =>
         {
             let package = wallpaper_platform::package_directory::collect(folder)
                 .map_err(|error| error.to_string())?;
-            let (case, mode) = if flag == "--run-trusted-clock-package" {
-                ("local-clock-package", scene_ipc::Mode::LocalClock)
-            } else {
-                ("local-script-package", scene_ipc::Mode::LocalScene)
+            let (case, mode) = match flag.as_str() {
+                "--run-trusted-clock-package" => {
+                    ("local-clock-package", scene_ipc::Mode::LocalClock)
+                }
+                "--run-trusted-lifecycle-package" => {
+                    ("local-lifecycle-package", scene_ipc::Mode::LocalLifecycle)
+                }
+                _ => ("local-script-package", scene_ipc::Mode::LocalScene),
             };
             (case, Some(scene_ipc::prepare_script_scene(&package, mode)?))
         }
@@ -689,6 +699,7 @@ fn host(args: &[String]) -> Result<()> {
                 | "scene-script"
                 | "local-clock-package"
                 | "local-script-package"
+                | "local-lifecycle-package"
                 | "scene-timer"
                 | "scene-timer-registration"
                 | "ipc-write-drain"
@@ -716,6 +727,7 @@ fn host(args: &[String]) -> Result<()> {
                         | "scene-script"
                         | "local-clock-package"
                         | "local-script-package"
+                        | "local-lifecycle-package"
                         | "scene-timer"
                         | "scene-timer-registration" => scene_ipc::RESULT_BIT,
                         "process" => 64,

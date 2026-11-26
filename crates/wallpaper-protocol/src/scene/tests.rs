@@ -63,6 +63,10 @@ fn interval_cancellation_roundtrips_without_payload() {
 
 #[test]
 fn lifecycle_messages_require_a_canonical_state_byte() {
+    let ready = message(Body::LifecycleReady, 3, 0);
+    let wire = encode(&ready);
+    assert_eq!(&wire[30..], &[19]);
+    assert_eq!(read_frame(&mut wire.as_slice()).unwrap(), Some(ready));
     for body in [
         Body::Lifecycle { paused: true },
         Body::Lifecycle { paused: false },

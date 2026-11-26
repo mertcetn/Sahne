@@ -61,3 +61,32 @@ The `scene-timer-registration` fixture delivers pause and resume to the retained
 The host pauses its queue before notifying the worker. The worker calls the matching JavaScript function under the existing per-callback deadline and acknowledges completion. After the resume acknowledgement, the host dispatches the overdue interval once and schedules its next deadline from that dispatch. The embedded JavaScript checks that pause precedes resume and that both occur before any timer call. Lifecycle callbacks in this fixture stage no DOM edits. Connecting operating system lifecycle events and exposing the callbacks to local package scripts remain open.
 
 The release probe logged both JavaScript acknowledgements and verified three subsequent clock revisions, cancellation and profile cleanup. Four AppContainer controls and the headless live rollover also passed. Local report at `target/sandbox-validation/52db4c027ea4473ea91eb01632cbe1f2/`.
+
+## Trusted package lifecycle probe
+
+The Windows developer probe accepts a [trusted native flat package](m4-scene-transactions.md#running-a-trusted-local-script-package). Pass its absolute folder path.
+
+```powershell
+cargo build --release -p wallpaper-sandbox-probe --locked
+target/release/wallpaper-sandbox-probe.exe --run-trusted-lifecycle-package $folder
+```
+
+The manifest's script must evaluate to an object with three functions. `pause()` and `resume()` receive no arguments. `tick(document, value)` receives the existing DOM adapter and an empty string. It must stage a nonempty valid scene batch. The callbacks can share JavaScript state across the sequence.
+
+```javascript
+(() => {
+    let paused = false;
+    return {
+        pause() { paused = true; },
+        resume() { paused = false; },
+        tick(document) {
+            if (paused) throw new Error("Unexpected tick during pause");
+            document.getElementById("status").textContent = "Resumed";
+        },
+    };
+})()
+```
+
+The worker sends `LifecycleReady` (empty message kind 19, sequence 3, base revision 0) after evaluating the callback object. The host waits for readiness and then sends its two scripted transitions in order. The worker acknowledges each transition only after the callback returns. The probe runs one tick, verifies terminal rollback and cleans up the worker. Package parsing runs in the host and requires trusted input. This headless command drives synthetic events. Windows session notifications and package timer registration remain open.
+
+The local release probe acknowledged pause, resume and one edit in that order. A replacement script that threw during resume stopped before the tick. Both runs verified profile cleanup. Four AppContainer regression cases and the headless live clock also passed. Local regression report at `target/sandbox-validation/3ce42ff9c71942e6bf5c5e7431327733/`.

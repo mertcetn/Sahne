@@ -19,6 +19,7 @@ pub enum Mode {
     Script,
     LocalClock,
     LocalScene,
+    LocalLifecycle,
     Timer,
     RegisteredTimer,
     Utc,
@@ -31,6 +32,7 @@ impl Mode {
             "scene-script" => Some(Self::Script),
             "local-clock-package" => Some(Self::LocalClock),
             "local-script-package" => Some(Self::LocalScene),
+            "local-lifecycle-package" => Some(Self::LocalLifecycle),
             "scene-timer" => Some(Self::Timer),
             "scene-timer-registration" => Some(Self::RegisteredTimer),
             "preview-clock-utc" => Some(Self::Utc),
@@ -39,7 +41,11 @@ impl Mode {
     }
 
     fn loads_script(self) -> bool {
-        matches!(self, Self::Script | Self::LocalClock | Self::LocalScene)
+        matches!(self, Self::Script | Self::LocalClock) || self.uses_general_bindings()
+    }
+
+    fn uses_general_bindings(self) -> bool {
+        matches!(self, Self::LocalScene | Self::LocalLifecycle)
     }
 
     fn updates(self) -> u64 {
@@ -164,7 +170,7 @@ pub(super) fn prepare_script_scene(
     package: &wallpaper_format::Package,
     mode: Mode,
 ) -> Result<CompiledScriptScene> {
-    let (width, height) = if mode == Mode::LocalScene {
+    let (width, height) = if mode.uses_general_bindings() {
         (1920, 1080)
     } else {
         (100, 100)
@@ -183,7 +189,7 @@ pub(super) fn prepare_script_scene(
         .ok_or("Missing compiled script reference")?;
     let source = package.require_text(script, ".js", "script")?.to_owned();
     let mut targets = compiled.script_targets();
-    let clock_bindings = if mode == Mode::LocalScene {
+    let clock_bindings = if mode.uses_general_bindings() {
         None
     } else {
         let (&clock, &accent) = targets
@@ -241,7 +247,7 @@ pub fn read_response(
     }
     let (scene, clock_bindings, program) = if mode.loads_script() {
         let compiled = match mode {
-            Mode::LocalClock | Mode::LocalScene => {
+            Mode::LocalClock | Mode::LocalScene | Mode::LocalLifecycle => {
                 local_script.ok_or("Missing prepared local package")?
             }
             _ => compiled_script_scene()?,
@@ -307,6 +313,15 @@ pub fn read_response(
             ))
             .map_err(|_| "Scene program writer queue unavailable")?;
     }
+    if mode == Mode::LocalLifecycle {
+        let ready = read_frame(output)?.ok_or(MissingFrame("lifecycle readiness"))?;
+        if ready != envelope(session, 3, Body::LifecycleReady) {
+            return Err("Unexpected lifecycle readiness".into());
+        }
+        for paused in [true, false] {
+            notify_lifecycle(output, &requests, session, paused)?;
+        }
+    }
     let expected_color = if mode != Mode::Typed {
         Color([36, 179, 144, 255])
     } else {
@@ -324,17 +339,7 @@ pub fn read_response(
                 return Err("Interval exceeds the fixed probe's duration budget".into());
             }
             let timer = resumed_timer(Duration::from_millis(u64::from(delay_ms)), |paused| {
-                let sequence = lifecycle_sequence(paused);
-                requests
-                    .try_send(envelope(session, sequence, Body::Lifecycle { paused }))
-                    .map_err(|_| "Lifecycle writer queue unavailable")?;
-                let ack = read_frame(output)?.ok_or(MissingFrame("lifecycle acknowledgement"))?;
-                if ack != envelope(session, sequence, Body::LifecycleAck { paused }) {
-                    return Err("Unexpected lifecycle acknowledgement".into());
-                }
-                let event = if paused { "pause" } else { "resume" };
-                println!("JavaScript lifecycle acknowledged: {event}.");
-                Ok(())
+                notify_lifecycle(output, &requests, session, paused)
             })?;
             println!("Worker interval registered with host: {delay_ms} ms.");
             Some(timer)
@@ -565,18 +570,7 @@ pub fn worker(
             output,
             envelope(session, 3, Body::RegisterInterval { delay_ms }),
         )?;
-        for paused in [true, false] {
-            let sequence = lifecycle_sequence(paused);
-            let event = read_frame(input)?.ok_or(MissingFrame("lifecycle event"))?;
-            if event != envelope(session, sequence, Body::Lifecycle { paused }) {
-                return Err("Unexpected lifecycle event".into());
-            }
-            callback.lifecycle(paused)?;
-            send(
-                output,
-                envelope(session, sequence, Body::LifecycleAck { paused }),
-            )?;
-        }
+        deliver_lifecycle(input, output, session, &callback.callbacks)?;
         Some(callback)
     } else {
         None
@@ -615,7 +609,16 @@ pub fn worker(
             None,
         )
     };
-    let clock = if mode == Mode::LocalScene {
+    let local_callbacks = if mode == Mode::LocalLifecycle {
+        let source = source.as_deref().ok_or("Missing local lifecycle source")?;
+        let callbacks = script::RetainedCallbacks::from_source(source)?;
+        send(output, envelope(session, 3, Body::LifecycleReady))?;
+        deliver_lifecycle(input, output, session, &callbacks)?;
+        Some(callbacks)
+    } else {
+        None
+    };
+    let clock = if mode.uses_general_bindings() {
         bindings
             .first()
             .ok_or("Missing local script bindings")?
@@ -644,17 +647,19 @@ pub fn worker(
                 return Err("Expected host clock tick".into());
             };
             format_minute(utc_minute)
-        } else if mode == Mode::LocalScene {
+        } else if mode.uses_general_bindings() {
             String::new()
         } else {
             "12:34".into()
         };
         let edits = if let Some(callback) = &registered_clock {
-            let edits = callback.edits(&bindings, &display_time)?;
+            let edits = callback.callbacks.edits(&bindings, &display_time)?;
             if callback.cancelled() != (sequence == updates) {
                 return Err("JavaScript interval did not cancel on its third callback".into());
             }
             edits
+        } else if let Some(callbacks) = &local_callbacks {
+            callbacks.edits(&bindings, &display_time)?
         } else if mode != Mode::Typed {
             script::scene_edits(&bindings, &display_time, source.as_deref())?
         } else {
@@ -682,7 +687,7 @@ pub fn worker(
             return Err("Unexpected interval cancellation acknowledgement".into());
         }
     }
-    let terminal_edit = if matches!(mode, Mode::Script | Mode::LocalScene) {
+    let terminal_edit = if mode == Mode::Script || mode.uses_general_bindings() {
         Edit::Color {
             node: if mode == Mode::Script {
                 SCRIPT_BACKGROUND_PROBE
@@ -737,6 +742,46 @@ pub fn worker(
 
 fn lifecycle_sequence(paused: bool) -> u64 {
     if paused { 4 } else { 5 }
+}
+
+fn notify_lifecycle(
+    output: &mut impl Read,
+    requests: &mpsc::SyncSender<Message>,
+    session: u64,
+    paused: bool,
+) -> Result<()> {
+    let sequence = lifecycle_sequence(paused);
+    requests
+        .try_send(envelope(session, sequence, Body::Lifecycle { paused }))
+        .map_err(|_| "Lifecycle writer queue unavailable")?;
+    let ack = read_frame(output)?.ok_or(MissingFrame("lifecycle acknowledgement"))?;
+    if ack != envelope(session, sequence, Body::LifecycleAck { paused }) {
+        return Err("Unexpected lifecycle acknowledgement".into());
+    }
+    let event = if paused { "pause" } else { "resume" };
+    println!("JavaScript lifecycle acknowledged: {event}.");
+    Ok(())
+}
+
+fn deliver_lifecycle(
+    input: &mut impl Read,
+    output: &mut impl Write,
+    session: u64,
+    callbacks: &script::RetainedCallbacks,
+) -> Result<()> {
+    for paused in [true, false] {
+        let sequence = lifecycle_sequence(paused);
+        let event = read_frame(input)?.ok_or(MissingFrame("lifecycle event"))?;
+        if event != envelope(session, sequence, Body::Lifecycle { paused }) {
+            return Err("Unexpected lifecycle event".into());
+        }
+        callbacks.lifecycle(paused)?;
+        send(
+            output,
+            envelope(session, sequence, Body::LifecycleAck { paused }),
+        )?;
+    }
+    Ok(())
 }
 
 fn send(output: &mut impl Write, message: impl std::borrow::Borrow<Message>) -> Result<()> {
