@@ -103,7 +103,7 @@ cargo build --release -p wallpaper-sandbox-probe --locked
 target/release/wallpaper-sandbox-probe.exe --run-trusted-clock-package $folder
 ```
 
-Use a trusted local Windows package folder and its absolute path. The native manifest must declare an HTML entry and a JavaScript callback source. The fixture expects an unnamed rectangle followed by the named spans `clock` (text `initial`) and `accent` (text `UTC`), each with a background and white foreground. This order gives the terminal test its known unauthorized accent background target. Use the following body for the HTML entry.
+Use a trusted local Windows package folder and its absolute path. The native manifest must declare an HTML entry and a JavaScript callback source. The local command requires the named spans `clock` (text `initial`) and `accent` (text `UTC`) with white foreground. Either span may have a background. Their order is flexible, and the scene can include decorative elements. Only `clock` and `accent` are exposed to the callback. One possible HTML entry is shown below.
 
 ```html
 <div style="width:100px;height:100px;background-color:#121212"></div>
@@ -116,6 +116,10 @@ The callback receives the fixture document and the sample time `12:34`. It must 
 The host collects and compiles the package with the existing workspace package collector. It sends the source and bindings over the bounded initialization channel. The worker evaluates the callback inside AppContainer, and the host verifies the accepted scene and rollback after its deliberate invalid update. This command is headless. Host-side package collection and parsing still require trusted inputs. General script callbacks, timers and untrusted package intake remain open.
 
 The local release check accepted the folder callback and rejected a replacement callback that threw an exception. Both runs verified AppContainer profile cleanup. The embedded script, timer and restart recovery regressions passed. Local report at `target/sandbox-validation/d96fdf0062e2493588056ad42eb4549d/`.
+
+The layout-independent local case uses the same invalid-text rollback control as the typed probe. The embedded `scene-script` case continues to check an unauthorized background mutation.
+
+The release check passed with the accent span first, a named decorative rectangle next, and the clock span last. The callback confirmed the decorative ID was unavailable. The local worker cleaned up successfully, and the embedded scripted, typed and timer probes passed. Local regression report at `target/sandbox-validation/fa29398f74ba4dd59f2b9a99c017975c/`.
 
 ## Content snapshots for presentation
 

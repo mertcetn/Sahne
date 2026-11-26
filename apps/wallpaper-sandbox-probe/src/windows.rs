@@ -244,6 +244,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "ipc-roundtrip-stall"
         | "scene-transaction"
         | "scene-script"
+        | "local-clock-package"
         | "scene-timer"
         | "preview-clock-utc"
         | "ipc-write-drain"
@@ -556,7 +557,7 @@ fn host(args: &[String]) -> Result<()> {
             let package = wallpaper_platform::package_directory::collect(folder)
                 .map_err(|error| error.to_string())?;
             (
-                "scene-script",
+                "local-clock-package",
                 Some(scene_ipc::prepare_script_scene(&package)?),
             )
         }
@@ -574,52 +575,53 @@ fn host(args: &[String]) -> Result<()> {
     {
         return retry::run(case);
     }
-    if ![
-        "healthy",
-        "package-basic",
-        "package-invalid",
-        "compiler-basic",
-        "compiler-invalid",
-        "image-basic",
-        "image-invalid",
-        "hierarchy-basic",
-        "hierarchy-invalid",
-        "groups-basic",
-        "groups-invalid",
-        "network",
-        "network-egress",
-        "memory",
-        "memory-incremental",
-        "cpu-busy",
-        "process",
-        "handles",
-        "endpoint",
-        "ipc-rights",
-        "ipc-roundtrip",
-        "ipc-roundtrip-replay",
-        "ipc-roundtrip-stall",
-        "scene-transaction",
-        "scene-script",
-        "scene-timer",
-        "ipc-write-stall",
-        "ipc-write-drain",
-        "filesystem",
-        "registry",
-        "hang",
-        "oversized",
-        "crash",
-        "ipc-flood",
-        "ipc-stall",
-        "ipc-truncated",
-        "ipc-replay",
-        "ipc-open",
-        "js-basic",
-        "js-interrupt",
-        "js-memory",
-        "js-stack",
-        "js-jobs",
-    ]
-    .contains(&case)
+    if local_script.is_none()
+        && ![
+            "healthy",
+            "package-basic",
+            "package-invalid",
+            "compiler-basic",
+            "compiler-invalid",
+            "image-basic",
+            "image-invalid",
+            "hierarchy-basic",
+            "hierarchy-invalid",
+            "groups-basic",
+            "groups-invalid",
+            "network",
+            "network-egress",
+            "memory",
+            "memory-incremental",
+            "cpu-busy",
+            "process",
+            "handles",
+            "endpoint",
+            "ipc-rights",
+            "ipc-roundtrip",
+            "ipc-roundtrip-replay",
+            "ipc-roundtrip-stall",
+            "scene-transaction",
+            "scene-script",
+            "scene-timer",
+            "ipc-write-stall",
+            "ipc-write-drain",
+            "filesystem",
+            "registry",
+            "hang",
+            "oversized",
+            "crash",
+            "ipc-flood",
+            "ipc-stall",
+            "ipc-truncated",
+            "ipc-replay",
+            "ipc-open",
+            "js-basic",
+            "js-interrupt",
+            "js-memory",
+            "js-stack",
+            "js-jobs",
+        ]
+        .contains(&case)
     {
         return Err("Unknown case".into());
     }
@@ -648,13 +650,38 @@ fn host(args: &[String]) -> Result<()> {
                 );
             }
             (
-                "healthy" | "package-basic" | "package-invalid" | "compiler-basic"
-                | "compiler-invalid" | "image-basic" | "image-invalid" | "hierarchy-basic"
-                | "hierarchy-invalid" | "groups-basic" | "groups-invalid" | "network"
-                | "network-egress" | "memory" | "memory-incremental" | "process" | "handles"
-                | "endpoint" | "ipc-rights" | "ipc-roundtrip" | "scene-transaction"
-                | "scene-script" | "scene-timer" | "ipc-write-drain" | "filesystem" | "registry"
-                | "js-basic" | "js-interrupt" | "js-memory" | "js-stack" | "js-jobs",
+                "healthy"
+                | "package-basic"
+                | "package-invalid"
+                | "compiler-basic"
+                | "compiler-invalid"
+                | "image-basic"
+                | "image-invalid"
+                | "hierarchy-basic"
+                | "hierarchy-invalid"
+                | "groups-basic"
+                | "groups-invalid"
+                | "network"
+                | "network-egress"
+                | "memory"
+                | "memory-incremental"
+                | "process"
+                | "handles"
+                | "endpoint"
+                | "ipc-rights"
+                | "ipc-roundtrip"
+                | "scene-transaction"
+                | "scene-script"
+                | "local-clock-package"
+                | "scene-timer"
+                | "ipc-write-drain"
+                | "filesystem"
+                | "registry"
+                | "js-basic"
+                | "js-interrupt"
+                | "js-memory"
+                | "js-stack"
+                | "js-jobs",
                 Ok(Ok(ProbeReply::Report(bits))),
             ) if bits
                 == (EXPECTED
@@ -667,9 +694,10 @@ fn host(args: &[String]) -> Result<()> {
                         "hierarchy-basic" | "hierarchy-invalid" => package::HIERARCHY_RESULT_BIT,
                         "groups-basic" | "groups-invalid" => package::GROUP_COMPILER_RESULT_BIT,
                         "ipc-roundtrip" => roundtrip::RESULT_BIT,
-                        "scene-transaction" | "scene-script" | "scene-timer" => {
-                            scene_ipc::RESULT_BIT
-                        }
+                        "scene-transaction"
+                        | "scene-script"
+                        | "local-clock-package"
+                        | "scene-timer" => scene_ipc::RESULT_BIT,
                         "process" => 64,
                         "handles" => 128,
                         "endpoint" => 1024,

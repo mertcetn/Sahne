@@ -641,3 +641,7 @@ The Windows developer CLI uses the trusted package collector, flat compiler and 
 ## 74. M4 trusted local clock execution
 
 The Windows developer probe can collect and compile a trusted folder matching the clock fixture contract before launching the existing AppContainer worker. Only the scene program's source and bindings cross the worker initialization channel. The host verifies the committed clock update and the terminal rollback, then applies the existing process and profile cleanup. See [Running a trusted local clock package](m4-scene-transactions.md#running-a-trusted-local-clock-package).
+
+## 75. M4 layout-independent local clock targets
+
+The trusted local clock probe selects its two writable text nodes by author ID across different layouts. Decorative nodes stay outside the worker's bindings and the host's write grants. The local case uses invalid text for its terminal rollback check. The embedded case continues to test a write to an existing unauthorized background node. See [Running a trusted local clock package](m4-scene-transactions.md#running-a-trusted-local-clock-package).

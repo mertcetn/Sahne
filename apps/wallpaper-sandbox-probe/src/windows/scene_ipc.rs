@@ -16,6 +16,7 @@ const SCRIPT_BACKGROUND_PROBE: u32 = 4;
 pub enum Mode {
     Typed,
     Script,
+    LocalClock,
     Timer,
     Utc,
 }
@@ -25,10 +26,15 @@ impl Mode {
         match case {
             "scene-transaction" => Some(Self::Typed),
             "scene-script" => Some(Self::Script),
+            "local-clock-package" => Some(Self::LocalClock),
             "scene-timer" => Some(Self::Timer),
             "preview-clock-utc" => Some(Self::Utc),
             _ => None,
         }
+    }
+
+    fn loads_script(self) -> bool {
+        matches!(self, Self::Script | Self::LocalClock)
     }
 
     fn updates(self) -> u64 {
@@ -125,7 +131,14 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
         "#.to_vec()),
         ("clock.js".into(), include_bytes!("clock_fixture.js").to_vec()),
     ])?;
-    prepare_script_scene(&package)
+    let compiled = prepare_script_scene(&package)?;
+    if !matches!(
+        content(&compiled.scene, SCRIPT_BACKGROUND_PROBE),
+        Some(Content::Rectangle { .. })
+    ) {
+        return Err("Embedded rejection fixture changed its background node".into());
+    }
+    Ok(compiled)
 }
 
 pub(super) fn prepare_script_scene(
@@ -149,19 +162,10 @@ pub(super) fn prepare_script_scene(
         .get("clock")
         .zip(targets.get("accent"))
         .ok_or("Missing compiled clock bindings")?;
-    if targets.len() != 2
-        || !matches!(content(compiled.scene(), clock), Some(Content::Text { text, color, .. }) if text == "initial" && *color == Color([255; 4]))
+    if !matches!(content(compiled.scene(), clock), Some(Content::Text { text, color, .. }) if text == "initial" && *color == Color([255; 4]))
         || !matches!(content(compiled.scene(), accent), Some(Content::Text { text, color, .. }) if text == "UTC" && *color == Color([255; 4]))
     {
         return Err("Package does not match the scripted clock fixture's initial bindings".into());
-    }
-    if !compiled.symbols()["accent"].contains(&SCRIPT_BACKGROUND_PROBE)
-        || !matches!(
-            content(compiled.scene(), SCRIPT_BACKGROUND_PROBE),
-            Some(Content::Rectangle { .. })
-        )
-    {
-        return Err("Embedded rejection fixture changed its background node".into());
     }
     Ok(CompiledScriptScene {
         scene: compiled.into_scene(),
@@ -198,10 +202,10 @@ pub fn read_response(
     if pong != envelope(session, 2, Body::Pong { nonce }) {
         return Err("Invalid scene Pong".into());
     }
-    let (scene, clock, accent, source) = if mode == Mode::Script {
-        let compiled = match local_script {
-            Some(compiled) => compiled,
-            None => compiled_script_scene()?,
+    let (scene, clock, accent, source) = if mode.loads_script() {
+        let compiled = match mode {
+            Mode::LocalClock => local_script.ok_or("Missing prepared local clock package")?,
+            _ => compiled_script_scene()?,
         };
         (
             compiled.scene,
@@ -266,10 +270,10 @@ pub fn read_response(
         let accepted = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
         let ack = accept_scene_batch(&mut host, accepted);
         let accent_matches = match content(host.scene(), accent) {
-            Some(Content::Text { text, color, .. }) if mode == Mode::Script => {
+            Some(Content::Text { text, color, .. }) if mode.loads_script() => {
                 text == "UTC" && *color == expected_color
             }
-            Some(Content::Rectangle { color }) if mode != Mode::Script => *color == expected_color,
+            Some(Content::Rectangle { color }) if !mode.loads_script() => *color == expected_color,
             _ => false,
         };
         if ack != update_message(session, sequence, Body::SceneAck { revision: sequence })
@@ -400,7 +404,7 @@ pub fn worker(
     mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
-    let (clock, accent, source) = if mode == Mode::Script {
+    let (clock, accent, source) = if mode.loads_script() {
         let program = read_frame(input)?.ok_or(MissingFrame("scene program"))?;
         program.check_context(session, 2, 0)?;
         let Body::SceneProgram { targets, source } = program.body else {
