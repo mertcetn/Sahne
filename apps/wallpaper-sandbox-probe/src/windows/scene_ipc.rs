@@ -22,6 +22,7 @@ pub enum Mode {
     LocalScene,
     LocalLifecycle,
     PreviewLifecycle,
+    LiveLifecycle,
     Timer,
     RegisteredTimer,
     Utc,
@@ -36,6 +37,7 @@ impl Mode {
             "local-script-package" => Some(Self::LocalScene),
             "local-lifecycle-package" => Some(Self::LocalLifecycle),
             "preview-lifecycle-package" => Some(Self::PreviewLifecycle),
+            "live-lifecycle-package" => Some(Self::LiveLifecycle),
             "scene-timer" => Some(Self::Timer),
             "scene-timer-registration" => Some(Self::RegisteredTimer),
             "preview-clock-utc" => Some(Self::Utc),
@@ -50,7 +52,7 @@ impl Mode {
     fn uses_general_bindings(self) -> bool {
         matches!(
             self,
-            Self::LocalScene | Self::LocalLifecycle | Self::PreviewLifecycle
+            Self::LocalScene | Self::LocalLifecycle | Self::PreviewLifecycle | Self::LiveLifecycle
         )
     }
 
@@ -626,41 +628,44 @@ pub fn worker(
             None,
         )
     };
-    let (local_callbacks, package_ticks) =
-        if matches!(mode, Mode::LocalLifecycle | Mode::PreviewLifecycle) {
-            let source = source.as_deref().ok_or("Missing local lifecycle source")?;
-            let (callbacks, timer) = script_result(
-                output,
-                session,
-                3,
-                0,
-                if mode == Mode::PreviewLifecycle {
-                    script::RetainedCallbacks::from_package_source(source)
-                } else {
-                    script::RetainedCallbacks::from_source(source)
-                        .map(|callbacks| (callbacks, None))
-                },
-            )?;
-            if let Some(timer) = &timer {
-                send(
-                    output,
-                    envelope(
-                        session,
-                        3,
-                        Body::PackageTimer {
-                            delay_ms: timer.delay_ms,
-                            ticks: timer.ticks,
-                        },
-                    ),
-                )?;
+    let (local_callbacks, package_ticks) = if matches!(
+        mode,
+        Mode::LocalLifecycle | Mode::PreviewLifecycle | Mode::LiveLifecycle
+    ) {
+        let source = source.as_deref().ok_or("Missing local lifecycle source")?;
+        let (callbacks, timer) = script_result(
+            output,
+            session,
+            3,
+            0,
+            if matches!(mode, Mode::PreviewLifecycle | Mode::LiveLifecycle) {
+                script::RetainedCallbacks::from_package_source(source, mode == Mode::LiveLifecycle)
             } else {
-                send(output, envelope(session, 3, Body::LifecycleReady))?;
-            }
-            deliver_lifecycle(input, output, session, |paused| callbacks.lifecycle(paused))?;
-            (Some(callbacks), timer.map(|timer| u64::from(timer.ticks)))
+                script::RetainedCallbacks::from_source(source).map(|callbacks| (callbacks, None))
+            },
+        )?;
+        if let Some(timer) = &timer {
+            send(
+                output,
+                envelope(
+                    session,
+                    3,
+                    Body::PackageTimer {
+                        delay_ms: timer.delay_ms,
+                        ticks: timer.ticks,
+                    },
+                ),
+            )?;
         } else {
-            (None, None)
-        };
+            send(output, envelope(session, 3, Body::LifecycleReady))?;
+        }
+        if mode != Mode::LiveLifecycle {
+            deliver_lifecycle(input, output, session, |paused| callbacks.lifecycle(paused))?;
+        }
+        (Some(callbacks), timer.map(|timer| u64::from(timer.ticks)))
+    } else {
+        (None, None)
+    };
     let clock = if mode.uses_general_bindings() {
         bindings
             .first()
@@ -684,12 +689,51 @@ pub fn worker(
         .transpose()?;
     let mut lifecycle_sequence = 1u64;
     let mut utc_paused = false;
-    while mode == Mode::Utc || sequence <= updates {
+    let mut package_paused = false;
+    let mut package_lifecycle_sequence = 4;
+    while matches!(mode, Mode::Utc | Mode::LiveLifecycle) || sequence <= updates {
         if package_ticks.is_some() {
-            let tick = read_frame(input)?.ok_or(MissingFrame("package tick"))?;
-            tick.check_context(session, sequence + 5, sequence - 1)?;
-            if tick.body != Body::PackageTick {
-                return Err("Expected host package tick".into());
+            loop {
+                let request = read_frame(input)?.ok_or(MissingFrame("package tick"))?;
+                if let (Mode::LiveLifecycle, Body::Lifecycle { paused }) = (mode, &request.body) {
+                    request.check_context(session, package_lifecycle_sequence, sequence - 1)?;
+                    if *paused == package_paused {
+                        return Err("Duplicate package lifecycle transition".into());
+                    }
+                    let callbacks = local_callbacks
+                        .as_ref()
+                        .ok_or("Missing package callbacks")?;
+                    script_result(
+                        output,
+                        session,
+                        package_lifecycle_sequence,
+                        sequence - 1,
+                        callbacks.lifecycle(*paused),
+                    )?;
+                    send(
+                        output,
+                        Message {
+                            body: Body::LifecycleAck { paused: *paused },
+                            ..request
+                        },
+                    )?;
+                    package_paused = *paused;
+                    package_lifecycle_sequence = package_lifecycle_sequence
+                        .checked_add(1)
+                        .ok_or("Package lifecycle sequence exhausted")?;
+                } else {
+                    request.check_context(
+                        session,
+                        sequence
+                            .checked_add(5)
+                            .ok_or("Package tick sequence exhausted")?,
+                        sequence - 1,
+                    )?;
+                    if request.body != Body::PackageTick || package_paused {
+                        return Err("Expected host package tick".into());
+                    }
+                    break;
+                }
             }
         }
         let display_time = if mode.uses_host_timer() || mode == Mode::Utc {

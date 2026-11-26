@@ -197,14 +197,14 @@ impl RetainedCallbacks {
     }
 
     pub fn from_source(source: &str) -> Result<Self> {
-        Self::load(source, false).map(|(callbacks, _)| callbacks)
+        Self::load(source, false, false).map(|(callbacks, _)| callbacks)
     }
 
-    pub fn from_package_source(source: &str) -> Result<(Self, Option<PackageTimer>)> {
-        Self::load(source, true)
+    pub fn from_package_source(source: &str, live: bool) -> Result<(Self, Option<PackageTimer>)> {
+        Self::load(source, true, live)
     }
 
-    fn load(source: &str, read_interval: bool) -> Result<(Self, Option<PackageTimer>)> {
+    fn load(source: &str, read_interval: bool, live: bool) -> Result<(Self, Option<PackageTimer>)> {
         if !wallpaper_sandbox::is_appcontainer()? {
             return Err("Lifecycle probe refuses non-AppContainer execution".into());
         }
@@ -228,6 +228,9 @@ impl RetainedCallbacks {
             .map_err(|_| "Expected an object with pause, resume and tick callbacks")?;
         check_callback_budget(&runtime, &interrupted)?;
         check_rejections(&rejected)?;
+        if live && (ticks.is_some() || delay.is_none()) {
+            return Err("Live package requires an interval without a tick count".into());
+        }
         let timer = match delay {
             Some(value)
                 if value.fract() == 0.0

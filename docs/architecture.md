@@ -781,3 +781,7 @@ In the headless preview lifecycle check, a retained package callback object may 
 ## 109. M4 bounded repeated package ticks
 
 The worker registers the delay and dispatch count in a dedicated IPC message. The codec bounds both fields. The host re-arms a one-shot timer after each accepted scene revision and sends the next tick with that base revision. The worker applies acknowledged edits to its bindings before the next callback. The host verifies terminal rejection against the last accepted revision and publishes only changed snapshots.
+
+## 110. M4 live trusted package lifecycle
+
+The trusted live package preview uses the existing Windows lifecycle subscription and the retained worker context. The host admits one tick at a time, checks lifecycle acknowledgements between revisions, suspends timer dispatch while paused and re-arms the delay on resume. The job supervisor keeps a deadline for in-progress callback exchanges and removes it only after pause acknowledgement while waiting for resume. Preview shutdown stops the worker and removes its AppContainer profile. See [Live trusted package lifecycle preview](m4-timers.md#live-trusted-package-lifecycle-preview).

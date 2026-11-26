@@ -43,6 +43,7 @@ $cases = @(
     @{ Name = 'lifecycle-repeated-rejected'; Lifecycle = $true; Script = '(() => { let calls = 0; return { intervalMs: 16, tickCount: 3, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Tick " + (++calls); if (calls === 2) throw new Error("private-fixture-error"); } }; })()'; RejectTick = $true }
     @{ Name = 'lifecycle-invalid-delay'; Lifecycle = $true; InvalidDelay = $true; Script = '({ intervalMs: 32.5, pause() {}, resume() {}, tick() {} })' }
     @{ Name = 'lifecycle-invalid-count'; Lifecycle = $true; InvalidDelay = $true; Script = '({ intervalMs: 16, tickCount: 4, pause() {}, resume() {}, tick() {} })' }
+    @{ Name = 'lifecycle-live'; Live = $true; Script = '(() => { let phase = 0, calls = 0; return { intervalMs: 32, pause() { phase = 1; }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Tick " + (++calls); } }; })()' }
     @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; HtmlBytes = 128 * 1024 }
     @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = 'validation' }
     @{ Name = 'intake-missing-script'; Intake = $true; Reject = 'validation' }
@@ -87,6 +88,7 @@ $results = foreach ($case in $cases) {
 
     $mode = if ($case.ContainsKey('Intake')) { '--check-package-intake' }
         elseif ($case.ContainsKey('Lifecycle')) { '--check-trusted-script-lifecycle' }
+        elseif ($case.ContainsKey('Live')) { '--check-trusted-script-live' }
         else { '--check-trusted-script-preview' }
     $result = Invoke-SahneGuardedProcess -FilePath $preview -ArgumentList @($mode) `
         -PackageFolder $inputFolder -WorkingDirectory $repo -OutputDirectory (Join-Path $run "logs/$($case.Name)")
@@ -109,6 +111,10 @@ $results = foreach ($case in $cases) {
             $passed = $passed -and $result.ExitCode -eq 0 -and $validated -and $outputVerified -and
                 [string]::IsNullOrWhiteSpace($stderr)
         }
+    }
+    elseif ($case.ContainsKey('Live')) {
+        $passed = $passed -and $cleanupCount -eq 1 -and $result.ExitCode -eq 0 -and
+            $stdout.Contains('Live package pause, resume and two updates verified.') -and [string]::IsNullOrWhiteSpace($stderr)
     }
     elseif ($case.ContainsKey('Lifecycle')) {
         $pause = $stdout.IndexOf('Package lifecycle acknowledged: pause.')

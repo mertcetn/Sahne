@@ -1,5 +1,6 @@
 //! Bounded development bridge to the existing AppContainer clock fixture.
 use super::*;
+use script_package::Lifecycle;
 use std::{
     collections::BTreeSet,
     fs::{self, File},
@@ -101,6 +102,7 @@ struct ChannelState {
     notify: Box<dyn Fn() + Send + Sync>,
     signal: mpsc::SyncSender<Signal>,
     mode: Mode,
+    handles_lifecycle: bool,
 }
 
 #[derive(Default)]
@@ -116,34 +118,40 @@ pub struct Bridge {
 }
 
 impl Bridge {
-    pub fn is_utc(&self) -> bool {
-        self.state.mode == Mode::Utc
+    pub fn handles_lifecycle(&self) -> bool {
+        self.state.handles_lifecycle
     }
     pub fn start(mode: Mode, notify: impl Fn() + Send + Sync + 'static) -> Result<Self> {
-        Self::start_inner(mode, None, notify)
+        Self::start_inner(mode, None, false, notify)
     }
 
     pub fn start_package(
         package: script_package::Prepared,
+        paused: bool,
         notify: impl Fn() + Send + Sync + 'static,
     ) -> Result<Self> {
-        Self::start_inner(Mode::Fixture, Some(package), notify)
+        Self::start_inner(Mode::Fixture, Some(package), paused, notify)
     }
 
     fn start_inner(
         mode: Mode,
         package: Option<script_package::Prepared>,
+        paused: bool,
         notify: impl Fn() + Send + Sync + 'static,
     ) -> Result<Self> {
         let (signal, receiver) = mpsc::sync_channel(2);
         let state = Arc::new(ChannelState {
             update: Mutex::new(Update::default()),
             cancel: AtomicBool::new(false),
-            paused: AtomicBool::new(false),
+            paused: AtomicBool::new(paused),
             channel_thread: OnceLock::new(),
             notify: Box::new(notify),
             signal,
             mode,
+            handles_lifecycle: mode == Mode::Utc
+                || package
+                    .as_ref()
+                    .is_some_and(|p| p.lifecycle == Lifecycle::Live),
         });
         let shared = Arc::clone(&state);
         let supervisor = thread::Builder::new()
@@ -172,7 +180,7 @@ impl Bridge {
     }
 
     pub fn set_paused(&self, paused: bool) {
-        if self.state.mode == Mode::Utc
+        if self.state.handles_lifecycle
             && self.state.paused.swap(paused, Ordering::AcqRel) != paused
             && let Some(channel) = self.state.channel_thread.get()
         {
@@ -215,7 +223,7 @@ fn supervise(
         (
             wallpaper_scene::decode(&package.scene.encode())?,
             targets.values().copied().collect(),
-            Some((package.program, package.lifecycle_check)),
+            Some((package.program, package.lifecycle)),
         )
     } else {
         (
@@ -230,11 +238,11 @@ fn supervise(
     fs::create_dir_all(&base)?;
     let root = base.join(format!("preview-{}-{session:016x}", std::process::id()));
     let package_mode = program.is_some();
-    let case = if let Some((_, lifecycle_check)) = &program {
-        if *lifecycle_check {
-            "preview-lifecycle-package"
-        } else {
-            "local-script-package"
+    let case = if let Some((_, lifecycle)) = &program {
+        match lifecycle {
+            Lifecycle::OneShot => "local-script-package",
+            Lifecycle::Check => "preview-lifecycle-package",
+            Lifecycle::Live => "live-lifecycle-package",
         }
     } else {
         match state.mode {
@@ -341,7 +349,7 @@ fn exchange(
     nonce: u64,
     mut host: HostScene,
     state: &ChannelState,
-    program: Option<(Body, bool)>,
+    program: Option<(Body, Lifecycle)>,
 ) -> WorkerResult<()> {
     let mut key = host
         .snapshot_after(None)
@@ -619,31 +627,109 @@ pub fn check(mode: Mode) -> Result<()> {
     Err("Live worker clock check timed out".into())
 }
 
+fn wait_package_tick(
+    input: &mut File,
+    output: &mut File,
+    tick: Message,
+    delay: Duration,
+    state: &ChannelState,
+    mut lifecycle: Option<&mut (bool, u64)>,
+) -> WorkerResult<()> {
+    let mut wake = Instant::now() + delay;
+    if lifecycle.is_some() {
+        state
+            .signal
+            .send(Signal::Deadline(Some(wake + RESPONSE_LIMIT)))?;
+    }
+    loop {
+        if state.cancel.load(Ordering::Acquire) {
+            return Err("Package tick cancelled".into());
+        }
+        if let Some((paused, sequence)) = lifecycle.as_deref_mut() {
+            let desired = state.paused.load(Ordering::Acquire);
+            if desired != *paused {
+                state
+                    .signal
+                    .send(Signal::Deadline(Some(Instant::now() + RESPONSE_LIMIT)))?;
+                let event = frame(
+                    tick.session,
+                    *sequence,
+                    tick.base_revision,
+                    Body::Lifecycle { paused: desired },
+                );
+                send(input, event)?;
+                if read_frame(output)?
+                    != Some(frame(
+                        tick.session,
+                        *sequence,
+                        tick.base_revision,
+                        Body::LifecycleAck { paused: desired },
+                    ))
+                {
+                    return Err("Package lifecycle callback rejected".into());
+                }
+                *paused = desired;
+                *sequence = sequence
+                    .checked_add(1)
+                    .ok_or("Package lifecycle sequence exhausted")?;
+                state
+                    .update
+                    .lock()
+                    .map_err(|_| "Package mailbox unavailable")?
+                    .paused = Some(desired);
+                (state.notify)();
+                if desired {
+                    state.signal.send(Signal::Deadline(None))?;
+                } else {
+                    wake = Instant::now() + delay;
+                    state
+                        .signal
+                        .send(Signal::Deadline(Some(wake + RESPONSE_LIMIT)))?;
+                }
+                continue;
+            }
+            if *paused {
+                state.signal.send(Signal::Deadline(None))?;
+                thread::park();
+                continue;
+            }
+        }
+        if let Some(remaining) = wake.checked_duration_since(Instant::now()) {
+            thread::park_timeout(remaining);
+        } else {
+            return send(input, tick);
+        }
+    }
+}
+
 fn exchange_package(
     mut input: File,
     mut output: File,
     session: u64,
     mut host: HostScene,
     state: &ChannelState,
-    (program, lifecycle_check): (Body, bool),
+    (program, lifecycle): (Body, Lifecycle),
 ) -> WorkerResult<()> {
     let mut accepted_key = host
         .snapshot_after(None)
         .ok_or("Missing initial package scene")?
         .key;
     send(&mut input, frame(session, 2, 0, program))?;
-    let (delay, ticks) = if lifecycle_check {
+    let (delay, ticks) = if lifecycle != Lifecycle::OneShot {
         let ready = read_frame(&mut output)?.ok_or("Missing package lifecycle readiness")?;
         ready.check_context(session, 3, 0)?;
         let timing = match ready.body {
-            Body::LifecycleReady => (None, 1),
+            Body::LifecycleReady if lifecycle == Lifecycle::Check => (None, 1),
             Body::PackageTimer { delay_ms, ticks } => (
                 Some(Duration::from_millis(u64::from(delay_ms))),
                 u64::from(ticks),
             ),
             _ => return Err("Package lifecycle initialization rejected".into()),
         };
-        for (sequence, paused) in [(4, true), (5, false)] {
+        for (sequence, paused) in [(4, true), (5, false)]
+            .into_iter()
+            .filter(|_| lifecycle == Lifecycle::Check)
+        {
             send(
                 &mut input,
                 frame(session, sequence, 0, Body::Lifecycle { paused }),
@@ -666,30 +752,22 @@ fn exchange_package(
     } else {
         (None, 1)
     };
-    for sequence in 1..=ticks {
+    let live = lifecycle == Lifecycle::Live;
+    let mut lifecycle_state = (false, 4u64);
+    for sequence in 1..=if live { u64::MAX - 5 } else { ticks } {
         let base = sequence - 1;
         if let Some(delay) = delay {
-            let start = Instant::now();
-            let mut timers = wallpaper_scene::timer::Timers::new(start);
-            let timer = timers
-                .schedule(start, delay, false)
-                .map_err(|_| "Could not schedule package tick")?;
-            loop {
-                if state.cancel.load(Ordering::Acquire) {
-                    return Err("Package tick cancelled".into());
-                }
-                let now = Instant::now();
-                if timers.take_due(now).map_err(|_| "Package timer failed")? == Some(timer) {
-                    break;
-                }
-                let wake = timers.next_wake().ok_or("Missing package timer deadline")?;
-                thread::park_timeout(wake.saturating_duration_since(now));
-            }
-            send(
+            wait_package_tick(
                 &mut input,
+                &mut output,
                 frame(session, sequence + 5, base, Body::PackageTick),
+                delay,
+                state,
+                live.then_some(&mut lifecycle_state),
             )?;
-            println!("Host dispatched scheduled package tick.");
+            if !live {
+                println!("Host dispatched scheduled package tick.");
+            }
         }
         let batch = read_frame(&mut output)?.ok_or("Missing package scene batch")?;
         let ack = accept_scene_batch(&mut host, batch);
@@ -707,7 +785,7 @@ fn exchange_package(
             return Err("Package scene batch rejected".into());
         }
         send(&mut input, ack)?;
-        if delay.is_some() {
+        if delay.is_some() && !live {
             println!("Host acknowledged scheduled package revision {sequence}.");
         }
         if let Some(accepted) = host.snapshot_after(Some(accepted_key)) {
@@ -719,6 +797,9 @@ fn exchange_package(
                 .snapshot = Some(accepted);
             (state.notify)();
         }
+    }
+    if live {
+        return Err("Package tick sequence exhausted".into());
     }
     let invalid = read_frame(&mut output)?.ok_or("Missing terminal package batch")?;
     invalid.check_context(session, ticks + 1, ticks)?;
@@ -755,7 +836,7 @@ fn exchange_package(
 }
 
 pub fn check_package(package: script_package::Prepared) -> Result<()> {
-    let bridge = Bridge::start_package(package, || {})?;
+    let bridge = Bridge::start_package(package, false, || {})?;
     let mut changed = false;
     let until = Instant::now() + RESPONSE_LIMIT + Duration::from_secs(3);
     while Instant::now() < until {
@@ -771,4 +852,46 @@ pub fn check_package(package: script_package::Prepared) -> Result<()> {
         thread::sleep(POLL_INTERVAL);
     }
     Err("Live package worker check timed out".into())
+}
+
+pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
+    let mut bridge = Bridge::start_package(package, true, || {})?;
+    let until = Instant::now() + RESPONSE_LIMIT + Duration::from_secs(3);
+    let mut resume_at = None;
+    let mut resumed = false;
+    let mut updates = 0;
+    while Instant::now() < until {
+        let update = bridge.poll()?;
+        if let Some(result) = update.terminal {
+            result?;
+            return Err("Live package ended before lifecycle verification".into());
+        }
+        match update.paused {
+            Some(true) if resume_at.is_none() => {
+                resume_at = Some(Instant::now() + Duration::from_millis(150));
+            }
+            Some(false) if resume_at.is_some() => resumed = true,
+            _ => {}
+        }
+        if !resumed && resume_at.is_some_and(|at| Instant::now() >= at) {
+            bridge.set_paused(false);
+        }
+        if update.snapshot.is_some() {
+            if !resumed {
+                return Err("Live package changed before resume".into());
+            }
+            updates += 1;
+            if updates == 2 {
+                bridge.shutdown()?;
+                bridge
+                    .poll()?
+                    .terminal
+                    .ok_or("Missing live package cleanup result")??;
+                println!("Live package pause, resume and two updates verified.");
+                return Ok(());
+            }
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
+    Err("Live package lifecycle verification timed out".into())
 }

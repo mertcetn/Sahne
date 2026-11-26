@@ -112,6 +112,19 @@ The November 26, 2026 regression verified a 32 ms registration, dispatch after r
 
 A subsequent run verified three ordered dispatches and accepted revisions, a second-tick failure that stopped before the third dispatch, and rejection of a four-tick request during initialization. All 27 headless cases passed. Local report: `target/script-preview-validation/6f876bdee118404aac5da8739cab3ae8/summary.json`.
 
+### Live trusted package lifecycle preview
+
+```powershell
+target/release/wallpaper-preview.exe --trusted-script-live $folder --seconds 90
+target/release/wallpaper-preview.exe --check-trusted-script-live $folder
+```
+
+The live preview requires a trusted package with the same `pause()`, `resume()` and `tick(document, value)` functions and an integer `intervalMs` from 16 through 1000. The timer runs for the preview lifetime. Use `--desktop` to attach behind Windows icons. `tickCount` is reserved for the bounded lifecycle check.
+
+The preview uses the existing Windows session, display and power notifications and the window's minimized state. It sends pause and resume between acknowledged updates. Acknowledged pause stops new ticks. After resume, the host waits for a new interval before dispatching the next tick. If the worker fails, the preview retains the last accepted scene. Windows session messages are documented by [Microsoft Learn](https://learn.microsoft.com/en-us/windows/win32/termserv/wm-wtssession-change).
+
+The headless live check used a synthetic pause and resume, observed two changed scenes after resuming and verified worker profile cleanup. All 28 cases passed in the November 26, 2026 run. Windows lock and suspend delivery to this package mode still needs physical verification. Local report: `target/script-preview-validation/d886cfc265924667abbc1c02b10eeded/summary.json`.
+
 The registered and continuous clock callbacks and the trusted package lifecycle probe use the same bounded Promise job drain. A lifecycle callback runs at most 64 jobs within its own 100 ms deadline. It must finish with an empty queue and fulfill any Promise it returns before the worker acknowledges the event. A tick follows the same rules before its DOM writes are collected. A rejection reported as unhandled fails the invocation. The trusted package's initial callback object must be available synchronously with no queued jobs.
 
 A failed lifecycle callback sends a bounded rejection and terminates the worker session. Its pending jobs cannot run in a subsequent invocation. The host retains the last accepted scene and revision.

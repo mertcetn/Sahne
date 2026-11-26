@@ -6,7 +6,14 @@ use wallpaper_scene::{Content, ValidatedScene, transaction::Edit};
 pub struct Prepared {
     pub scene: Arc<ValidatedScene>,
     pub program: Body,
-    pub lifecycle_check: bool,
+    pub lifecycle: Lifecycle,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Lifecycle {
+    OneShot,
+    Check,
+    Live,
 }
 
 pub fn prepare(folder: &str) -> Result<Prepared> {
@@ -65,6 +72,6 @@ pub fn prepare(folder: &str) -> Result<Prepared> {
     Ok(Prepared {
         scene: Arc::new(compiled.into_scene()),
         program: program.body,
-        lifecycle_check: false,
+        lifecycle: Lifecycle::OneShot,
     })
 }

@@ -54,6 +54,7 @@ fn main() -> Result<()> {
     let mut script_package_folder = None;
     let mut check_script_package = false;
     let mut check_script_lifecycle = false;
+    let mut live_script_lifecycle = false;
     let mut sandbox_package_folder = None;
     let mut worker_live = None;
     let mut check_worker_live = false;
@@ -87,6 +88,12 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--check-trusted-script-lifecycle <absolute-folder> checks pause, resume and one script tick without a window."
+                );
+                println!(
+                    "--trusted-script-live <absolute-folder> [--desktop] [--seconds N] runs a trusted package timer with Windows lifecycle callbacks."
+                );
+                println!(
+                    "--check-trusted-script-live <absolute-folder> checks the live bridge with synthetic pause and resume."
                 );
                 println!(
                     "--sandboxed-package-preview <absolute-folder> [--desktop] [--seconds 1..3600] displays the AppContainer-compiled static scene in a window or behind Windows icons."
@@ -144,12 +151,15 @@ fn main() -> Result<()> {
             }
             "--trusted-script-preview"
             | "--check-trusted-script-preview"
+            | "--trusted-script-live"
+            | "--check-trusted-script-live"
             | "--check-trusted-script-lifecycle" => {
                 if script_package_folder.is_some() {
                     return Err("Choose one script preview input".into());
                 }
                 check_script_package = arg.starts_with("--check-");
                 check_script_lifecycle = arg == "--check-trusted-script-lifecycle";
+                live_script_lifecycle = arg.ends_with("-live");
                 script_package_folder =
                     Some(args.next().ok_or("Missing trusted script package folder")?);
             }
@@ -205,14 +215,24 @@ fn main() -> Result<()> {
     {
         return Err("Conflicting options for scripted or retained scene preview".into());
     }
-    let script_package = script_package_folder
+    let mut script_package = script_package_folder
         .as_deref()
         .map(script_package::prepare)
         .transpose()?;
+    if let Some(package) = &mut script_package {
+        if live_script_lifecycle {
+            package.lifecycle = script_package::Lifecycle::Live;
+        } else if check_script_lifecycle {
+            package.lifecycle = script_package::Lifecycle::Check;
+        }
+    }
     if check_script_package {
-        let mut package = script_package.ok_or("Missing script preview package")?;
-        package.lifecycle_check = check_script_lifecycle;
-        return live_clock::check_package(package);
+        let package = script_package.ok_or("Missing script preview package")?;
+        return if live_script_lifecycle {
+            live_clock::check_live_package(package)
+        } else {
+            live_clock::check_package(package)
+        };
     }
     let retained_scene = if let Some(folder) = retained_scene_folder.as_deref() {
         let scene = compiled::load_retained(folder)?;
@@ -448,6 +468,12 @@ impl App {
                 return;
             }
         };
+        if let Some(paused) = update.paused {
+            eprintln!(
+                "Package worker lifecycle acknowledged: {}",
+                if paused { "pause" } else { "resume" }
+            );
+        }
         if let Some(snapshot) = update.snapshot {
             let scene = Arc::clone(&snapshot.scene);
             if let Some(state) = &mut self.state {
@@ -553,12 +579,16 @@ impl App {
         self.next_retry = None;
         self.generation += 1;
         let result = (|| -> Result<State> {
-            let utc_worker = self.start_live_clock == Some(live_clock::Mode::Utc)
+            let lifecycle_worker = self.start_live_clock == Some(live_clock::Mode::Utc)
+                || self
+                    .start_script_package
+                    .as_ref()
+                    .is_some_and(|p| p.lifecycle == script_package::Lifecycle::Live)
                 || self
                     .live_clock
                     .as_ref()
-                    .is_some_and(live_clock::Bridge::is_utc);
-            if self.desktop_mode && utc_worker && self.desktop_lifecycle.is_none() {
+                    .is_some_and(live_clock::Bridge::handles_lifecycle);
+            if self.desktop_mode && lifecycle_worker && self.desktop_lifecycle.is_none() {
                 let window = Arc::new(
                     events.create_window(
                         Window::default_attributes()
@@ -617,7 +647,7 @@ impl App {
                 (self.compiled_example, flat_scene),
                 self.test_pixels,
             ))?;
-            if utc_worker && !self.desktop_mode {
+            if lifecycle_worker && !self.desktop_mode {
                 let proxy = self.proxy.clone();
                 let generation = self.generation;
                 state._session_lifecycle =
@@ -916,9 +946,13 @@ impl ApplicationHandler<AppEvent> for App {
                         }
                         if let Some(package) = self.start_script_package.take() {
                             let proxy = self.proxy.clone();
-                            match live_clock::Bridge::start_package(package, move || {
-                                let _ = proxy.send_event(AppEvent::ClockUpdate);
-                            }) {
+                            match live_clock::Bridge::start_package(
+                                package,
+                                self.clock_pause.paused(),
+                                move || {
+                                    let _ = proxy.send_event(AppEvent::ClockUpdate);
+                                },
+                            ) {
                                 Ok(bridge) => self.live_clock = Some(bridge),
                                 Err(error) => eprintln!("Package worker could not start: {error}"),
                             }
