@@ -14,6 +14,7 @@ wallpaper-compiler = { path = "../../crates/wallpaper-compiler", features = ["fi
 wallpaper-scene = { path = "../../crates/wallpaper-scene", features = ["fixtures"] }
 wallpaper-format = { path = "../../crates/wallpaper-format" }
 wallpaper-media = { path = "../../crates/wallpaper-media" }
+wallpaper-platform = { path = "../../crates/wallpaper-platform" }
 rquickjs = { version = "=0.14.0", default-features = false, features = ["std"] }
 
 [lints]

@@ -108,7 +108,7 @@ fn update_message(session: u64, sequence: u64, body: Body) -> Message {
     }
 }
 
-struct CompiledScriptScene {
+pub(super) struct CompiledScriptScene {
     scene: ValidatedScene,
     clock: u32,
     accent: u32,
@@ -125,14 +125,21 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
         "#.to_vec()),
         ("clock.js".into(), include_bytes!("clock_fixture.js").to_vec()),
     ])?;
+    prepare_script_scene(&package)
+}
+
+pub(super) fn prepare_script_scene(
+    package: &wallpaper_format::Package,
+) -> Result<CompiledScriptScene> {
     let compiled = wallpaper_compiler::compile(
-        &package,
+        package,
         wallpaper_compiler::Viewport {
             width: 100,
             height: 100,
             background: Color([0; 4]),
         },
     )?;
+    wallpaper_media::validate_assets(compiled.scene(), compiled.images())?;
     let script = compiled
         .script()
         .ok_or("Missing compiled script reference")?;
@@ -142,6 +149,12 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
         .get("clock")
         .zip(targets.get("accent"))
         .ok_or("Missing compiled clock bindings")?;
+    if targets.len() != 2
+        || !matches!(content(compiled.scene(), clock), Some(Content::Text { text, color, .. }) if text == "initial" && *color == Color([255; 4]))
+        || !matches!(content(compiled.scene(), accent), Some(Content::Text { text, color, .. }) if text == "UTC" && *color == Color([255; 4]))
+    {
+        return Err("Package does not match the scripted clock fixture's initial bindings".into());
+    }
     if !compiled.symbols()["accent"].contains(&SCRIPT_BACKGROUND_PROBE)
         || !matches!(
             content(compiled.scene(), SCRIPT_BACKGROUND_PROBE),
@@ -174,6 +187,7 @@ pub fn read_response(
     ready: &mpsc::SyncSender<()>,
     requests: mpsc::SyncSender<Message>,
     mode: Mode,
+    local_script: Option<CompiledScriptScene>,
 ) -> Result<ProbeReply> {
     let hello = read_frame(output)?.ok_or(MissingFrame("scene Hello"))?;
     if hello != envelope(session, 1, Body::Hello { api_version: 1 }) {
@@ -185,7 +199,10 @@ pub fn read_response(
         return Err("Invalid scene Pong".into());
     }
     let (scene, clock, accent, source) = if mode == Mode::Script {
-        let compiled = compiled_script_scene()?;
+        let compiled = match local_script {
+            Some(compiled) => compiled,
+            None => compiled_script_scene()?,
+        };
         (
             compiled.scene,
             compiled.clock,

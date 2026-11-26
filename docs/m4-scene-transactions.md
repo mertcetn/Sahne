@@ -96,6 +96,27 @@ Run this check only on packages you trust. It parses content in the CLI process 
 
 The local release check rejected a missing script and a script over 32 KiB. It accepted a bounded script containing a top-level throw, confirming that it did not evaluate the source. The embedded `scene-script` AppContainer probe passed with the shared target resolver. Local report at `target/sandbox-validation/1b45d80cd3f147669c65e37b65337e09/`.
 
+### Running a trusted local clock package
+
+```powershell
+cargo build --release -p wallpaper-sandbox-probe --locked
+target/release/wallpaper-sandbox-probe.exe --run-trusted-clock-package $folder
+```
+
+Use a trusted local Windows package folder and its absolute path. The native manifest must declare an HTML entry and a JavaScript callback source. The fixture expects an unnamed rectangle followed by the named spans `clock` (text `initial`) and `accent` (text `UTC`), each with a background and white foreground. This order gives the terminal test its known unauthorized accent background target. Use the following body for the HTML entry.
+
+```html
+<div style="width:100px;height:100px;background-color:#121212"></div>
+<span id="clock" style="width:100px;height:24px;background-color:#222222">initial</span>
+<span id="accent" style="width:100px;height:24px;background-color:#333333">UTC</span>
+```
+
+The callback receives the fixture document and the sample time `12:34`. It must write that value into `clock.textContent` and set `accent.style.color` to `[36, 179, 144, 255]`.
+
+The host collects and compiles the package with the existing workspace package collector. It sends the source and bindings over the bounded initialization channel. The worker evaluates the callback inside AppContainer, and the host verifies the accepted scene and rollback after its deliberate invalid update. This command is headless. Host-side package collection and parsing still require trusted inputs. General script callbacks, timers and untrusted package intake remain open.
+
+The local release check accepted the folder callback and rejected a replacement callback that threw an exception. Both runs verified AppContainer profile cleanup. The embedded script, timer and restart recovery regressions passed. Local report at `target/sandbox-validation/d96fdf0062e2493588056ad42eb4549d/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

@@ -40,6 +40,14 @@ pub(super) struct ProbeAttempt {
 }
 impl ProbeAttempt {
     pub fn start(case: &str, previous_session: Option<u64>) -> Result<Self> {
+        Self::start_with_script(case, previous_session, None)
+    }
+
+    pub fn start_with_script(
+        case: &str,
+        previous_session: Option<u64>,
+        script: Option<scene_ipc::CompiledScriptScene>,
+    ) -> Result<Self> {
         let session = wallpaper_sandbox::random_id()?;
         let nonce = wallpaper_sandbox::random_id()?;
         if previous_session == Some(session) {
@@ -168,6 +176,7 @@ impl ProbeAttempt {
                             &ready_send,
                             requests.expect("scene case owns writer sender"),
                             mode,
+                            script,
                         )
                     } else if let Some(requests) = requests {
                         roundtrip::read_response(

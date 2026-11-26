@@ -1871,6 +1871,7 @@ dependencies = [
  "wallpaper-compiler",
  "wallpaper-format",
  "wallpaper-media",
+ "wallpaper-platform",
  "wallpaper-protocol",
  "wallpaper-sandbox",
  "wallpaper-scene",

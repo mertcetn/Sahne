@@ -500,7 +500,10 @@ fn worker(args: &[String]) -> Result<()> {
 fn host(args: &[String]) -> Result<()> {
     if args == ["--help"] {
         println!(
-            "Usage: wallpaper-sandbox-probe [--case CASE]\nCases: healthy, network, network-egress, memory, process, handles, hang, oversized, crash, ipc-flood, ipc-stall, ipc-truncated, ipc-replay, ipc-open.\nTrusted Windows AppContainer/Job/IPC spike; fixed native/JS fixtures only, no packages or script paths. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile.\nNetwork tests require explicit access denial; timeout is inconclusive and fails. network uses loopback; network-egress tries TEST-NET-1 192.0.2.1:9 without DNS or application payload.\nmemory checks a small allocation succeeds and an over-limit commit fails. process requires Job quota denial of a suspended child. handles checks an excluded host handle, including verified strict-policy termination after arming; WER is suppressed only for that intentional fault.\nIPC cases exercise unsolicited trailing-message flood, stalled partial body, truncated body at EOF, replayed sequence, and an open stream after a valid report. Every successful one-shot response requires EOF; a peer that keeps the stream open is stopped by the host deadline."
+            "--run-trusted-clock-package <absolute-folder> runs the local scripted clock development fixture in AppContainer. Use only packages you trust."
+        );
+        println!(
+            "Usage: wallpaper-sandbox-probe [--case CASE | --run-trusted-clock-package <absolute-folder>]\nCases: healthy, network, network-egress, memory, process, handles, hang, oversized, crash, ipc-flood, ipc-stall, ipc-truncated, ipc-replay, ipc-open.\nWindows AppContainer/Job/IPC development probe. Creates a unique test directory under target/sandbox-runs and a temporary AppContainer profile.\nNetwork tests require explicit access denial; timeout is inconclusive and fails. network uses loopback; network-egress tries TEST-NET-1 192.0.2.1:9 without DNS or application payload.\nmemory checks a small allocation succeeds and an over-limit commit fails. process requires Job quota denial of a suspended child. handles checks an excluded host handle, including verified strict-policy termination after arming; WER is suppressed only for that intentional fault.\nIPC cases exercise unsolicited trailing-message flood, stalled partial body, truncated body at EOF, replayed sequence, and an open stream after a valid report. Every successful one-shot response requires EOF; a peer that keeps the stream open is stopped by the host deadline."
         );
         println!(
             "JS cases: js-basic, js-interrupt, js-memory, js-stack, js-jobs. Fixed trusted source only, executed after the worker's AppContainer check. Heap=16 MiB, stack=256 KiB, cooperative deadline=100 ms, Promise job budget=64; the independent host watchdog remains enabled. No script path or external bytecode is accepted."
@@ -546,9 +549,17 @@ fn host(args: &[String]) -> Result<()> {
         );
         return Ok(());
     }
-    let case = match args {
-        [] => "healthy",
-        [flag, value] if flag == "--case" => value.as_str(),
+    let (case, local_script) = match args {
+        [] => ("healthy", None),
+        [flag, value] if flag == "--case" => (value.as_str(), None),
+        [flag, folder] if flag == "--run-trusted-clock-package" => {
+            let package = wallpaper_platform::package_directory::collect(folder)
+                .map_err(|error| error.to_string())?;
+            (
+                "scene-script",
+                Some(scene_ipc::prepare_script_scene(&package)?),
+            )
+        }
         _ => return Err("Use --help for probe arguments".into()),
     };
     if [
@@ -612,7 +623,7 @@ fn host(args: &[String]) -> Result<()> {
     {
         return Err("Unknown case".into());
     }
-    let mut attempt = ProbeAttempt::start(case, None)?;
+    let mut attempt = ProbeAttempt::start_with_script(case, None, local_script)?;
     let root = attempt.root.clone();
     let sandbox = &attempt.sandbox;
     let result = attempt.response.take().ok_or("Missing attempt result")?;

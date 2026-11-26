@@ -637,3 +637,7 @@ The scripted development probe resolves the manifest's script reference from the
 ## 73. M4 trusted folder script preparation
 
 The Windows developer CLI uses the trusted package collector, flat compiler and script IPC encoder to check whether a local package fits worker initialization. The flat compiler derives candidate targets shared with the embedded probe. It selects a unique text node for an author element with text and uses a sole rectangle for a rectangle-only element. Session owners still select writable targets. See [Trusted script package check](m4-scene-transactions.md#trusted-script-package-check).
+
+## 74. M4 trusted local clock execution
+
+The Windows developer probe can collect and compile a trusted folder matching the clock fixture contract before launching the existing AppContainer worker. Only the scene program's source and bindings cross the worker initialization channel. The host verifies the committed clock update and the terminal rollback, then applies the existing process and profile cleanup. See [Running a trusted local clock package](m4-scene-transactions.md#running-a-trusted-local-clock-package).
