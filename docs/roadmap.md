@@ -138,7 +138,7 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Connect live worker snapshots to the renderer and verify accepted-state preservation through the [headless AppContainer bridge](m4-clock-preview.md#live-appcontainer-window-bridge).
 - [x] Visually verify the [live worker rollover and retained display](m4-clock-preview.md#live-bridge-visual-result) after terminal rejection.
 - [x] Verify [continuous host-scheduled UTC updates](m4-clock-preview.md#continuous-utc-worker) over AppContainer IPC without a window.
-- [ ] Visually verify a real UTC minute change in the continuous AppContainer preview.
+- [x] Visually verify a [real UTC minute change in the continuous AppContainer preview](m4-clock-preview.md#continuous-utc-visual-result).
 - [ ] Integrate package/resource validation and restricted helper processing for untrusted parsing/media/font operations before accepting those inputs.
 - [ ] Re-run the complete sandbox failure suite through the integrated content path.
 

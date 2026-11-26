@@ -79,4 +79,8 @@ The host samples UTC on startup and schedules each next sample with a monotonic 
 
 On November 25, 2026, the headless release check observed 20:09 → 20:10 UTC in one AppContainer session and verified cleanup after cancellation. The deterministic rollover and the `scene-timer`, `scene-script` and `ipc-roundtrip` probes also passed.
 
-The continuous mode uses a fixed development script. Visual validation of this mode, product worker packaging and desktop attachment remain open.
+The continuous mode uses a fixed development script. Product worker packaging and desktop attachment remain open.
+
+### Continuous UTC visual result
+
+On November 26, 2026, source `c673dab` displayed 07:39 and then 07:40 UTC in the same 960×600 D3D12 window on an NVIDIA GeForce RTX 3050 Laptop GPU at DPI scale 1. The UTC label retained the worker's accent color across the minute boundary. The log recorded the fallback presentation and one presentation per accepted minute, for three frames in one GPU generation. The preview closed at the configured deadline, and neither the preview nor its worker remained running. Local log at `target/m4-utc-visual/af7933fc4b824b6cb8d0deecff8bf129/stderr.log`.
