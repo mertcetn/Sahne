@@ -232,6 +232,10 @@ target/release/wallpaper-preview.exe --check-isolated-script-preview $folder
 
 This Windows development command captures the folder and sends the raw snapshot to an AppContainer helper. The helper validates and compiles the flat text-and-rectangle package and prepares its manifest-selected script and binding table. The host decodes the flat scene and independently derives each initial binding value from it. After the preparation helper exits and its profile is removed, a separate AppContainer worker runs the one-shot script. The existing preview bridge validates the returned scene transaction.
 
+The script program accepts 1 through 32,768 UTF-8 bytes without NUL characters. Preparation checks this limit before copying the script into the program. A package above the limit fails during preparation, before the script execution worker starts.
+
+The local boundary regression executed a 32,768-byte script and rejected a 32,769-byte script during preparation. It verified both profile cleanups for the accepted case and preparation-only cleanup for the rejected case. All 42 headless cases passed. Local report: `target/script-preview-validation/e537f60bbf8048888b26fe71de26632a/summary.json`.
+
 The November 26, 2026 regression accepted a valid update, rejected a runtime exception, and verified that an oversized binding table and a missing script stopped before launching the execution worker. All 38 cases passed. Local report: `target/script-preview-validation/c36cb122d71749cfa9248c1627d4264a/summary.json`.
 
 #### Isolated script package preview

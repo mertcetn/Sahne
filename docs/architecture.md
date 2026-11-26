@@ -794,6 +794,8 @@ The live package preview caps per-event logging for frames, snapshot consumption
 
 The headless isolated check extends the package intake stream with a bounded script program frame after the flat scene. The host checks the preparation session and derives the exact initial binding values from the independently decoded scene before authorizing the program. The execution session uses a separate AppContainer profile and the existing scene transaction bridge. Both profiles are cleaned up by their supervisors. See [Isolated script package check](m4-scene-transactions.md#isolated-script-package-check).
 
+Package preparation checks the script source's transport limit before copying it into the program. The control-frame codec also enforces the limit while encoding and decoding.
+
 ## 112. M4 isolated package preparation for visible script modes
 
 The one-shot and live isolated script modes consume the validated preparation result before creating the event loop. The preview retains the initial scene and starts the separate execution worker after the first presentation. The live mode uses the same Windows lifecycle and host timer bridge as the trusted live preview. See [Isolated script package preview](m4-scene-transactions.md#isolated-script-package-preview).

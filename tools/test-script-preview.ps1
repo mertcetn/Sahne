@@ -61,6 +61,8 @@ $cases = @(
     @{ Name = 'intake-html-over-limit'; Intake = $true; Script = '() => {}'; HtmlBytes = (1024 * 1024) + 1; Reject = 'compilation' }
     @{ Name = 'intake-html-at-limit'; Intake = $true; Script = '() => {}'; HtmlBytes = 1024 * 1024 }
     @{ Name = 'isolated-script-changed'; Isolated = $true; Script = '(document) => { document.getElementById("status").textContent = "Updated"; }' }
+    @{ Name = 'isolated-script-source-at-limit'; Isolated = $true; ScriptBytes = 32 * 1024; Script = '(document) => { document.getElementById("status").textContent = "Updated"; }' }
+    @{ Name = 'isolated-script-source-over-limit'; Isolated = $true; ScriptBytes = (32 * 1024) + 1; Script = '(document) => { document.getElementById("status").textContent = "Updated"; }'; Reject = 'script preparation' }
     @{ Name = 'isolated-script-runtime-rejected'; Isolated = $true; Script = '() => { throw new Error("private-fixture-error"); }'; RuntimeReject = $true }
     @{ Name = 'isolated-script-too-many-bindings'; Isolated = $true; Targets = 33; Script = '() => {}'; Reject = 'script preparation' }
     @{ Name = 'isolated-script-missing-source'; Isolated = $true; Reject = 'validation' }
@@ -95,6 +97,14 @@ $results = foreach ($case in $cases) {
     }
     if ($case.ContainsKey('Script')) {
         [IO.File]::WriteAllText((Join-Path $inputFolder 'update.js'), $case.Script)
+    }
+    if ($case.ContainsKey('ScriptBytes')) {
+        $scriptPath = Join-Path $inputFolder 'update.js'
+        $padding = $case.ScriptBytes - (Get-Item -LiteralPath $scriptPath).Length
+        [IO.File]::AppendAllText($scriptPath, ' ' * $padding)
+        if ((Get-Item -LiteralPath $scriptPath).Length -ne $case.ScriptBytes) {
+            throw "Incorrect script fixture size for $($case.Name)"
+        }
     }
     if ($case.ContainsKey('HtmlBytes')) {
         $htmlPath = Join-Path $inputFolder 'index.html'

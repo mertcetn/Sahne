@@ -34,6 +34,7 @@ pub fn prepare(folder: &str) -> Result<Prepared> {
         ".js",
         "script",
     )?;
+    wallpaper_protocol::validate_scene_script_source(source)?;
     let targets = compiled.script_targets();
     let initial = wallpaper_protocol::initial_scene_edits(compiled.scene(), &targets)?;
     let program = wallpaper_protocol::Message {

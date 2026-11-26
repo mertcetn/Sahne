@@ -16,6 +16,7 @@ pub fn script_program(
         ".js",
         "script",
     )?;
+    wallpaper_protocol::validate_scene_script_source(source)?;
     let targets = compiled.script_targets();
     let initial = initial_scene_edits(compiled.scene(), &targets)?;
     let program = Message {

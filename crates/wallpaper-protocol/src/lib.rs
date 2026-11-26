@@ -5,7 +5,9 @@ use std::{
     io::{self, Read, Write},
 };
 mod scene;
-pub use scene::{SCENE_REJECT_CODE, accept_scene_batch, initial_scene_edits};
+pub use scene::{
+    SCENE_REJECT_CODE, accept_scene_batch, initial_scene_edits, validate_scene_script_source,
+};
 use wallpaper_scene::transaction::Edit;
 
 pub const PROTOCOL_VERSION: u16 = 1;

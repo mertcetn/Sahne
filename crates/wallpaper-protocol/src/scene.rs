@@ -32,11 +32,17 @@ fn check_script_size(size: usize) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn encode_script_source(output: &mut Vec<u8>, source: &str) -> Result<()> {
+/// Validate source transport limits before copying or framing the source.
+pub fn validate_scene_script_source(source: &str) -> Result<()> {
     check_script_size(source.len())?;
     if source.contains('\0') {
         return Err(Error::Invalid("scene script contains a NUL byte"));
     }
+    Ok(())
+}
+
+pub(super) fn encode_script_source(output: &mut Vec<u8>, source: &str) -> Result<()> {
+    validate_scene_script_source(source)?;
     output.extend_from_slice(&(source.len() as u16).to_le_bytes());
     output.extend_from_slice(source.as_bytes());
     Ok(())
