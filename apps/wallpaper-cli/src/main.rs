@@ -7,6 +7,7 @@ const LOCAL_PACKAGE_HELP: &str = "\
 --check-trusted-package <absolute-folder> <flat|groups> validates and compiles a local native package on Windows.
 --export-trusted-package <absolute-folder> <flat|groups> also writes its binary version 2 provenance record to stdout.
 --verify-trusted-package <absolute-folder> <flat|groups> checks a binary record from stdin against that folder.
+--check-trusted-script-package <absolute-folder> validates a flat package and checks its script initialization frame without executing JavaScript.
 Use local packages you trust. These developer commands run in the CLI process.";
 
 fn main() -> ExitCode {
@@ -71,6 +72,10 @@ fn main() -> ExitCode {
         [arg] if arg == "--compiled-provenance-fixture" => provenance_fixture(None, false),
         [arg, name] if arg == "--compiled-provenance-fixture" => {
             provenance_fixture(Some(name), false)
+        }
+        #[cfg(windows)]
+        [arg, path] if arg == "--check-trusted-script-package" => {
+            local_package::run(path, "flat", local_package::Action::CheckScript)
         }
         #[cfg(windows)]
         [arg, path, mode]

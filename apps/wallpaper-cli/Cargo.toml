@@ -12,6 +12,7 @@ wallpaper-media = { path = "../../crates/wallpaper-media" }
 
 [target.'cfg(windows)'.dependencies]
 wallpaper-platform = { path = "../../crates/wallpaper-platform" }
+wallpaper-protocol = { path = "../../crates/wallpaper-protocol" }
 
 [lints]
 workspace = true

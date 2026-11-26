@@ -1794,6 +1794,7 @@ dependencies = [
  "wallpaper-compiler",
  "wallpaper-media",
  "wallpaper-platform",
+ "wallpaper-protocol",
  "wallpaper-scene",
 ]
 

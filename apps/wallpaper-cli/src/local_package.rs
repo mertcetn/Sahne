@@ -10,6 +10,7 @@ pub enum Action {
     Check,
     Export,
     Verify,
+    CheckScript,
 }
 
 pub fn run(path: &str, mode: &str, action: Action) -> ExitCode {
@@ -37,6 +38,30 @@ pub fn run(path: &str, mode: &str, action: Action) -> ExitCode {
             Action::Verify => {
                 verify_compiled(io::stdin().lock(), &package, viewport, mode)?;
                 println!("Compiled record matches the trusted package.");
+            }
+            Action::CheckScript => {
+                let compiled = wallpaper_compiler::compile(&package, viewport)?;
+                wallpaper_media::validate_assets(compiled.scene(), compiled.images())?;
+                let script = compiled.script().ok_or("Package must declare a script")?;
+                let source = package.require_text(script, ".js", "script")?;
+                let targets = compiled.script_targets();
+                let count = targets.len();
+                wallpaper_protocol::write_frame(
+                    &mut io::sink(),
+                    &wallpaper_protocol::Message {
+                        session: 1,
+                        sequence: 2,
+                        base_revision: 0,
+                        body: wallpaper_protocol::Body::SceneProgram {
+                            targets,
+                            source: source.to_owned(),
+                        },
+                    },
+                )?;
+                println!(
+                    "Trusted script package validated: {count} bindings, {} source bytes.",
+                    source.len()
+                );
             }
         }
         Ok::<(), Box<dyn std::error::Error>>(())

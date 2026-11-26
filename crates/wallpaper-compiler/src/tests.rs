@@ -114,6 +114,26 @@ fn viewport() -> Viewport {
 }
 
 #[test]
+fn script_targets_prefer_span_text_and_skip_unbound_nodes() {
+    let package = package(
+        r#"<span id="label" style="width:100px;height:24px;background-color:#222222">Text</span>
+           <div id="panel" style="width:100px;height:24px;background-color:#333333"></div>
+           <div style="width:100px;height:24px;background-color:#444444"></div>"#,
+        "",
+    );
+    let compiled = compile(&package, viewport()).unwrap();
+    let label = &compiled.symbols()["label"];
+    assert_eq!(label.len(), 2);
+    assert_eq!(
+        compiled.script_targets(),
+        std::collections::BTreeMap::from([
+            ("label".to_owned(), label[1]),
+            ("panel".to_owned(), compiled.symbols()["panel"][0]),
+        ])
+    );
+}
+
+#[test]
 fn original_static_sources_compile_to_expected_independently_validated_scene() {
     let package = fixtures::static_package().unwrap();
     let compiled = compile(&package, viewport()).unwrap();

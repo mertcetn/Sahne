@@ -81,6 +81,21 @@ The worker evaluates the source as a callback expression and runs it with the ex
 
 The scripted, typed and timer probes, three JavaScript controls and the headless live clock check passed. Local AppContainer report at `target/sandbox-validation/6fd0d656a93741899e47418014b6cb79/`.
 
+### Trusted script package check
+
+On Windows, build the developer CLI and pass the absolute path to a trusted local package folder.
+
+```powershell
+cargo build --release -p wallpaper-cli --locked
+target/release/wallpaper-cli.exe --check-trusted-script-package $folder
+```
+
+The command collects the package, compiles a flat scene and validates its image assets. It resolves the declared JavaScript entry and checks the candidate bindings and source with the same initialization encoder used by the sandbox probe. A named span with text and a background contributes its text node. A named element with a single rectangle contributes that rectangle. Image nodes and unnamed elements contribute no binding. The command prints the binding count and source size. It uses the existing workspace protocol crate and adds no third-party dependency.
+
+Run this check only on packages you trust. It parses content in the CLI process and writes the encoded frame to a sink. The command performs no JavaScript evaluation or rendering. A successful check confirms the frame can be encoded. Runtime behavior and creator-package execution require separate validation.
+
+The local release check rejected a missing script and a script over 32 KiB. It accepted a bounded script containing a top-level throw, confirming that it did not evaluate the source. The embedded `scene-script` AppContainer probe passed with the shared target resolver. Local report at `target/sandbox-validation/1b45d80cd3f147669c65e37b65337e09/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

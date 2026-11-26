@@ -633,3 +633,7 @@ The host can send a bounded author-ID to node-ID table during worker initializat
 ## 72. M4 manifest-selected script source
 
 The scripted development probe resolves the manifest's script reference from the same validated embedded package used for scene compilation. The host sends the UTF-8 source and its binding table in one bounded initialization frame. The AppContainer worker checks the envelope and evaluates the received source within its existing QuickJS deadline, memory and stack limits. See [Manifest-selected fixture script](m4-scene-transactions.md#manifest-selected-fixture-script).
+
+## 73. M4 trusted folder script preparation
+
+The Windows developer CLI uses the trusted package collector, flat compiler and script IPC encoder to check whether a local package fits worker initialization. The flat compiler derives candidate targets shared with the embedded probe. It selects a unique text node for an author element with text and uses a sole rectangle for a rectangle-only element. Session owners still select writable targets. See [Trusted script package check](m4-scene-transactions.md#trusted-script-package-check).

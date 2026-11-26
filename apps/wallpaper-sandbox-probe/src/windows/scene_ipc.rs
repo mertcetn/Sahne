@@ -137,29 +137,17 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
         .script()
         .ok_or("Missing compiled script reference")?;
     let source = package.require_text(script, ".js", "script")?.to_owned();
-    let node_for = |name: &str, supports: fn(&Content) -> bool| -> Result<u32> {
-        let ids = compiled
-            .symbols()
-            .get(name)
-            .ok_or("Missing compiled author ID")?;
-        let mut targets = compiled
-            .scene()
-            .scene()
-            .nodes
-            .iter()
-            .filter(|node| ids.contains(&node.id) && supports(&node.content));
-        let target = targets.next().ok_or("Missing compiled property target")?;
-        if targets.next().is_some() {
-            return Err("Ambiguous compiled property target".into());
-        }
-        Ok(target.id)
-    };
-    let clock = node_for("clock", |content| matches!(content, Content::Text { .. }))?;
-    let accent = node_for("accent", |content| matches!(content, Content::Text { .. }))?;
-    let accent_background = node_for("accent", |content| {
-        matches!(content, Content::Rectangle { .. })
-    })?;
-    if accent_background != SCRIPT_BACKGROUND_PROBE {
+    let targets = compiled.script_targets();
+    let (&clock, &accent) = targets
+        .get("clock")
+        .zip(targets.get("accent"))
+        .ok_or("Missing compiled clock bindings")?;
+    if !compiled.symbols()["accent"].contains(&SCRIPT_BACKGROUND_PROBE)
+        || !matches!(
+            content(compiled.scene(), SCRIPT_BACKGROUND_PROBE),
+            Some(Content::Rectangle { .. })
+        )
+    {
         return Err("Embedded rejection fixture changed its background node".into());
     }
     Ok(CompiledScriptScene {
@@ -168,6 +156,15 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
         accent,
         source,
     })
+}
+
+fn content(scene: &ValidatedScene, id: u32) -> Option<&Content> {
+    scene
+        .scene()
+        .nodes
+        .iter()
+        .find(|node| node.id == id)
+        .map(|node| &node.content)
 }
 
 pub fn read_response(
@@ -217,14 +214,6 @@ pub fn read_response(
     } else {
         Color([255; 4])
     };
-    fn content(scene: &ValidatedScene, id: u32) -> Option<&Content> {
-        scene
-            .scene()
-            .nodes
-            .iter()
-            .find(|node| node.id == id)
-            .map(|node| &node.content)
-    }
     let mut timer = if mode == Mode::Timer {
         Some(resumed_timer()?)
     } else {

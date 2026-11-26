@@ -33,6 +33,34 @@ impl Compiled {
     pub fn symbols(&self) -> &BTreeMap<String, Vec<u32>> {
         &self.symbols
     }
+    /// Candidate flat-scene mutation targets. The session owner grants authority.
+    pub fn script_targets(&self) -> BTreeMap<String, u32> {
+        let nodes: BTreeMap<_, _> = self
+            .scene
+            .scene()
+            .nodes
+            .iter()
+            .map(|node| (node.id, &node.content))
+            .collect();
+        self.symbols
+            .iter()
+            .filter_map(|(name, ids)| {
+                let mut text = ids
+                    .iter()
+                    .filter(|id| matches!(nodes.get(*id), Some(Content::Text { .. })));
+                let target = match (text.next(), text.next(), ids.as_slice()) {
+                    (Some(id), None, _) => id,
+                    (None, None, [id])
+                        if matches!(nodes.get(id), Some(Content::Rectangle { .. })) =>
+                    {
+                        id
+                    }
+                    _ => return None,
+                };
+                Some((name.clone(), *target))
+            })
+            .collect()
+    }
     pub fn images(&self) -> &BTreeMap<u32, RgbaImage> {
         &self.images
     }
