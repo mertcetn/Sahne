@@ -48,3 +48,15 @@ These requirements remain active, rather than being declared passed by the fixed
 | M5 / M6 | Product/session/performance and declared Windows/Linux target matrices; no untested platform support claims |
 
 Known dependency findings, including QuickJS source/maintenance uncertainty and the separately assessed renderer lru/ttf-parser issues, remain in [JS dependency review](m2-js-dependencies.md) and [M1 dependency review](m1-dependencies.md). This task changes no dependency or feature and does not resolve those risks. No third-party sample has been executed by these fixtures.
+
+## M4 integrated evidence checkpoint
+
+Reviewed November 26, 2026. The Windows headless package regression passed 34 local cases. Its results cover the development paths below. The G2 gate stays open.
+
+| Area | Evidence | Remaining verification |
+| --- | --- | --- |
+| Native intake | The restricted helper checks the manifest, compiles flat HTML/CSS and decodes supported PNGs. The host validates returned scene and pixel data. | Scripted package preparation still uses trusted host parsing. Custom font processing and broader input handling remain pending. |
+| Live transactions | The preview accepts bounded script updates and retains the accepted revision after callback or scene rejection. | Run the transport failure suite through the integrated path, including stale/reordered frames and independent deadline and cleanup cases. |
+| Callback limits | Promise and DOM limits, staged edit limits, callback deadline, and pause/resume have local AppContainer evidence. | Broader callback and resource failure coverage, including host-death cleanup and OS isolation review. |
+
+See [Windows AppContainer intake check](m3-manifest.md#windows-appcontainer-intake-check), [integrated script regression](m4-scene-transactions.md#integrated-script-preview-regression), and [live trusted package lifecycle](m4-timers.md#live-trusted-package-lifecycle-preview).
