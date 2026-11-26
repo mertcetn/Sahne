@@ -761,3 +761,7 @@ After a nonce acknowledgement, the intake helper sends a versioned stream contai
 ## 104. M4 sandboxed static package window
 
 The sandboxed package preview consumes the same validated intake result as the headless check. The application retains the flat scene and decoded pixels so it can rebuild GPU resources if the window surface is recreated. The flat renderer rechecks image bindings and device dimension limits before upload. Text shaping uses the bundled application font. Package scripts and custom fonts are outside this window path. See [Windows sandboxed package preview](m3-manifest.md#windows-sandboxed-package-preview).
+
+## 105. M4 sandboxed static package desktop attachment
+
+The static package preview can pass the verified scene and image data to the existing Windows desktop attachment. Package validation and helper cleanup complete before Explorer attachment. When the surface is recreated, the application uses its retained scene and pixels.

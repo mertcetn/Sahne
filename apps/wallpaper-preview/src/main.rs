@@ -85,7 +85,7 @@ fn main() -> Result<()> {
                     "--check-package-intake <absolute-folder> validates and compiles a flat package in AppContainer without rendering or running a script."
                 );
                 println!(
-                    "--sandboxed-package-preview <absolute-folder> [--seconds 1..3600] displays the AppContainer-compiled static scene in a window."
+                    "--sandboxed-package-preview <absolute-folder> [--desktop] [--seconds 1..3600] displays the AppContainer-compiled static scene in a window or behind Windows icons."
                 );
                 return Ok(());
             }
@@ -170,8 +170,7 @@ fn main() -> Result<()> {
         }
     }
     if sandbox_package_folder.is_some()
-        && (desktop_mode
-            || compiled_example.is_some()
+        && (compiled_example.is_some()
             || worker_snapshot.is_some()
             || worker_live.is_some()
             || retained_scene_folder.is_some()
@@ -182,7 +181,7 @@ fn main() -> Result<()> {
             || test_clock_rollover
             || reference_pose)
     {
-        return Err("Sandboxed package preview accepts a folder and optional --seconds".into());
+        return Err("Sandboxed package preview accepts a folder, --desktop and --seconds".into());
     }
     if (retained_scene_folder.is_some() || script_package_folder.is_some())
         && (compiled_example.is_some()

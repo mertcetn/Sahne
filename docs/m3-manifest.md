@@ -78,6 +78,8 @@ This development command opens a D3D12 window after the same intake checks pass 
 
 On November 26, 2026, the user confirmed that both the `Sahne / PNG` text and the checkerboard image from `examples/static-image` were visible in the 960×600 window. The log records AppContainer profile cleanup before the first D3D12 presentation. Local evidence is under `target/m4-sandbox-window-visual/d6d6058798d8455cac2366fcecac332a/`.
 
+Add `--desktop` to request the same static scene behind Windows icons. The application validates the package before attaching to the desktop. Visual verification of this package mode on the desktop is pending.
+
 Callers establish regular-file and containment guarantees before passing readers and supply operational deadlines if needed. The Windows directory collector still needs handle-relative opens and reparse rejection. Path checks followed by a fresh open by name leave a window for directory replacement. The reader interface gives that future collector a single bounded ingestion path. [Windows file opening semantics](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)
 
 ## Windows handle-relative opening
