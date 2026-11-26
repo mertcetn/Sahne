@@ -237,3 +237,33 @@ fn rejection() -> Body {
 
 #[cfg(test)]
 mod tests;
+/// Derive the only supported initial script properties from a validated flat scene.
+pub fn initial_scene_edits(
+    scene: &wallpaper_scene::ValidatedScene,
+    targets: &BTreeMap<String, u32>,
+) -> Result<Vec<Edit>> {
+    use wallpaper_scene::Content;
+    check_binding_header(0, targets.len())?;
+    let nodes: BTreeMap<_, _> = scene
+        .scene()
+        .nodes
+        .iter()
+        .map(|node| (node.id, &node.content))
+        .collect();
+    let mut initial = Vec::new();
+    for &node in targets.values() {
+        let color = match nodes.get(&node) {
+            Some(Content::Text { text, color, .. }) => {
+                initial.push(Edit::Text {
+                    node,
+                    value: text.clone(),
+                });
+                *color
+            }
+            Some(Content::Rectangle { color }) => *color,
+            _ => return Err(Error::Invalid("unsupported script binding target")),
+        };
+        initial.push(Edit::Color { node, value: color });
+    }
+    Ok(initial)
+}

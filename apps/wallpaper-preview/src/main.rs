@@ -62,6 +62,17 @@ fn main() -> Result<()> {
     let mut args = std::env::args().skip(1).peekable();
     if args
         .peek()
+        .is_some_and(|arg| arg == "--check-isolated-script-preview")
+    {
+        args.next();
+        let folder = args.next().ok_or("Expected an absolute package folder")?;
+        if args.next().is_some() {
+            return Err("Isolated script check takes exactly one folder".into());
+        }
+        return live_clock::check_package(script_package::prepare_isolated(&folder)?);
+    }
+    if args
+        .peek()
         .is_some_and(|arg| arg == "--check-package-intake")
     {
         args.next();
@@ -85,6 +96,9 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--check-package-intake <absolute-folder> validates and compiles a flat package in AppContainer without rendering or running a script."
+                );
+                println!(
+                    "--check-isolated-script-preview <absolute-folder> prepares and executes a flat script package in separate AppContainer workers without rendering."
                 );
                 println!(
                     "--check-trusted-script-lifecycle <absolute-folder> checks pause, resume and one script tick without a window."

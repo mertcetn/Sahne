@@ -1,6 +1,36 @@
-//! Original fixed sources only; no filesystem input or script execution.
+//! Package preparation and fixed compiler fixtures. Sources are supplied in memory.
 use super::Result;
 use wallpaper_format::{ErrorCode, Package};
+use wallpaper_protocol::{Body, Message, initial_scene_edits, write_frame};
+
+pub fn script_program(
+    package: &Package,
+    compiled: &wallpaper_compiler::Compiled,
+    session: u64,
+) -> Result<Message> {
+    if !compiled.images().is_empty() {
+        return Err("Script package must use text and rectangles only".into());
+    }
+    let source = package.require_text(
+        compiled.script().ok_or("Expected package script")?,
+        ".js",
+        "script",
+    )?;
+    let targets = compiled.script_targets();
+    let initial = initial_scene_edits(compiled.scene(), &targets)?;
+    let program = Message {
+        session,
+        sequence: 3,
+        base_revision: 0,
+        body: Body::SceneProgram {
+            targets,
+            source: source.into(),
+            initial,
+        },
+    };
+    write_frame(&mut std::io::sink(), &program)?;
+    Ok(program)
+}
 
 pub const RESULT_BIT: u32 = 1 << 18;
 pub const COMPILER_RESULT_BIT: u32 = 1 << 19;

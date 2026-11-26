@@ -10,7 +10,7 @@ use wallpaper_media::flat_output::{self, FlatOutput};
 use wallpaper_protocol::{Body, Message, read_frame, write_frame};
 
 enum IntakeReply {
-    Compiled(FlatOutput),
+    Compiled(FlatOutput, Option<Body>),
     Rejected(&'static str),
 }
 
@@ -26,6 +26,15 @@ pub fn check(folder: &str) -> Result<()> {
 }
 
 pub fn load(folder: &str) -> Result<FlatOutput> {
+    load_package(folder, false).map(|(output, _)| output)
+}
+
+pub fn load_script(folder: &str) -> Result<(FlatOutput, Body)> {
+    let (output, program) = load_package(folder, true)?;
+    Ok((output, program.ok_or("Missing isolated script program")?))
+}
+
+fn load_package(folder: &str, scripted: bool) -> Result<(FlatOutput, Option<Body>)> {
     let snapshot = wallpaper_platform::package_directory::collect_snapshot(folder)?;
     let exe = std::env::current_exe()?.with_file_name("wallpaper-sandbox-probe.exe");
     let session = wallpaper_sandbox::random_id()?;
@@ -37,7 +46,18 @@ pub fn load(folder: &str) -> Result<FlatOutput> {
         mut sandbox,
         mut input,
         mut output,
-    } = wallpaper_sandbox::spawn_probe(&exe, &root, session, "package-snapshot", 0, None)?;
+    } = wallpaper_sandbox::spawn_probe(
+        &exe,
+        &root,
+        session,
+        if scripted {
+            "package-script-snapshot"
+        } else {
+            "package-snapshot"
+        },
+        0,
+        None,
+    )?;
 
     let (sender, receiver) = mpsc::sync_channel(1);
     let channel = thread::Builder::new()
@@ -65,7 +85,16 @@ pub fn load(folder: &str) -> Result<FlatOutput> {
                 reply.check_context(session, 2, 0)?;
                 let result = match reply.body {
                     Body::Pong { nonce: echoed } if echoed == nonce => {
-                        IntakeReply::Compiled(flat_output::read(&mut output)?)
+                        let scene = flat_output::read(&mut output)?;
+                        let program = if scripted {
+                            let message = read_frame(&mut output)?
+                                .ok_or("Missing isolated script program")?;
+                            message.check_context(session, 3, 0)?;
+                            Some(message.body)
+                        } else {
+                            None
+                        };
+                        IntakeReply::Compiled(scene, program)
                     }
                     Body::Reject { code: 1, message } if message == "Package validation failed" => {
                         IntakeReply::Rejected("Package rejected by AppContainer validation")
@@ -74,6 +103,11 @@ pub fn load(folder: &str) -> Result<FlatOutput> {
                         if message == "Package compilation failed" =>
                     {
                         IntakeReply::Rejected("Package rejected by AppContainer compilation")
+                    }
+                    Body::Reject { code: 3, message }
+                        if scripted && message == "Package script preparation failed" =>
+                    {
+                        IntakeReply::Rejected("Package rejected by AppContainer script preparation")
                     }
                     _ => return Err("Unexpected package helper reply".into()),
                 };
@@ -115,7 +149,7 @@ pub fn load(folder: &str) -> Result<FlatOutput> {
         return Err("Package helper did not exit cleanly".into());
     }
     match result {
-        IntakeReply::Compiled(compiled) => Ok(compiled),
+        IntakeReply::Compiled(compiled, program) => Ok((compiled, program)),
         IntakeReply::Rejected(reason) => Err(reason.into()),
     }
 }

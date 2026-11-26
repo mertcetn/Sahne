@@ -167,7 +167,10 @@ fn worker(args: &[String]) -> Result<()> {
     let Body::Ping { nonce } = request.body else {
         return Err("Expected Ping".into());
     };
-    if case == "package-snapshot" {
+    if matches!(
+        case.as_str(),
+        "package-snapshot" | "package-script-snapshot"
+    ) {
         let snapshot = wallpaper_format::PackageSnapshot::read_from(&mut input)?;
         require_eof(&mut input)?;
         let compiled = match snapshot.parse() {
@@ -181,20 +184,39 @@ fn worker(args: &[String]) -> Result<()> {
                     height: 1080,
                     background: wallpaper_scene::Color([0; 4]),
                 };
-                wallpaper_compiler::compile(&package, viewport).map_err(|_| Body::Reject {
-                    code: 2,
-                    message: "Package compilation failed".into(),
-                })
+                wallpaper_compiler::compile(&package, viewport)
+                    .map_err(|_| Body::Reject {
+                        code: 2,
+                        message: "Package compilation failed".into(),
+                    })
+                    .and_then(|compiled| {
+                        let program = if case == "package-script-snapshot" {
+                            Some(
+                                package::script_program(&package, &compiled, session).map_err(
+                                    |_| Body::Reject {
+                                        code: 3,
+                                        message: "Package script preparation failed".into(),
+                                    },
+                                )?,
+                            )
+                        } else {
+                            None
+                        };
+                        Ok((compiled, program))
+                    })
             }
         };
         match compiled {
-            Ok(compiled) => {
+            Ok((compiled, program)) => {
                 write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
                 wallpaper_media::flat_output::write(
                     &mut output,
                     compiled.scene(),
                     compiled.images(),
                 )?;
+                if let Some(program) = program {
+                    write_frame(&mut output, &program)?;
+                }
             }
             Err(body) => write_frame(&mut output, &envelope(session, 2, body))?,
         }

@@ -1,7 +1,7 @@
 //! Trusted flat package preparation for the one-shot worker bridge.
 use super::*;
 use wallpaper_protocol::Body;
-use wallpaper_scene::{Content, ValidatedScene, transaction::Edit};
+use wallpaper_scene::ValidatedScene;
 
 pub struct Prepared {
     pub scene: Arc<ValidatedScene>,
@@ -35,29 +35,7 @@ pub fn prepare(folder: &str) -> Result<Prepared> {
         "script",
     )?;
     let targets = compiled.script_targets();
-    let mut initial = Vec::new();
-    for &node in targets.values() {
-        let content = &compiled
-            .scene()
-            .scene()
-            .nodes
-            .iter()
-            .find(|item| item.id == node)
-            .ok_or("Missing compiled script target")?
-            .content;
-        let color = match content {
-            Content::Text { text, color, .. } => {
-                initial.push(Edit::Text {
-                    node,
-                    value: text.clone(),
-                });
-                *color
-            }
-            Content::Rectangle { color } => *color,
-            _ => return Err("Unsupported script binding content".into()),
-        };
-        initial.push(Edit::Color { node, value: color });
-    }
+    let initial = wallpaper_protocol::initial_scene_edits(compiled.scene(), &targets)?;
     let program = wallpaper_protocol::Message {
         session: 1,
         sequence: 2,
@@ -72,6 +50,26 @@ pub fn prepare(folder: &str) -> Result<Prepared> {
     Ok(Prepared {
         scene: Arc::new(compiled.into_scene()),
         program: program.body,
+        lifecycle: Lifecycle::OneShot,
+    })
+}
+
+pub fn prepare_isolated(folder: &str) -> Result<Prepared> {
+    let (output, program) = super::package_intake::load_script(folder)?;
+    let Body::SceneProgram {
+        targets, initial, ..
+    } = &program
+    else {
+        return Err("Expected isolated script program".into());
+    };
+    if !output.images.is_empty()
+        || wallpaper_protocol::initial_scene_edits(&output.scene, targets)? != *initial
+    {
+        return Err("Isolated script bindings do not match the validated scene".into());
+    }
+    Ok(Prepared {
+        scene: Arc::new(output.scene),
+        program,
         lifecycle: Lifecycle::OneShot,
     })
 }

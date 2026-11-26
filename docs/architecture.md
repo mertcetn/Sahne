@@ -789,3 +789,7 @@ The trusted live package preview uses the existing Windows lifecycle subscriptio
 A worker callback rejection is terminal. The host checks its envelope and verifies that the scene transaction closed with the same accepted revision and snapshot. A host-rejected batch still receives a rejection reply. A worker that reports callback failure exits on its own, so the host proceeds to cleanup without writing to its pipe.
 
 The live package preview caps per-event logging for frames, snapshot consumption and lifecycle acknowledgements independently. Presentation and mailbox processing continue after the log limits, and the exit summary reports their totals.
+
+## 111. M4 isolated script package preparation and execution
+
+The headless isolated check extends the package intake stream with a bounded script program frame after the flat scene. The host checks the preparation session and derives the exact initial binding values from the independently decoded scene before authorizing the program. The execution session uses a separate AppContainer profile and the existing scene transaction bridge. Both profiles are cleaned up by their supervisors. See [Isolated script package check](m4-scene-transactions.md#isolated-script-package-check).
