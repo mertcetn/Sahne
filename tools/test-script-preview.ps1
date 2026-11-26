@@ -33,8 +33,12 @@ $cases = @(
     @{ Name = 'promise-budget'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; for (let i = 0; i < 65; i++) Promise.resolve().then(() => {}); }' }
     @{ Name = 'missing-script' }
     @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; Padded = $true }
-    @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = $true }
-    @{ Name = 'intake-missing-script'; Intake = $true; Reject = $true }
+    @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = 'validation' }
+    @{ Name = 'intake-missing-script'; Intake = $true; Reject = 'validation' }
+    @{ Name = 'intake-invalid-html'; Intake = $true; Script = '() => {}'; Html = '<unknown></unknown>'; Reject = 'compilation' }
+    @{ Name = 'intake-invalid-css'; Intake = $true; Script = '() => {}'; Html = '<span style="position:fixed">Ready</span>'; Reject = 'compilation' }
+    @{ Name = 'intake-image'; Intake = $true; Image = 'valid' }
+    @{ Name = 'intake-invalid-image'; Intake = $true; Image = 'invalid'; Reject = 'compilation' }
 )
 $manifest = '{"formatVersion":1,"apiVersion":1,"id":"probe.integration","name":"Script preview validation","entry":"index.html","script":"update.js","permissions":[],"preferredFps":30}'
 Write-Host "Script preview validation reports in $run"
@@ -44,6 +48,18 @@ $results = foreach ($case in $cases) {
     $manifestSource = if ($case.ContainsKey('Manifest')) { $case.Manifest } else { $manifest }
     [IO.File]::WriteAllText((Join-Path $inputFolder 'manifest.json'), $manifestSource)
     [IO.File]::WriteAllText((Join-Path $inputFolder 'index.html'), '<span id="status" style="width:400px;height:24px">Ready</span>')
+    if ($case.ContainsKey('Html')) {
+        [IO.File]::WriteAllText((Join-Path $inputFolder 'index.html'), $case.Html)
+    }
+    if ($case.ContainsKey('Image')) {
+        $example = Join-Path $repo 'examples/static-image'
+        foreach ($file in @('manifest.json', 'index.html', 'style.css', 'checker.png')) {
+            Copy-Item -LiteralPath (Join-Path $example $file) -Destination $inputFolder
+        }
+        if ($case.Image -eq 'invalid') {
+            [IO.File]::WriteAllBytes((Join-Path $inputFolder 'checker.png'), [byte[]]@(0, 1, 2))
+        }
+    }
     if ($case.ContainsKey('Script')) {
         [IO.File]::WriteAllText((Join-Path $inputFolder 'update.js'), $case.Script)
     }
@@ -62,11 +78,11 @@ $results = foreach ($case in $cases) {
     $passed = $result.Completion -eq 'Exited' -and "$stdout$stderr" -notmatch 'private-fixture-error'
     if ($case.ContainsKey('Intake')) {
         $cleanupCount = [regex]::Matches($stdout, '(?m)^Package helper profile cleanup verified\.\r?$').Count
-        $validated = $stdout -match '(?m)^Package validated in AppContainer\.\r?$'
+        $validated = $stdout -match '(?m)^Package validated and compiled in AppContainer\.\r?$'
         $passed = $passed -and $cleanupCount -eq 1
         if ($case.ContainsKey('Reject')) {
             $passed = $passed -and $result.ExitCode -ne 0 -and -not $validated -and
-                $stderr.Contains('Package rejected by AppContainer validation')
+                $stderr.Contains("Package rejected by AppContainer $($case.Reject)")
         }
         else {
             $passed = $passed -and $result.ExitCode -eq 0 -and $validated -and [string]::IsNullOrWhiteSpace($stderr)

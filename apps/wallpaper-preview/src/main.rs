@@ -81,7 +81,7 @@ fn main() -> Result<()> {
                     "--trusted-script-preview <absolute-folder> displays a trusted flat package and its AppContainer update. Add --desktop to attach it behind Windows icons. --check-trusted-script-preview <absolute-folder> checks that exchange without a window."
                 );
                 println!(
-                    "--check-package-intake <absolute-folder> checks package validation in AppContainer without rendering or running a script."
+                    "--check-package-intake <absolute-folder> validates and compiles a flat package in AppContainer without rendering or running a script."
                 );
                 return Ok(());
             }

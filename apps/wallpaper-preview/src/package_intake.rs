@@ -20,7 +20,7 @@ pub fn check(folder: &str) -> Result<()> {
     let channel = thread::Builder::new()
         .name("package-intake-channel".into())
         .spawn(move || {
-            let result = (|| -> Result<bool> {
+            let result = (|| -> Result<Option<&'static str>> {
                 let hello = read_frame(&mut output)?.ok_or("Missing package helper Hello")?;
                 hello.check_context(session, 1, 0)?;
                 if hello.body != (Body::Hello { api_version: 1 }) {
@@ -40,17 +40,22 @@ pub fn check(folder: &str) -> Result<()> {
                 drop(input);
                 let reply = read_frame(&mut output)?.ok_or("Missing package helper reply")?;
                 reply.check_context(session, 2, 0)?;
-                let accepted = match reply.body {
-                    Body::Pong { nonce: echoed } if echoed == nonce => true,
+                let rejection = match reply.body {
+                    Body::Pong { nonce: echoed } if echoed == nonce => None,
                     Body::Reject { code: 1, message } if message == "Package validation failed" => {
-                        false
+                        Some("Package rejected by AppContainer validation")
+                    }
+                    Body::Reject { code: 2, message }
+                        if message == "Package compilation failed" =>
+                    {
+                        Some("Package rejected by AppContainer compilation")
                     }
                     _ => return Err("Unexpected package helper reply".into()),
                 };
                 if read_frame(&mut output)?.is_some() {
                     return Err("Extra package helper reply".into());
                 }
-                Ok(accepted)
+                Ok(rejection)
             })()
             .map_err(|error| error.to_string());
             let _ = sender.send(result);
@@ -78,13 +83,13 @@ pub fn check(folder: &str) -> Result<()> {
     sandbox.cleanup_profile()?;
     joined.map_err(|_| "Package intake channel panicked")?;
     println!("Package helper profile cleanup verified.");
-    let accepted = reply??;
+    let rejection = reply??;
     if exit? != Some(0) {
         return Err("Package helper did not exit cleanly".into());
     }
-    if !accepted {
-        return Err("Package rejected by AppContainer validation".into());
+    if let Some(reason) = rejection {
+        return Err(reason.into());
     }
-    println!("Package validated in AppContainer.");
+    println!("Package validated and compiled in AppContainer.");
     Ok(())
 }

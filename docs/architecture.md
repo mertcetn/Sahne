@@ -748,4 +748,8 @@ The package snapshot has a versioned stream encoding for moving opaque file byte
 
 ## 101. M4 AppContainer package validation check
 
-The host captures the package without parsing its sources and sends the snapshot over inherited standard input after the versioned control handshake. It closes the input pipe after the snapshot. The AppContainer worker requires end of input, validates the native package and returns only a nonce acknowledgement or a fixed rejection. An independent host watchdog bounds the exchange and verifies worker shutdown and profile cleanup. Compilation, media and font processing, and rendering integration remain pending. See [Windows AppContainer intake check](m3-manifest.md#windows-appcontainer-intake-check).
+The host captures the package without parsing its sources and sends the snapshot over inherited standard input after the versioned control handshake. It closes the input pipe after the snapshot. The AppContainer worker requires end of input, validates the native package and returns only a nonce acknowledgement or a fixed rejection. An independent host watchdog bounds the exchange and verifies worker shutdown and profile cleanup. See [Windows AppContainer intake check](m3-manifest.md#windows-appcontainer-intake-check).
+
+## 102. M4 flat package compilation in AppContainer
+
+After package validation, the intake helper compiles the existing flat HTML/CSS subset for a fixed viewport and decodes supported PNG resources under the existing compiler, decoder and sandbox budgets. It discards the resulting scene and pixel buffers and sends a fixed compilation status to the host. Font processing and transport of validated scene output remain pending.
