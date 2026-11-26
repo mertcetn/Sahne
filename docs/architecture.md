@@ -697,3 +697,7 @@ The continuous UTC preview also subscribes to the interactive session display st
 ## 88. M4 callback deadlines and bounded diagnostics
 
 Scene callbacks check the monotonic deadline before returning staged edits and after lifecycle callbacks, in addition to the QuickJS interrupt hook. A script execution failure sends a correlated rejection with a fixed diagnostic. The host reports the phase without printing worker-provided text. See [Callback deadlines and diagnostics](m4-scene-transactions.md#callback-deadlines-and-diagnostics).
+
+## 89. M4 bounded Promise jobs for scene updates
+
+The one-shot scene callback keeps its staged DOM state until its Promise jobs drain. The worker runs at most 64 jobs under the callback's existing monotonic deadline and collects edits only after successful completion. Failure discards the staged changes. See [Bounded Promise jobs](m4-scene-transactions.md#bounded-promise-jobs).

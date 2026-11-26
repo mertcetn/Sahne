@@ -42,12 +42,14 @@
     const document = Object.freeze({
         getElementById(id) { return typeof id === "string" ? (ids[id] ?? null) : null; },
     });
-    callback(document, displayTime);
-    const edits = [];
-    for (let index = 0; index < states.length; index++) {
-        const state = states[index];
-        if (state.textDirty) edits[edits.length] = [index, 1, state.text];
-        if (state.colorDirty) edits[edits.length] = [index, 2, state.color];
-    }
-    return edits;
+    const result = callback(document, displayTime);
+    return [result, () => {
+        const edits = [];
+        for (let index = 0; index < states.length; index++) {
+            const state = states[index];
+            if (state.textDirty) edits[edits.length] = [index, 1, state.text];
+            if (state.colorDirty) edits[edits.length] = [index, 2, state.color];
+        }
+        return edits;
+    }];
 }

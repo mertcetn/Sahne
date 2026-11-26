@@ -1,6 +1,9 @@
 //! Fixed trusted fixtures only. The caller must already be a verified AppContainer worker.
 use super::Result;
-use rquickjs::{Context, Error, Function, Object, Runtime, context::intrinsic};
+use rquickjs::{
+    Array, Context, Error, Function, Object, Persistent, Runtime, Value, context::intrinsic,
+    promise::PromiseState,
+};
 use std::{
     cell::Cell,
     collections::BTreeMap,
@@ -148,11 +151,15 @@ impl RetainedCallbacks {
 
     pub fn edits(&self, bindings: &[Binding], display_time: &str) -> Result<Vec<Edit>> {
         let interrupted = arm_deadline(&self.runtime);
-        let edits = self.context.with(|ctx| {
+        let staged = self.context.with(|ctx| {
             let callbacks: Object = ctx.globals().get("registeredClock")?;
             let callback: Function = callbacks.get("tick")?;
-            run_scene_callback(&ctx, bindings, callback, display_time)
+            stage_scene_callback(&ctx, bindings, callback, display_time)
         })?;
+        check_callback_budget(&self.runtime, &interrupted)?;
+        let edits = self
+            .context
+            .with(|ctx| collect_scene_edits(&ctx, bindings, staged))?;
         check_callback_budget(&self.runtime, &interrupted)?;
         Ok(edits)
     }
@@ -169,10 +176,15 @@ impl RetainedCallbacks {
 }
 
 fn check_callback_budget(runtime: &Runtime, deadline: &Deadline) -> Result<()> {
-    if deadline.flag.load(Ordering::Relaxed)
-        || Instant::now() >= deadline.at
-        || runtime.is_job_pending()
-    {
+    check_deadline(deadline)?;
+    if runtime.is_job_pending() {
+        return Err("Scene callback left pending jobs beyond its execution budget".into());
+    }
+    Ok(())
+}
+
+fn check_deadline(deadline: &Deadline) -> Result<()> {
+    if deadline.flag.load(Ordering::Relaxed) || Instant::now() >= deadline.at {
         return Err("Scene callback exceeded its execution budget".into());
     }
     Ok(())
@@ -342,28 +354,50 @@ pub fn scene_edits(
         return Err("Clock fixture refuses non-AppContainer execution".into());
     }
     let (runtime, interrupted) = bounded_runtime()?;
-    let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
-    let edits = context.with(|ctx| {
+    let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
+    let rejected = Arc::new(AtomicBool::new(false));
+    let observed = Arc::clone(&rejected);
+    runtime.set_host_promise_rejection_tracker(Some(Box::new(move |_, _, _, handled| {
+        if !handled {
+            observed.store(true, Ordering::Relaxed);
+        }
+    })));
+    let staged = context.with(|ctx| {
         let callback: Function = ctx
             .eval(package_source.unwrap_or(include_str!("clock_fixture.js")))
             .map_err(|_| "Scene source did not evaluate to a callback")?;
-        run_scene_callback(&ctx, bindings, callback, display_time)
+        stage_scene_callback(&ctx, bindings, callback, display_time)
     })?;
+    for _ in 0..JOB_LIMIT {
+        check_deadline(&interrupted)?;
+        if !runtime
+            .execute_pending_job()
+            .map_err(|_| "Scene Promise job failed")?
+        {
+            break;
+        }
+    }
     check_callback_budget(&runtime, &interrupted)?;
+    let edits = context.with(|ctx| collect_scene_edits(&ctx, bindings, staged))?;
+    check_callback_budget(&runtime, &interrupted)?;
+    if rejected.load(Ordering::Relaxed) {
+        return Err("Scene callback had an unhandled promise rejection".into());
+    }
     Ok(edits)
 }
 
-fn run_scene_callback<'js>(
+struct StagedScene {
+    completion: Persistent<Value<'static>>,
+    collect: Persistent<Function<'static>>,
+}
+
+fn stage_scene_callback<'js>(
     ctx: &rquickjs::Ctx<'js>,
     bindings: &[Binding],
     callback: Function<'js>,
     value: &str,
-) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
-    use rquickjs::Array;
-    use wallpaper_scene::{
-        Color, MAX_TEXT_BYTES,
-        transaction::{Edit, MAX_BATCH_TEXT_BYTES, MAX_EDITS},
-    };
+) -> Result<StagedScene> {
+    use wallpaper_scene::transaction::MAX_EDITS;
 
     if !(1..=MAX_EDITS).contains(&bindings.len()) {
         return Err("Scene binding count outside bounds".into());
@@ -384,14 +418,38 @@ fn run_scene_callback<'js>(
     let staged: Array = adapter
         .call((input, callback, value))
         .map_err(|_| "Fixed clock callback failed")?;
-    let count = staged.len();
+    Ok(StagedScene {
+        completion: Persistent::save(ctx, staged.get::<Value>(0)?),
+        collect: Persistent::save(ctx, staged.get::<Function>(1)?),
+    })
+}
+
+fn collect_scene_edits(
+    ctx: &rquickjs::Ctx<'_>,
+    bindings: &[Binding],
+    staged: StagedScene,
+) -> Result<Vec<Edit>> {
+    use wallpaper_scene::{
+        MAX_TEXT_BYTES,
+        transaction::{MAX_BATCH_TEXT_BYTES, MAX_EDITS},
+    };
+    if staged
+        .completion
+        .restore(ctx)?
+        .into_promise()
+        .is_some_and(|promise| promise.state() != PromiseState::Resolved)
+    {
+        return Err("Scene callback promise did not fulfill".into());
+    }
+    let edits_array: Array = staged.collect.restore(ctx)?.call(())?;
+    let count = edits_array.len();
     if !(1..=MAX_EDITS).contains(&count) {
         return Err("Clock fixture edit count outside bounds".into());
     }
     let mut edits = Vec::with_capacity(count);
     let mut total = 0;
     for index in 0..count {
-        let edit: Array = staged.get(index)?;
+        let edit: Array = edits_array.get(index)?;
         let binding: usize = edit.get(0)?;
         let binding = bindings
             .get(binding)

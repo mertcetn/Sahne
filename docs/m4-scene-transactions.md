@@ -164,6 +164,14 @@ During a script failure, the worker returns rejection code 101 with a fixed diag
 
 Release checks exercised a throwing scene callback and a throwing resume callback. Both reported the failed phase, omitted the exception text and verified profile cleanup. The resume failure stopped before any scene transaction. The scripted scene, registered timer, interrupt and Promise job probes and headless rollover regression passed. Local regression report at `target/sandbox-validation/9d41ca529bf4467fb037cf10f14854cc/`.
 
+### Bounded Promise jobs
+
+The one-shot scene callback can use Promise microtasks. The worker runs at most 64 queued jobs within the same 100 ms deadline as the synchronous callback. It collects the DOM edits only after the queue is empty. If the script returns a Promise, it must be fulfilled by then. A rejection reported as unhandled by QuickJS also fails the callback. These failures use the bounded diagnostic path and send no partial scene batch.
+
+For example, a trusted script run by `--run-trusted-script-package` can return `Promise.resolve().then(() => { document.getElementById("status").textContent = "Updated"; })` from its callback. The retained lifecycle context still uses its synchronous callback contract. [QuickJS pending job API](https://docs.rs/rquickjs/0.14.0/rquickjs/struct.Runtime.html#method.execute_pending_job)
+
+The release check acknowledged synchronous and Promise writes in one batch and accepted a write in the 64th queued job. A 65-job queue, an unhandled rejection and an unresolved returned Promise each failed before the host acknowledged any edit. Profile cleanup passed for each run. Four AppContainer regressions and headless rollover also passed. Local report at `target/sandbox-validation/483dafb7748640e6ae42586a1ee70e75/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.
