@@ -703,6 +703,26 @@ fn wait_package_tick(
     }
 }
 
+fn accept_package_response(
+    output: &mut impl Read,
+    host: &mut HostScene,
+    session: u64,
+    sequence: u64,
+    base: u64,
+) -> WorkerResult<(Message, bool)> {
+    let batch = read_frame(output)?.ok_or("Missing package scene batch")?;
+    batch.check_context(session, sequence, base)?;
+    let worker_rejected = match &batch.body {
+        Body::Reject {
+            code: SCRIPT_FAILURE_CODE,
+            ..
+        } => true,
+        Body::SceneBatch { .. } => false,
+        _ => return Err("Unexpected package worker response".into()),
+    };
+    Ok((accept_scene_batch(host, batch), worker_rejected))
+}
+
 fn exchange_package(
     mut input: File,
     mut output: File,
@@ -770,17 +790,8 @@ fn exchange_package(
                 println!("Host dispatched scheduled package tick.");
             }
         }
-        let batch = read_frame(&mut output)?.ok_or("Missing package scene batch")?;
-        batch.check_context(session, sequence, base)?;
-        let worker_rejected = match &batch.body {
-            Body::Reject {
-                code: SCRIPT_FAILURE_CODE,
-                ..
-            } => true,
-            Body::SceneBatch { .. } => false,
-            _ => return Err("Unexpected package worker response".into()),
-        };
-        let ack = accept_scene_batch(&mut host, batch);
+        let (ack, worker_rejected) =
+            accept_package_response(&mut output, &mut host, session, sequence, base)?;
         if ack
             != frame(
                 session,
@@ -858,6 +869,67 @@ fn exchange_package(
         return Err("Invalid package worker completion".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod package_transport_tests {
+    use super::*;
+
+    #[test]
+    fn package_bridge_rejects_wrong_context_and_truncation_after_an_accepted_update() {
+        let session = 7;
+        let mut host = HostScene::new(
+            clock::initial_scene().unwrap(),
+            session,
+            &BTreeSet::from([clock::CLOCK_ID]),
+        )
+        .unwrap();
+        let batch = |session, sequence, base, value: &str| {
+            frame(
+                session,
+                sequence,
+                base,
+                Body::SceneBatch {
+                    edits: vec![Edit::Text {
+                        node: clock::CLOCK_ID,
+                        value: value.into(),
+                    }],
+                },
+            )
+        };
+        let mut first = Vec::new();
+        write_frame(&mut first, &batch(session, 1, 0, "12:34")).unwrap();
+        let result =
+            accept_package_response(&mut first.as_slice(), &mut host, session, 1, 0).unwrap();
+        assert_eq!(
+            result,
+            (frame(session, 1, 0, Body::SceneAck { revision: 1 }), false)
+        );
+        let accepted = host.snapshot_after(None).unwrap();
+        for invalid in [
+            batch(session + 1, 2, 1, "12:35"),
+            batch(session, 1, 1, "12:35"),
+            batch(session, 3, 1, "12:35"),
+            batch(session, 2, 0, "12:35"),
+            frame(session, 2, 1, Body::ClockReady),
+        ] {
+            let mut wire = Vec::new();
+            write_frame(&mut wire, &invalid).unwrap();
+            assert!(
+                accept_package_response(&mut wire.as_slice(), &mut host, session, 2, 1).is_err()
+            );
+            assert_eq!(host.revision(), 1);
+            assert!(host.snapshot_after(Some(accepted.key)).is_none());
+        }
+        let mut incomplete = Vec::new();
+        write_frame(&mut incomplete, &batch(session, 2, 1, "12:35")).unwrap();
+        incomplete.pop();
+        assert!(
+            accept_package_response(&mut incomplete.as_slice(), &mut host, session, 2, 1).is_err()
+        );
+        assert_eq!(host.revision(), 1);
+        assert!(host.snapshot_after(Some(accepted.key)).is_none());
+    }
 }
 
 pub fn check_package(package: script_package::Prepared) -> Result<()> {

@@ -62,3 +62,5 @@ Reviewed November 26, 2026. The Windows headless package regression passed 34 lo
 See [Windows AppContainer intake check](m3-manifest.md#windows-appcontainer-intake-check), [integrated script regression](m4-scene-transactions.md#integrated-script-preview-regression), and [live trusted package lifecycle](m4-timers.md#live-trusted-package-lifecycle-preview).
 
 The [M4 advisory refresh](m2-js-dependencies.md#m4-advisory-refresh) checked all 243 locked crates.io versions and the embedded engine's upstream advisories. It confirmed the existing renderer findings and the need to retain the G2 decision until the remaining source and isolation work is complete.
+
+The preview's package response reader has a local byte-stream regression after the host has accepted revision 1. Responses with a different session, repeated or skipped sequence, stale base revision, unexpected message kind or truncated frame fail without changing the accepted revision or snapshot. This covers the receiver used by the preview. Process-level fault injection and independent watchdog evidence for the integrated path remain pending.
