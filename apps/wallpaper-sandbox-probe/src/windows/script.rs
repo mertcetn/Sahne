@@ -145,6 +145,8 @@ fn run_case(
 
 /// Rust resolves the adapter's local indices against the host fixture bindings.
 pub fn clock_edits(
+    clock: u32,
+    accent: u32,
     previous: &str,
     display_time: &str,
 ) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
@@ -153,7 +155,7 @@ pub fn clock_edits(
     }
     let (runtime, interrupted) = bounded_runtime()?;
     let context = Context::custom::<(intrinsic::Eval,)>(&runtime)?;
-    let bindings = [("clock", 1, Some(previous)), ("accent", 2, None)];
+    let bindings = [("clock", clock, Some(previous)), ("accent", accent, None)];
     let edits = context.with(|ctx| {
         run_scene_callback(
             &ctx,

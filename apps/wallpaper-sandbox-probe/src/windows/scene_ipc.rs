@@ -3,7 +3,7 @@ use super::*;
 use std::collections::BTreeSet;
 use wallpaper_protocol::{SCENE_REJECT_CODE, accept_scene_batch};
 use wallpaper_scene::{
-    Color, Content, Node, Rect, SCENE_VERSION, Scene,
+    Color, Content, Node, Rect, SCENE_VERSION, Scene, ValidatedScene,
     timer::{MIN_DELAY, Timers},
     transaction::{Edit, HostScene},
 };
@@ -106,6 +106,41 @@ fn update_message(session: u64, sequence: u64, body: Body) -> Message {
     }
 }
 
+fn compiled_script_scene() -> Result<(ValidatedScene, u32, u32)> {
+    let package = wallpaper_format::Package::from_entries(vec![
+        ("manifest.json".into(), br#"{"formatVersion":1,"apiVersion":1,"id":"probe.scene","name":"Scene binding probe","entry":"index.html","permissions":[],"preferredFps":30}"#.to_vec()),
+        ("index.html".into(), br#"<div style="width:100px;height:100px;background-color:#121212"></div><span id="clock" style="width:100px;height:24px">initial</span><div id="accent" style="width:10px;height:10px;background-color:#ffffff"></div>"#.to_vec()),
+    ])?;
+    let compiled = wallpaper_compiler::compile(
+        &package,
+        wallpaper_compiler::Viewport {
+            width: 100,
+            height: 100,
+            background: Color([0; 4]),
+        },
+    )?;
+    let node_for = |name: &str, supports: fn(&Content) -> bool| -> Result<u32> {
+        let Some([id]) = compiled.symbols().get(name).map(Vec::as_slice) else {
+            return Err("Expected exactly one compiled node per script binding".into());
+        };
+        if !compiled
+            .scene()
+            .scene()
+            .nodes
+            .iter()
+            .any(|node| node.id == *id && supports(&node.content))
+        {
+            return Err("Compiled node does not support the requested script binding".into());
+        }
+        Ok(*id)
+    };
+    let clock = node_for("clock", |content| matches!(content, Content::Text { .. }))?;
+    let accent = node_for("accent", |content| {
+        matches!(content, Content::Rectangle { .. })
+    })?;
+    Ok((compiled.into_scene(), clock, accent))
+}
+
 pub fn read_response(
     output: &mut impl Read,
     session: u64,
@@ -123,49 +158,26 @@ pub fn read_response(
     if pong != envelope(session, 2, Body::Pong { nonce }) {
         return Err("Invalid scene Pong".into());
     }
-    let scene = Scene {
-        version: SCENE_VERSION,
-        width: 100,
-        height: 100,
-        background: Color([0; 4]),
-        resources: vec![],
-        nodes: vec![
-            Node {
-                id: 1,
-                bounds: Rect {
-                    x: 0.0,
-                    y: 0.0,
-                    width: 100.0,
-                    height: 100.0,
-                },
-                content: Content::Text {
-                    text: "initial".into(),
-                    font_size: 16.0,
-                    color: Color([255; 4]),
-                },
-            },
-            Node {
-                id: 2,
-                bounds: Rect {
-                    x: 0.0,
-                    y: 0.0,
-                    width: 10.0,
-                    height: 10.0,
-                },
-                content: Content::Rectangle {
-                    color: Color([255; 4]),
-                },
-            },
-        ],
-    }
-    .validate()?;
-    let mut host = HostScene::new(scene, session, &BTreeSet::from([1, 2]))
+    let (scene, clock, accent) = if mode == Mode::Script {
+        compiled_script_scene()?
+    } else {
+        (fixed_scene()?, 1, 2)
+    };
+    let mut host = HostScene::new(scene, session, &BTreeSet::from([clock, accent]))
         .map_err(|_| "Could not initialize fixture host scene")?;
     let expected_color = if mode != Mode::Typed {
         Color([36, 179, 144, 255])
     } else {
         Color([255; 4])
     };
+    fn content(scene: &ValidatedScene, id: u32) -> Option<&Content> {
+        scene
+            .scene()
+            .nodes
+            .iter()
+            .find(|node| node.id == id)
+            .map(|node| &node.content)
+    }
     let mut timer = if mode == Mode::Timer {
         Some(resumed_timer()?)
     } else {
@@ -201,9 +213,9 @@ pub fn read_response(
         let accepted = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
         let ack = accept_scene_batch(&mut host, accepted);
         if ack != update_message(session, sequence, Body::SceneAck { revision: sequence })
-            || !matches!(&host.scene().scene().nodes[0].content, Content::Text { text, .. } if text == &display_time)
-            || host.scene().scene().nodes[1].content
-                != (Content::Rectangle {
+            || !matches!(content(host.scene(), clock), Some(Content::Text { text, .. }) if text == &display_time)
+            || content(host.scene(), accent)
+                != Some(&Content::Rectangle {
                     color: expected_color,
                 })
         {
@@ -283,6 +295,45 @@ pub fn read_response(
     Ok(ProbeReply::Report(bits))
 }
 
+fn fixed_scene() -> Result<ValidatedScene> {
+    Ok(Scene {
+        version: SCENE_VERSION,
+        width: 100,
+        height: 100,
+        background: Color([0; 4]),
+        resources: vec![],
+        nodes: vec![
+            Node {
+                id: 1,
+                bounds: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 100.0,
+                },
+                content: Content::Text {
+                    text: "initial".into(),
+                    font_size: 16.0,
+                    color: Color([255; 4]),
+                },
+            },
+            Node {
+                id: 2,
+                bounds: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0,
+                },
+                content: Content::Rectangle {
+                    color: Color([255; 4]),
+                },
+            },
+        ],
+    }
+    .validate()?)
+}
+
 pub fn worker(
     input: &mut impl Read,
     output: &mut impl Write,
@@ -292,8 +343,14 @@ pub fn worker(
     mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
+    let (clock, accent) = if mode == Mode::Script {
+        let (_, clock, accent) = compiled_script_scene()?;
+        (clock, accent)
+    } else {
+        (1, 2)
+    };
     let text = |value: &str| Edit::Text {
-        node: 1,
+        node: clock,
         value: value.into(),
     };
     let updates = mode.updates();
@@ -314,7 +371,7 @@ pub fn worker(
             "12:34".into()
         };
         let edits = if mode != Mode::Typed {
-            script::clock_edits(&previous, &display_time)?
+            script::clock_edits(clock, accent, &previous, &display_time)?
         } else {
             vec![text(&display_time)]
         };
@@ -338,7 +395,7 @@ pub fn worker(
             body: Body::SceneBatch {
                 edits: vec![
                     Edit::Color {
-                        node: 1,
+                        node: clock,
                         value: Color([0; 4]),
                     },
                     text("invalid\0text"),

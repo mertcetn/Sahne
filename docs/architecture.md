@@ -607,3 +607,7 @@ The Windows preview hosts the existing AppContainer clock fixture directly over 
 ## 67. M4 continuous UTC worker preview
 
 The opt-in Windows development preview can keep one AppContainer worker running across real UTC minute changes. The host schedules each wake on a monotonic clock, samples UTC at dispatch and allows one outstanding tick. The response watchdog covers startup and each scheduled tick. Changed snapshots wake the window through its event queue. Matching content receives an acknowledgement without publishing a snapshot. Closing the preview stops the Job, joins the pipe thread and cleans up the profile. See [Continuous UTC worker](m4-clock-preview.md#continuous-utc-worker).
+
+## 68. M4 compiler-derived script bindings
+
+The scripted AppContainer probe now compiles a trusted embedded HTML fixture in both processes. The host derives its writable node set from the validated scene and the compiler's author IDs. The worker resolves the adapter's local indices against the same source and sends typed edits on the existing transaction channel. The fixture admits single-node bindings for text and RGBA updates. See [Compiler-derived fixture bindings](m4-scene-transactions.md#compiler-derived-fixture-bindings).

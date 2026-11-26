@@ -41,6 +41,14 @@ The `scene-script` case now records the text of `clock` and the RGBA color of `a
 
 The scripted and typed scene cases plus the basic JavaScript and job-limit controls passed with four verified cleanups. Local report: `target/sandbox-validation/8263cc41a63d48b68c2aac016ca4370e/`. All 155 workspace tests and Clippy passed.
 
+## Compiler-derived fixture bindings
+
+The `scene-script` case compiles embedded HTML and CSS declarations to a validated flat scene. The host and worker independently resolve `clock` and `accent` from the compiler's author-ID table. A binding requires exactly one node of the expected kind. A background node precedes both targets in the fixture. The host grants transaction access only to the two resolved nodes.
+
+The worker maps staged text and RGBA edits to those generated node IDs. The host verifies the committed values and the matching acknowledgement. An invalid follow-up batch still closes the session and leaves the accepted scene and revision intact. This path uses trusted embedded source. Binding delivery for creator packages and support for author elements that compile to multiple nodes remain open.
+
+Release checks for `scene-script`, `scene-transaction` and `scene-timer` passed with three verified profile cleanups. The live rollover bridge passed its headless regression check. Local report at `target/sandbox-validation/6ebfa1ff6c54495ba2bdf908121362e7/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

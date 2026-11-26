@@ -27,6 +27,9 @@ impl Compiled {
     pub fn scene(&self) -> &ValidatedScene {
         &self.scene
     }
+    pub fn into_scene(self) -> ValidatedScene {
+        self.scene
+    }
     pub fn symbols(&self) -> &BTreeMap<String, Vec<u32>> {
         &self.symbols
     }
