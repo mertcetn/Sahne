@@ -32,13 +32,15 @@ $cases = @(
     @{ Name = 'script-error'; Script = '() => { throw new Error("private-fixture-error"); }' }
     @{ Name = 'promise-budget'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; for (let i = 0; i < 65; i++) Promise.resolve().then(() => {}); }' }
     @{ Name = 'missing-script' }
-    @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; Padded = $true }
+    @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; HtmlBytes = 128 * 1024 }
     @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = 'validation' }
     @{ Name = 'intake-missing-script'; Intake = $true; Reject = 'validation' }
     @{ Name = 'intake-invalid-html'; Intake = $true; Script = '() => {}'; Html = '<unknown></unknown>'; Reject = 'compilation' }
     @{ Name = 'intake-invalid-css'; Intake = $true; Script = '() => {}'; Html = '<span style="position:fixed">Ready</span>'; Reject = 'compilation' }
     @{ Name = 'intake-image'; Intake = $true; Image = 'valid' }
     @{ Name = 'intake-invalid-image'; Intake = $true; Image = 'invalid'; Reject = 'compilation' }
+    @{ Name = 'intake-html-over-limit'; Intake = $true; Script = '() => {}'; HtmlBytes = (1024 * 1024) + 1; Reject = 'compilation' }
+    @{ Name = 'intake-html-at-limit'; Intake = $true; Script = '() => {}'; HtmlBytes = 1024 * 1024 }
 )
 $manifest = '{"formatVersion":1,"apiVersion":1,"id":"probe.integration","name":"Script preview validation","entry":"index.html","script":"update.js","permissions":[],"preferredFps":30}'
 Write-Host "Script preview validation reports in $run"
@@ -63,9 +65,13 @@ $results = foreach ($case in $cases) {
     if ($case.ContainsKey('Script')) {
         [IO.File]::WriteAllText((Join-Path $inputFolder 'update.js'), $case.Script)
     }
-    if ($case.ContainsKey('Padded')) {
-        # Exercise a package larger than a control frame and the anonymous pipe buffer.
-        [IO.File]::AppendAllText((Join-Path $inputFolder 'index.html'), ' ' * (128 * 1024))
+    if ($case.ContainsKey('HtmlBytes')) {
+        $htmlPath = Join-Path $inputFolder 'index.html'
+        $padding = $case.HtmlBytes - (Get-Item -LiteralPath $htmlPath).Length
+        [IO.File]::AppendAllText($htmlPath, ' ' * $padding)
+        if ((Get-Item -LiteralPath $htmlPath).Length -ne $case.HtmlBytes) {
+            throw "Incorrect HTML fixture size for $($case.Name)"
+        }
     }
 
     $mode = if ($case.ContainsKey('Intake')) { '--check-package-intake' } else { '--check-trusted-script-preview' }

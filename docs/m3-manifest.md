@@ -68,6 +68,8 @@ target/release/wallpaper-preview.exe --check-package-intake $folder
 
 The headless command captures the folder in the host. AppContainer validates the manifest, entry set and declared source references, then compiles the supported flat HTML/CSS subset and decodes referenced RGBA8 PNG assets. On success the host independently decodes the returned flat scene, validates the image IDs and derives the expected RGBA8 buffer sizes from the scene. The command reports the node and image counts after the helper exits and its profile is removed. Validation or compilation failure returns a fixed error. Font processing, script execution and rendering are outside this check. Run `pwsh -NoProfile -File tools/test-script-preview.ps1` to exercise input larger than a control frame, manifest and source validation, HTML/CSS compilation, and PNG acceptance and rejection.
 
+The Windows regression also checks the compiler's 1 MiB HTML source limit through the actual intake pipe. It sends valid HTML padded with spaces to one byte over the limit, expects compilation rejection and verified profile cleanup, then sends the same source padded to exactly the limit in a fresh helper and expects success. The November 26, 2026 run passed all 16 cases. Local report: `target/script-preview-validation/ed3ea19a83ca47adb6acdfe3061d1c81/summary.json`.
+
 ### Windows sandboxed package preview
 
 ```powershell
