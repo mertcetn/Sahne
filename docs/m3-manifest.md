@@ -76,6 +76,8 @@ target/release/wallpaper-preview.exe --sandboxed-package-preview $folder --secon
 
 This development command opens a D3D12 window after the same intake checks pass and the helper exits. It displays the static flat scene and its decoded images. Text uses the bundled Noto Sans font. Package scripts and custom fonts are outside this preview mode. Escape closes the window. The optional `--seconds` sets a time limit between 1 and 3600 seconds. Use `--check-package-intake` to verify the same package without opening a window.
 
+On November 26, 2026, the user confirmed that both the `Sahne / PNG` text and the checkerboard image from `examples/static-image` were visible in the 960×600 window. The log records AppContainer profile cleanup before the first D3D12 presentation. Local evidence is under `target/m4-sandbox-window-visual/d6d6058798d8455cac2366fcecac332a/`.
+
 Callers establish regular-file and containment guarantees before passing readers and supply operational deadlines if needed. The Windows directory collector still needs handle-relative opens and reparse rejection. Path checks followed by a fresh open by name leave a window for directory replacement. The reader interface gives that future collector a single bounded ingestion path. [Windows file opening semantics](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)
 
 ## Windows handle-relative opening
