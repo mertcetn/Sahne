@@ -103,4 +103,12 @@ The continuous UTC window subscribes to lock and unlock notifications for the cu
 
 Windows unit tests cover message classification and overlapping pause reasons. The release headless checks passed both the deterministic rollover and the 11:31 → 11:32 UTC transition with pause and resume acknowledgements.
 
-The native notification path needs a live lock/unlock and sleep/wake check. Start the preview with `--example clock --clock-worker-utc --seconds 300` and leave it running during the test. After each transition, compare the Windows event and worker acknowledgement in the log. If sleep is followed by a lock screen, the clock should wait for unlock before resuming. Check that the preview displays the current UTC minute after resume.
+On November 26, 2026, the live run of `5300840` received session lock and unlock and acknowledged both worker transitions. The preview displayed 11:35 UTC after wake. Windows logged Modern Standby entry and exit (Kernel-Power 506 and 507), while the application recorded no legacy suspend or resume messages. Local log at `target/m4-utc-session-visual/eef64afaa64d47e78013c2b9b4e1ab9f/stderr.log`.
+
+#### Modern Standby test and display notifications
+
+The preview subscribes to `GUID_SESSION_DISPLAY_STATUS` on its owned window. It pauses for display off and clears that reason when the interactive session display turns on or dims. Lock and other pause reasons remain independent. A display event may occur outside sleep, so it describes display availability. The host validates the native message against a fixed-size buffer and unregisters the notification when the window is torn down. [Windows power setting GUIDs](https://learn.microsoft.com/en-us/windows/win32/power/power-setting-guids)
+
+The headless release check passed both the deterministic rollover and the 15:06 → 15:07 UTC transition with pause and resume acknowledgements. Unit tests cover the native display payload and independent pause reasons.
+
+The new subscription needs a live Modern Standby retest. Start the preview with `--example clock --clock-worker-utc --seconds 300`. Sleep and wake while it runs, then check for `SessionDisplayOff(true)` and `SessionDisplayOff(false)` in the log. If the session is locked on wake, the worker should stay paused until unlock. Confirm the current UTC minute after resume.

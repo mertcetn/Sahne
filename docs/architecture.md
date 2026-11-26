@@ -689,3 +689,7 @@ The continuous UTC preview forwards minimize and restore transitions to its reta
 ## 86. M4 Windows session and power notifications
 
 The continuous Windows UTC preview subscribes its owned window to lock and unlock notifications for the current session and observes system suspend and automatic resume broadcasts. The native adapter forwards only those events to the preview. The preview tracks each pause reason independently, so clearing one reason cannot resume the worker while another applies. See [Windows lock and sleep notifications](m4-clock-preview.md#windows-lock-and-sleep-notifications).
+
+## 87. M4 session display notifications for Modern Standby
+
+The continuous UTC preview also subscribes to the interactive session display state. Display off is a separate pause reason, and display on or dim clears that reason. The native adapter validates the display-setting identifier, payload size and state. This lets the preview react to display inactivity on systems where legacy suspend and resume messages are absent. See [Modern Standby test and display notifications](m4-clock-preview.md#modern-standby-test-and-display-notifications).

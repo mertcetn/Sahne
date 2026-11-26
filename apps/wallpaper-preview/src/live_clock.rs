@@ -37,6 +37,7 @@ pub struct PauseState {
     pub suspended: bool,
     session_locked: bool,
     system_suspended: bool,
+    display_off: bool,
 }
 
 impl PauseState {
@@ -45,11 +46,16 @@ impl PauseState {
         match event {
             Event::SessionLocked(locked) => self.session_locked = locked,
             Event::SystemSuspended(suspended) => self.system_suspended = suspended,
+            Event::SessionDisplayOff(off) => self.display_off = off,
         }
     }
 
     pub fn paused(&self) -> bool {
-        self.minimized || self.suspended || self.session_locked || self.system_suspended
+        self.minimized
+            || self.suspended
+            || self.session_locked
+            || self.system_suspended
+            || self.display_off
     }
 }
 
@@ -66,6 +72,7 @@ mod pause_tests {
         };
         state.apply(Event::SessionLocked(true));
         state.apply(Event::SystemSuspended(true));
+        state.apply(Event::SessionDisplayOff(true));
         state.apply(Event::SystemSuspended(false));
         assert!(state.paused());
         state.minimized = false;
@@ -74,6 +81,8 @@ mod pause_tests {
         state.apply(Event::SessionLocked(false));
         assert!(state.paused());
         state.suspended = false;
+        assert!(state.paused());
+        state.apply(Event::SessionDisplayOff(false));
         assert!(!state.paused());
     }
 }
