@@ -51,6 +51,17 @@ Material maintenance risk: QuickJS-NG's current security policy directs reports 
 
 The wrapper and engine contain substantial native/unsafe code. Unknown memory-corruption defects, OOM cleanup bugs and missed interruption points remain credible risks. The OS sandbox must assume engine compromise; a 100 ms cooperative deadline is not OS preemption. Existing zero-capability AppContainer, 256 MiB Job limit, one-process limit, narrow executable access, explicit pipes and independent host deadline remain unchanged. Broader G2 gaps still prevent arbitrary content from being enabled. This limited trusted-fixture adoption is reviewable and reversible without widening the product's input surface.
 
+## M4 advisory refresh
+
+On November 26, 2026, the [OSV batch API](https://google.github.io/osv.dev/post-v1-querybatch/) returned a complete response for all 243 crates.io package versions in the workspace lockfile at `5f96690`. The lockfile SHA-256 was `5bc53c7d3b7657d735f8a1f1b3a6964fb1616df8d74a1dca4ad3157b4689affb`. The two returned findings were the same ones recorded in the earlier review.
+
+| Locked crate | Windows dependency path and finding |
+| --- | --- |
+| `lru 0.16.4` | The preview uses it through `glyphon 0.12.0`. The existing cache-key applicability assessment is in the [renderer dependency review](m1-dependencies.md). [RUSTSEC-2026-0253](https://rustsec.org/advisories/RUSTSEC-2026-0253.html) |
+| `ttf-parser 0.25.1` | The preview uses it through glyphon, cosmic-text and fontdb. The parser is unmaintained. Package fonts remain outside the preview contract. [RUSTSEC-2026-0192](https://rustsec.org/advisories/RUSTSEC-2026-0192.html) |
+
+The Windows dependency tree still resolves `rquickjs-sys 0.14.0` for the sandbox worker. The upstream APIs exposed the same ten QuickJS-NG advisories and zero rquickjs repository advisories. The previously documented embedded C snapshot and advisory-range uncertainty still apply. The refresh checked public advisory records and the Windows dependency tree. Source re-audit, exploitability assessment for new runtime surfaces and integrated isolation acceptance remain open. [QuickJS-NG advisories](https://api.github.com/repos/quickjs-ng/quickjs/security-advisories), [rquickjs advisories](https://api.github.com/repos/DelSkayn/rquickjs/security-advisories), [QuickJS-NG security policy](https://github.com/quickjs-ng/quickjs/security/policy)
+
 ## Primary references consulted
 
 - [Published rquickjs version](https://crates.io/crates/rquickjs/0.14.0), [owners API](https://crates.io/api/v1/crates/rquickjs/owners)
