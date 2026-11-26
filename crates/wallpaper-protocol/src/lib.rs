@@ -58,6 +58,7 @@ pub enum Body {
     SceneAck { revision: u64 },
     ClockTick { utc_minute: u16 },
     ClockReady,
+    ClockBindings { clock: u32, accent: u32 },
 }
 impl Message {
     /// Check expected envelope state without advancing any host state.
@@ -130,6 +131,12 @@ pub fn write_frame(writer: &mut impl Write, message: &Message) -> Result<()> {
             data.extend_from_slice(&utc_minute.to_le_bytes());
         }
         Body::ClockReady => data.push(9),
+        Body::ClockBindings { clock, accent } => {
+            check_clock_bindings(message.base_revision, *clock, *accent)?;
+            data.push(10);
+            data.extend_from_slice(&clock.to_le_bytes());
+            data.extend_from_slice(&accent.to_le_bytes());
+        }
     }
     if data.len() > MAX_FRAME_BYTES {
         return Err(Error::Invalid("frame too long"));
@@ -212,6 +219,12 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
             Body::ClockTick { utc_minute }
         }
         9 => Body::ClockReady,
+        10 => {
+            let clock = u32::from_le_bytes(data.array()?);
+            let accent = u32::from_le_bytes(data.array()?);
+            check_clock_bindings(base_revision, clock, accent)?;
+            Body::ClockBindings { clock, accent }
+        }
         _ => return Err(Error::Invalid("unknown message kind")),
     };
     if data.pos != bytes.len() {
@@ -223,6 +236,13 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Message>> {
         base_revision,
         body,
     }))
+}
+
+fn check_clock_bindings(base_revision: u64, clock: u32, accent: u32) -> Result<()> {
+    if base_revision != 0 || clock == 0 || accent == 0 || clock == accent {
+        return Err(Error::Invalid("invalid initial clock bindings"));
+    }
+    Ok(())
 }
 
 fn check_utc_minute(minute: u16) -> Result<()> {

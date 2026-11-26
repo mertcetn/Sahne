@@ -9,6 +9,8 @@ use wallpaper_scene::{
 };
 
 pub const RESULT_BIT: u32 = 1 << 23;
+// Deliberately ungranted target for the embedded scene's terminal rejection test.
+const SCRIPT_BACKGROUND_PROBE: u32 = 4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -110,7 +112,6 @@ struct CompiledScriptScene {
     scene: ValidatedScene,
     clock: u32,
     accent: u32,
-    accent_background: u32,
 }
 
 fn compiled_script_scene() -> Result<CompiledScriptScene> {
@@ -152,11 +153,13 @@ fn compiled_script_scene() -> Result<CompiledScriptScene> {
     let accent_background = node_for("accent", |content| {
         matches!(content, Content::Rectangle { .. })
     })?;
+    if accent_background != SCRIPT_BACKGROUND_PROBE {
+        return Err("Embedded rejection fixture changed its background node".into());
+    }
     Ok(CompiledScriptScene {
         scene: compiled.into_scene(),
         clock,
         accent,
-        accent_background,
     })
 }
 
@@ -185,6 +188,11 @@ pub fn read_response(
     };
     let mut host = HostScene::new(scene, session, &BTreeSet::from([clock, accent]))
         .map_err(|_| "Could not initialize fixture host scene")?;
+    if mode == Mode::Script {
+        requests
+            .try_send(envelope(session, 2, Body::ClockBindings { clock, accent }))
+            .map_err(|_| "Scene binding writer queue unavailable")?;
+    }
     let expected_color = if mode != Mode::Typed {
         Color([36, 179, 144, 255])
     } else {
@@ -367,15 +375,15 @@ pub fn worker(
     mode: Mode,
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
-    let (clock, accent, accent_background) = if mode == Mode::Script {
-        let compiled = compiled_script_scene()?;
-        (
-            compiled.clock,
-            compiled.accent,
-            Some(compiled.accent_background),
-        )
+    let (clock, accent) = if mode == Mode::Script {
+        let bindings = read_frame(input)?.ok_or(MissingFrame("clock bindings"))?;
+        bindings.check_context(session, 2, 0)?;
+        let Body::ClockBindings { clock, accent } = bindings.body else {
+            return Err("Expected host clock bindings".into());
+        };
+        (clock, accent)
     } else {
-        (1, 2, None)
+        (1, 2)
     };
     let text = |value: &str| Edit::Text {
         node: clock,
@@ -414,12 +422,13 @@ pub fn worker(
         previous = display_time;
         sequence = sequence.checked_add(1).ok_or("Clock sequence exhausted")?;
     }
-    let terminal_edit = match accent_background {
-        Some(node) => Edit::Color {
-            node,
+    let terminal_edit = if mode == Mode::Script {
+        Edit::Color {
+            node: SCRIPT_BACKGROUND_PROBE,
             value: Color([255; 4]),
-        },
-        None => text("invalid\0text"),
+        }
+    } else {
+        text("invalid\0text")
     };
     send(
         output,

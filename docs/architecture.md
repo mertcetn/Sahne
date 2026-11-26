@@ -615,3 +615,7 @@ The scripted AppContainer probe now compiles a trusted embedded HTML fixture in 
 ## 69. M4 property targets for compiled spans
 
 The scripted probe resolves a unique text node for each of two author spans that also emit a background rectangle. Text and foreground RGBA target the text nodes. The host only authorizes those two node IDs. A transaction that tries to edit the background is rejected in full. See [Foreground bindings for spans with backgrounds](m4-scene-transactions.md#foreground-bindings-for-spans-with-backgrounds).
+
+## 70. M4 host-delivered clock bindings
+
+In the scripted development probe, the host validates and compiles the embedded package, chooses writable targets and delivers the two clock bindings through IPC before the worker runs its callback. The worker verifies the session and initialization envelope and resolves the callback's local indices against the received mapping. Transaction authorization remains with the host. See [Host-delivered clock bindings](m4-scene-transactions.md#host-delivered-clock-bindings).

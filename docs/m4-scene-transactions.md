@@ -57,6 +57,14 @@ Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case scene-scr
 
 The scripted, typed and timer probes passed with three verified profile cleanups. The live clock bridge also passed its headless rollover check. Local report at `target/sandbox-validation/4c66c42d831847319c0573e200e96502/`.
 
+## Host-delivered clock bindings
+
+The `scene-script` case now compiles the validated embedded package in the host. After Pong and before the first script callback, the host sends a `ClockBindings` frame with the session, sequence 2 and base revision 0. Message kind 10 carries two little-endian u32 node IDs for `clock` and `accent`. Both IDs must be distinct and nonzero. The worker checks the envelope and uses the IDs for the callback's staged edits. Existing scene batches and acknowledgements keep their sequence and revision rules.
+
+The host independently checks each transaction against its writable targets. The terminal test still verifies that an unauthorized background edit rolls back the entire batch. The fixed binding frame applies to the embedded clock example. General author-ID tables and creator-package script loading remain open.
+
+The scripted, typed, timer and roundtrip probes passed with four verified profile cleanups. The live clock bridge also passed its headless rollover check. Local report at `target/sandbox-validation/082f9fb1e4154ef58d8b378f78debf92/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

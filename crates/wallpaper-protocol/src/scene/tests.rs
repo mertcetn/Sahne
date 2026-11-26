@@ -26,6 +26,32 @@ fn encode(message: &Message) -> Vec<u8> {
 }
 
 #[test]
+fn clock_bindings_require_distinct_nonzero_nodes_at_revision_zero() {
+    let binding = message(
+        Body::ClockBindings {
+            clock: 3,
+            accent: 5,
+        },
+        2,
+        0,
+    );
+    let encoded = encode(&binding);
+    assert_eq!(read_frame(&mut encoded.as_slice()).unwrap(), Some(binding));
+    for (clock, accent, revision) in [(0, 5, 0), (3, 0, 0), (3, 3, 0), (3, 5, 1)] {
+        let invalid = message(Body::ClockBindings { clock, accent }, 2, revision);
+        let mut output = Vec::new();
+        assert!(write_frame(&mut output, &invalid).is_err());
+        assert!(output.is_empty());
+
+        let mut wire = encoded.clone();
+        wire[22..30].copy_from_slice(&revision.to_le_bytes());
+        wire[31..35].copy_from_slice(&clock.to_le_bytes());
+        wire[35..39].copy_from_slice(&accent.to_le_bytes());
+        assert!(read_frame(&mut wire.as_slice()).is_err());
+    }
+}
+
+#[test]
 fn scene_batch_roundtrips_and_bad_wire_is_rejected() {
     let batch = message(
         Body::SceneBatch {
