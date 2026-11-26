@@ -785,3 +785,5 @@ The worker registers the delay and dispatch count in a dedicated IPC message. Th
 ## 110. M4 live trusted package lifecycle
 
 The trusted live package preview uses the existing Windows lifecycle subscription and the retained worker context. The host admits one tick at a time, checks lifecycle acknowledgements between revisions, suspends timer dispatch while paused and re-arms the delay on resume. The job supervisor keeps a deadline for in-progress callback exchanges and removes it only after pause acknowledgement while waiting for resume. Preview shutdown stops the worker and removes its AppContainer profile. See [Live trusted package lifecycle preview](m4-timers.md#live-trusted-package-lifecycle-preview).
+
+A worker callback rejection is terminal. The host checks its envelope and verifies that the scene transaction closed with the same accepted revision and snapshot. A host-rejected batch still receives a rejection reply. A worker that reports callback failure exits on its own, so the host proceeds to cleanup without writing to its pipe.

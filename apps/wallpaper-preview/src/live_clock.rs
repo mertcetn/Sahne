@@ -770,6 +770,10 @@ fn exchange_package(
             }
         }
         let batch = read_frame(&mut output)?.ok_or("Missing package scene batch")?;
+        let worker_rejected = live && matches!(batch.body, Body::Reject { .. });
+        if worker_rejected {
+            batch.check_context(session, sequence, base)?;
+        }
         let ack = accept_scene_batch(&mut host, batch);
         if ack
             != frame(
@@ -779,7 +783,17 @@ fn exchange_package(
                 Body::SceneAck { revision: sequence },
             )
         {
-            if matches!(ack.body, Body::Reject { .. }) {
+            if live {
+                if !host.is_closed()
+                    || host.revision() != base
+                    || host.snapshot_after(Some(accepted_key)).is_some()
+                {
+                    return Err("Live package rejection changed the accepted scene".into());
+                }
+                println!("Live package revision {base} preserved after rejection.");
+            }
+            // A worker reporting callback failure exits without waiting for a reply.
+            if !worker_rejected && matches!(ack.body, Body::Reject { .. }) {
                 send(&mut input, ack)?;
             }
             return Err("Package scene batch rejected".into());
