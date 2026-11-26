@@ -98,3 +98,9 @@ The registered and continuous clock callbacks and the trusted package lifecycle 
 A failed lifecycle callback sends a bounded rejection and terminates the worker session. Its pending jobs cannot run in a subsequent invocation. The host retains the last accepted scene and revision.
 
 In the trusted package release test, pause updated shared state through a Promise. Resume then changed that state in its 64th job, and tick read the result before publishing its edit. A 65-job resume, an unhandled rejection and an unresolved returned Promise each stopped before the resume acknowledgement and tick. Five AppContainer regressions and both headless clock checks passed. The continuous check observed 15:28 → 15:29 UTC with pause, resume and cleanup. Local report at `target/sandbox-validation/28bbb7457be641d7b3e9ead4af73bbdf/`.
+
+## Native interval call limits
+
+The retained registered-clock fixture accepts one native interval registration during setup and one cancellation during its final tick. The worker checks the delay before conversion to milliseconds. It must be an integer from 16 through 64, the fixed fixture's supported range. Cancellation requires the sole valid handle. Invalid and repeated calls leave a sticky failure that prevents the worker from sending the affected initialization response, lifecycle acknowledgement or scene batch. The host independently checks the interval request before scheduling it. General package timers remain outside this fixed fixture.
+
+The unit test covers valid controls, repeated operations, fractional and out-of-range delays, and invalid handles. Four AppContainer probes and the headless rollover check passed. Local report at `target/sandbox-validation/de0bebefa4484a91b7def857afb226e4/`.

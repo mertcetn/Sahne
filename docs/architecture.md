@@ -709,3 +709,7 @@ Retained pause, resume and tick callbacks share the scene callback's job drain a
 ## 91. M4 DOM operation budget
 
 The worker DOM adapter bounds the number of lookups and property accesses in each scene callback, including its Promise jobs. An exceeded budget prevents publishing any staged edit even if script catches the error. Adapter objects expire when the worker collects the batch. See [DOM operation budget](m4-scene-transactions.md#dom-operation-budget).
+
+## 92. M4 bounded native interval controls
+
+The retained interval fixture admits one native registration and one cancellation. The worker validates the delay and cancellation handle before converting them to the fixture's IPC operations. An invalid or repeated call blocks the current reply or edit batch. See [Native interval call limits](m4-timers.md#native-interval-call-limits).

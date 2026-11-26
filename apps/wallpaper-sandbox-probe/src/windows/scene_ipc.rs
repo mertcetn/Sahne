@@ -336,7 +336,7 @@ pub fn read_response(
             let Body::RegisterInterval { delay_ms } = registration.body else {
                 return Err("Unexpected interval registration for clock fixture".into());
             };
-            if delay_ms > 64 {
+            if delay_ms > script::MAX_FIXTURE_INTERVAL_MS {
                 return Err("Interval exceeds the fixed probe's duration budget".into());
             }
             let timer = resumed_timer(Duration::from_millis(u64::from(delay_ms)), |paused| {
@@ -572,7 +572,14 @@ pub fn worker(
             output,
             envelope(session, 3, Body::RegisterInterval { delay_ms }),
         )?;
-        deliver_lifecycle(input, output, session, &callback.callbacks)?;
+        deliver_lifecycle(input, output, session, |paused| {
+            callback.callbacks.lifecycle(paused)?;
+            callback.check_controls()?;
+            if callback.cancelled() {
+                return Err("Interval cancelled outside its timer callback".into());
+            }
+            Ok(())
+        })?;
         Some(callback)
     } else {
         None
@@ -621,7 +628,7 @@ pub fn worker(
             script::RetainedCallbacks::from_source(source),
         )?;
         send(output, envelope(session, 3, Body::LifecycleReady))?;
-        deliver_lifecycle(input, output, session, &callbacks)?;
+        deliver_lifecycle(input, output, session, |paused| callbacks.lifecycle(paused))?;
         Some(callbacks)
     } else {
         None
@@ -701,7 +708,13 @@ pub fn worker(
                 session,
                 sequence,
                 sequence - 1,
-                callback.callbacks.edits(&bindings, &display_time),
+                callback
+                    .callbacks
+                    .edits(&bindings, &display_time)
+                    .and_then(|edits| {
+                        callback.check_controls()?;
+                        Ok(edits)
+                    }),
             )?;
             if callback.cancelled() != (sequence == updates) {
                 return Err("JavaScript interval did not cancel on its third callback".into());
@@ -876,7 +889,7 @@ fn deliver_lifecycle(
     input: &mut impl Read,
     output: &mut impl Write,
     session: u64,
-    callbacks: &script::RetainedCallbacks,
+    mut callback: impl FnMut(bool) -> Result<()>,
 ) -> Result<()> {
     for paused in [true, false] {
         let sequence = lifecycle_sequence(paused);
@@ -884,7 +897,7 @@ fn deliver_lifecycle(
         if event != envelope(session, sequence, Body::Lifecycle { paused }) {
             return Err("Unexpected lifecycle event".into());
         }
-        script_result(output, session, sequence, 0, callbacks.lifecycle(paused))?;
+        script_result(output, session, sequence, 0, callback(paused))?;
         send(
             output,
             envelope(session, sequence, Body::LifecycleAck { paused }),

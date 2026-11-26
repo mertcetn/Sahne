@@ -66,7 +66,47 @@ fn arm_deadline(runtime: &Runtime) -> Deadline {
 
 pub struct RegisteredClock {
     pub callbacks: RetainedCallbacks,
-    cancelled: Rc<Cell<bool>>,
+    controls: Rc<ClockControls>,
+}
+
+pub const MAX_FIXTURE_INTERVAL_MS: u32 = 64;
+
+#[derive(Default)]
+struct ClockControls {
+    delay: Cell<Option<u32>>,
+    cancelled: Cell<bool>,
+    invalid: Cell<bool>,
+}
+
+impl ClockControls {
+    fn register(&self, milliseconds: f64) -> u32 {
+        if self.delay.get().is_some()
+            || milliseconds.fract() != 0.0
+            || !(wallpaper_scene::timer::MIN_DELAY.as_secs_f64() * 1000.0
+                ..=f64::from(MAX_FIXTURE_INTERVAL_MS))
+                .contains(&milliseconds)
+        {
+            self.invalid.set(true);
+            return 0;
+        }
+        self.delay.set(Some(milliseconds as u32));
+        1
+    }
+
+    fn clear(&self, handle: f64) -> bool {
+        if handle != 1.0 || self.delay.get().is_none() || self.cancelled.replace(true) {
+            self.invalid.set(true);
+            return false;
+        }
+        true
+    }
+
+    fn check(&self) -> Result<()> {
+        if self.invalid.get() {
+            return Err("Invalid or repeated interval host call".into());
+        }
+        Ok(())
+    }
 }
 
 impl RegisteredClock {
@@ -76,43 +116,40 @@ impl RegisteredClock {
         }
         let (runtime, interrupted) = bounded_runtime()?;
         let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
-        let cancelled = Rc::new(Cell::new(false));
-        let delay = Rc::new(Cell::new(None));
+        let controls = Rc::new(ClockControls::default());
         context.with(|ctx| -> rquickjs::Result<()> {
-            let requested = Rc::clone(&delay);
-            let register = Function::new(ctx.clone(), move |milliseconds: u32| {
-                if requested.get().is_some() {
-                    return 0;
-                }
-                requested.set(Some(milliseconds));
-                1
+            let register_state = Rc::clone(&controls);
+            let register = Function::new(ctx.clone(), move |milliseconds: f64| {
+                register_state.register(milliseconds)
             })?;
-            let stopped = Rc::clone(&cancelled);
-            let clear = Function::new(ctx.clone(), move |handle: u32| {
-                if handle == 1 {
-                    stopped.set(true);
-                }
-            })?;
+            let clear_state = Rc::clone(&controls);
+            let clear = Function::new(ctx.clone(), move |handle: f64| clear_state.clear(handle))?;
             let clock: Function = ctx.eval(include_str!("clock_fixture.js"))?;
             let setup: Function = ctx.eval(include_str!("script/registered_clock.js"))?;
             let callbacks: Object = setup.call((register, clear, clock))?;
             ctx.globals().set("registeredClock", callbacks)
         })?;
         check_callback_budget(&runtime, &interrupted)?;
-        let delay_ms = delay
+        controls.check()?;
+        let delay_ms = controls
+            .delay
             .get()
             .ok_or("Missing JavaScript interval registration")?;
         Ok((
             Self {
                 callbacks: RetainedCallbacks { context, runtime },
-                cancelled,
+                controls,
             },
             delay_ms,
         ))
     }
 
     pub fn cancelled(&self) -> bool {
-        self.cancelled.get()
+        self.controls.cancelled.get()
+    }
+
+    pub fn check_controls(&self) -> Result<()> {
+        self.controls.check()
     }
 }
 
@@ -531,6 +568,32 @@ fn collect_scene_edits(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interval_host_calls_reject_repeats_and_invalid_arguments() {
+        let controls = ClockControls::default();
+        assert_eq!(controls.register(32.0), 1);
+        assert!(controls.clear(1.0));
+        assert!(controls.check().is_ok());
+        assert!(!controls.clear(1.0));
+        assert!(controls.check().is_err());
+
+        let controls = ClockControls::default();
+        assert_eq!(controls.register(32.0), 1);
+        assert_eq!(controls.register(32.0), 0);
+        assert!(controls.check().is_err());
+
+        for delay in [f64::NAN, 31.5, 15.0, 65.0] {
+            let controls = ClockControls::default();
+            assert_eq!(controls.register(delay), 0);
+            assert!(controls.check().is_err());
+        }
+        let controls = ClockControls::default();
+        assert_eq!(controls.register(32.0), 1);
+        assert!(!controls.clear(1.5));
+        assert!(!controls.cancelled.get());
+        assert!(controls.check().is_err());
+    }
 
     #[test]
     fn retained_dom_objects_expire_after_collection() {
