@@ -188,9 +188,11 @@ target/release/wallpaper-preview.exe --check-scene-worker-snapshot $runFolder
 target/release/wallpaper-preview.exe --scene-worker-snapshot $runFolder --seconds 20
 ```
 
-The check loads the validated flat scene without opening a window. The window command displays the retained scene until Escape or the optional deadline. Both commands independently decode the bounded binary file and require a scene with zero image resources. The artifact contains scene data and provides no origin authentication. Use a trusted run folder. Window rendering uses the existing flat text and rectangle renderer. A live package-to-renderer connection and visual verification remain open.
+The check loads the validated flat scene without opening a window. The window command displays the retained scene until Escape or the optional deadline. Both commands independently decode the bounded binary file and require a scene with zero image resources. The artifact contains scene data and provides no origin authentication. Use a trusted run folder. Window rendering uses the existing flat text and rectangle renderer. A live package-to-renderer connection remains open.
 
 The release check exported a two-node scene after the host acknowledged text and rectangle color changes and the worker profile was cleaned up. The headless loader accepted the 1920×1080 export, rejected trailing bytes and rejected a conflicting duration flag. The exported text was `Worker update accepted`. Local visual test input at `target/sandbox-runs/9344-dd9302e011b7eace/`. Three AppContainer regression cases and headless rollover passed. Local report at `target/sandbox-validation/ff8ac44acf654f9c99f2654c28a00acf/`.
+
+The Windows D3D12 visual check of `ee40396` displayed `Worker update accepted` on the updated blue panel in a 960×600 client. The preview recorded one presented frame in one GPU generation. Escape closed the window. Local log at `target/m4-retained-scene-visual/2778d3cdf1f44ff9a952aad33cc27b7c/stderr.log`.
 
 ## Content snapshots for presentation
 
