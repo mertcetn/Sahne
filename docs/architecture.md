@@ -745,3 +745,7 @@ Windows folder collection can return owned source bytes after handle-relative fi
 ## 100. M4 bounded package snapshot stream
 
 The package snapshot has a versioned stream encoding for moving opaque file bytes across a process boundary. The decoder checks path lengths, entry counts and per-file and aggregate budgets before reading the corresponding payloads. The exchange owner supplies the deadline. See [Bounded snapshot from open readers](m3-manifest.md#bounded-snapshot-from-open-readers).
+
+## 101. M4 AppContainer package validation check
+
+The host captures the package without parsing its sources and sends the snapshot over inherited standard input after the versioned control handshake. It closes the input pipe after the snapshot. The AppContainer worker requires end of input, validates the native package and returns only a nonce acknowledgement or a fixed rejection. An independent host watchdog bounds the exchange and verifies worker shutdown and profile cleanup. Compilation, media and font processing, and rendering integration remain pending. See [Windows AppContainer intake check](m3-manifest.md#windows-appcontainer-intake-check).

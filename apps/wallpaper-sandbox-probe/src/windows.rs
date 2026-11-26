@@ -167,6 +167,21 @@ fn worker(args: &[String]) -> Result<()> {
     let Body::Ping { nonce } = request.body else {
         return Err("Expected Ping".into());
     };
+    if case == "package-snapshot" {
+        let snapshot = wallpaper_format::PackageSnapshot::read_from(&mut input)?;
+        require_eof(&mut input)?;
+        let body = if snapshot.parse().is_ok() {
+            Body::Pong { nonce }
+        } else {
+            Body::Reject {
+                code: 1,
+                message: "Package validation failed".into(),
+            }
+        };
+        write_frame(&mut output, &envelope(session, 2, body))?;
+        output.flush()?;
+        return Ok(());
+    }
     if case == "ipc-write-drain" {
         let mut block = [0; attempt::PRESSURE_CHUNK_BYTES];
         for _ in 0..attempt::PRESSURE_CHUNKS {

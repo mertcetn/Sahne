@@ -4,6 +4,7 @@ mod groups;
 mod lifecycle;
 mod live_clock;
 mod motion;
+mod package_intake;
 mod pixels;
 mod script_package;
 use glyphon::{
@@ -55,7 +56,18 @@ fn main() -> Result<()> {
     let mut worker_live = None;
     let mut check_worker_live = false;
     let mut compiled_example = None;
-    let mut args = std::env::args().skip(1);
+    let mut args = std::env::args().skip(1).peekable();
+    if args
+        .peek()
+        .is_some_and(|arg| arg == "--check-package-intake")
+    {
+        args.next();
+        let folder = args.next().ok_or("Expected an absolute package folder")?;
+        if args.next().is_some() {
+            return Err("Package intake check takes exactly one folder".into());
+        }
+        return package_intake::check(&folder);
+    }
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" => {
@@ -67,6 +79,9 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--trusted-script-preview <absolute-folder> displays a trusted flat package and its AppContainer update. Add --desktop to attach it behind Windows icons. --check-trusted-script-preview <absolute-folder> checks that exchange without a window."
+                );
+                println!(
+                    "--check-package-intake <absolute-folder> checks package validation in AppContainer without rendering or running a script."
                 );
                 return Ok(());
             }

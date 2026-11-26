@@ -55,7 +55,18 @@ Local validation passed all 47 workspace Rust tests and the full 37-case native 
 
 `PackageSnapshot` exposes capture separately from parsing. Windows `collect_snapshot` applies the same filesystem and read checks while retaining opaque source bytes. The consuming `parse` operation then validates the entry set, manifest and source references. The trusted `collect` command still performs both operations.
 
-The internal snapshot stream carries a version signature, an entry count and length-prefixed paths and opaque file bytes. The decoder bounds each field before allocating or reading that field's payload and reuses the capture byte limits. It leaves the stream positioned at the next message. The caller must enforce an I/O deadline and close the exchange on a decoding error. This stream is separate from the 64 KiB control frames. Wiring it to the restricted helper remains pending.
+The internal snapshot stream carries a version signature, an entry count and length-prefixed paths and opaque file bytes. The decoder bounds each field before allocating or reading that field's payload and reuses the capture byte limits. It leaves the stream positioned at the next message. The caller must enforce an I/O deadline and close the exchange on a decoding error. This stream is separate from the 64 KiB control frames.
+
+### Windows AppContainer intake check
+
+Build the release preview and sibling probe from the repository root, then pass an absolute package folder on a fixed drive.
+
+```powershell
+cargo build --release -p wallpaper-preview -p wallpaper-sandbox-probe --locked
+target/release/wallpaper-preview.exe --check-package-intake $folder
+```
+
+The headless command captures the folder in the host and validates the manifest, entry set and declared source references in AppContainer. It exits with a generic validation error on rejection. It performs no scene compilation, image decoding, font processing or script execution. Run `pwsh -NoProfile -File tools/test-script-preview.ps1` for the regression cases, which include a valid package larger than a control frame, a malformed manifest and a missing declared script.
 
 Callers establish regular-file and containment guarantees before passing readers and supply operational deadlines if needed. The Windows directory collector still needs handle-relative opens and reparse rejection. Path checks followed by a fresh open by name leave a window for directory replacement. The reader interface gives that future collector a single bounded ingestion path. [Windows file opening semantics](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)
 

@@ -32,26 +32,47 @@ $cases = @(
     @{ Name = 'script-error'; Script = '() => { throw new Error("private-fixture-error"); }' }
     @{ Name = 'promise-budget'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; for (let i = 0; i < 65; i++) Promise.resolve().then(() => {}); }' }
     @{ Name = 'missing-script' }
+    @{ Name = 'intake-valid'; Intake = $true; Script = '() => { throw new Error("private-fixture-error"); }'; Padded = $true }
+    @{ Name = 'intake-invalid-manifest'; Intake = $true; Manifest = '{'; Reject = $true }
+    @{ Name = 'intake-missing-script'; Intake = $true; Reject = $true }
 )
 $manifest = '{"formatVersion":1,"apiVersion":1,"id":"probe.integration","name":"Script preview validation","entry":"index.html","script":"update.js","permissions":[],"preferredFps":30}'
 Write-Host "Script preview validation reports in $run"
 $results = foreach ($case in $cases) {
     $inputFolder = Join-Path $packages $case.Name
     New-Item -ItemType Directory -Path $inputFolder -Force | Out-Null
-    [IO.File]::WriteAllText((Join-Path $inputFolder 'manifest.json'), $manifest)
+    $manifestSource = if ($case.ContainsKey('Manifest')) { $case.Manifest } else { $manifest }
+    [IO.File]::WriteAllText((Join-Path $inputFolder 'manifest.json'), $manifestSource)
     [IO.File]::WriteAllText((Join-Path $inputFolder 'index.html'), '<span id="status" style="width:400px;height:24px">Ready</span>')
     if ($case.ContainsKey('Script')) {
         [IO.File]::WriteAllText((Join-Path $inputFolder 'update.js'), $case.Script)
     }
+    if ($case.ContainsKey('Padded')) {
+        # Exercise a package larger than a control frame and the anonymous pipe buffer.
+        [IO.File]::AppendAllText((Join-Path $inputFolder 'index.html'), ' ' * (128 * 1024))
+    }
 
-    $result = Invoke-SahneGuardedProcess -FilePath $preview -ArgumentList @('--check-trusted-script-preview') `
+    $mode = if ($case.ContainsKey('Intake')) { '--check-package-intake' } else { '--check-trusted-script-preview' }
+    $result = Invoke-SahneGuardedProcess -FilePath $preview -ArgumentList @($mode) `
         -PackageFolder $inputFolder -WorkingDirectory $repo -OutputDirectory (Join-Path $run "logs/$($case.Name)")
     $stdout = Read-SahneBoundedLog -Path $result.StdoutPath
     $stderr = Read-SahneBoundedLog -Path $result.StderrPath
     $cleanupCount = [regex]::Matches($stdout, '(?m)^Package worker profile cleanup verified\.\r?$').Count
     $accepted = '(?m)^Live package transaction verified; scene changed=(true|false); worker cleaned up\.\r?$'
     $passed = $result.Completion -eq 'Exited' -and "$stdout$stderr" -notmatch 'private-fixture-error'
-    if ($case.ContainsKey('Changed')) {
+    if ($case.ContainsKey('Intake')) {
+        $cleanupCount = [regex]::Matches($stdout, '(?m)^Package helper profile cleanup verified\.\r?$').Count
+        $validated = $stdout -match '(?m)^Package validated in AppContainer\.\r?$'
+        $passed = $passed -and $cleanupCount -eq 1
+        if ($case.ContainsKey('Reject')) {
+            $passed = $passed -and $result.ExitCode -ne 0 -and -not $validated -and
+                $stderr.Contains('Package rejected by AppContainer validation')
+        }
+        else {
+            $passed = $passed -and $result.ExitCode -eq 0 -and $validated -and [string]::IsNullOrWhiteSpace($stderr)
+        }
+    }
+    elseif ($case.ContainsKey('Changed')) {
         $passed = $passed -and $result.ExitCode -eq 0 -and $cleanupCount -eq 1 -and
             $stdout -match ($accepted.Replace('(true|false)', $case.Changed)) -and [string]::IsNullOrWhiteSpace($stderr)
     }

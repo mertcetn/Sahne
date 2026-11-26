@@ -656,6 +656,7 @@ pub fn spawn_probe(
     if ![
         "healthy",
         "package-basic",
+        "package-snapshot",
         "package-invalid",
         "compiler-basic",
         "compiler-invalid",
