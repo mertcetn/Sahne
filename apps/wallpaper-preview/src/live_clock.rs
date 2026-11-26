@@ -5,7 +5,7 @@ use std::{
     fs::{self, File},
     io::{Read, Write},
     sync::{
-        Mutex,
+        Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
         mpsc,
     },
@@ -32,7 +32,7 @@ pub enum Mode {
 }
 
 enum Signal {
-    Deadline(Instant),
+    Deadline(Option<Instant>),
     Finished(WorkerResult<()>),
     Cancel,
 }
@@ -40,6 +40,8 @@ enum Signal {
 struct ChannelState {
     update: Mutex<Update>,
     cancel: AtomicBool,
+    paused: AtomicBool,
+    channel_thread: OnceLock<thread::Thread>,
     notify: Box<dyn Fn() + Send + Sync>,
     signal: mpsc::SyncSender<Signal>,
     mode: Mode,
@@ -48,6 +50,7 @@ struct ChannelState {
 #[derive(Default)]
 pub struct Update {
     pub snapshot: Option<Snapshot>,
+    pub paused: Option<bool>,
     pub terminal: Option<std::result::Result<(), String>>,
 }
 
@@ -62,6 +65,8 @@ impl Bridge {
         let state = Arc::new(ChannelState {
             update: Mutex::new(Update::default()),
             cancel: AtomicBool::new(false),
+            paused: AtomicBool::new(false),
+            channel_thread: OnceLock::new(),
             notify: Box::new(notify),
             signal,
             mode,
@@ -89,6 +94,15 @@ impl Bridge {
             supervisor.join().map_err(|_| "Clock supervisor panicked")?;
         }
         Ok(())
+    }
+
+    pub fn set_paused(&self, paused: bool) {
+        if self.state.mode == Mode::Utc
+            && self.state.paused.swap(paused, Ordering::AcqRel) != paused
+            && let Some(channel) = self.state.channel_thread.get()
+        {
+            channel.unpark();
+        }
     }
 
     pub fn poll(&self) -> Result<Update> {
@@ -138,8 +152,9 @@ fn supervise(state: &Arc<ChannelState>, receiver: mpsc::Receiver<Signal>) -> Wor
     let io_thread = thread::Builder::new()
         .name("clock-channel".into())
         .spawn(move || {
+            let _ = shared.channel_thread.set(thread::current());
             let result = exchange(input, output, session, nonce, scene, &shared);
-            let _ = shared.signal.try_send(Signal::Finished(result));
+            let _ = shared.signal.send(Signal::Finished(result));
         });
     let io_thread = match io_thread {
         Ok(thread) => thread,
@@ -148,12 +163,20 @@ fn supervise(state: &Arc<ChannelState>, receiver: mpsc::Receiver<Signal>) -> Wor
             return Err(error.into());
         }
     };
-    let mut deadline = Instant::now() + RESPONSE_LIMIT;
+    let mut deadline = Some(Instant::now() + RESPONSE_LIMIT);
     let response = loop {
         if state.cancel.load(Ordering::Acquire) {
             break None;
         }
-        match receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+        let signal = match deadline {
+            Some(deadline) => {
+                receiver.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            }
+            None => receiver
+                .recv()
+                .map_err(|_| mpsc::RecvTimeoutError::Disconnected),
+        };
+        match signal {
             Ok(Signal::Deadline(next)) => deadline = next,
             Ok(Signal::Finished(result)) => break Some(result),
             Ok(Signal::Cancel) => break None,
@@ -165,6 +188,7 @@ fn supervise(state: &Arc<ChannelState>, receiver: mpsc::Receiver<Signal>) -> Wor
             }
         }
     };
+    drop(receiver);
     let exit = if matches!(response, Some(Ok(()))) {
         sandbox.wait(1000)
     } else {
@@ -229,6 +253,8 @@ fn exchange(
         return Err("Invalid clock worker pong".into());
     }
     let mut sequence = 1u64;
+    let mut lifecycle_sequence = 1u64;
+    let mut acknowledged_pause = false;
     let mut wake = Instant::now();
     loop {
         let base = sequence - 1;
@@ -236,10 +262,66 @@ fn exchange(
         if state.mode == Mode::Fixture && fixture_minute.is_none() {
             break;
         }
-        if base != 0 {
-            if read_frame(&mut output)? != Some(frame(session, sequence, base, Body::ClockReady)) {
-                return Err("Invalid clock worker readiness".into());
+        if base != 0
+            && read_frame(&mut output)? != Some(frame(session, sequence, base, Body::ClockReady))
+        {
+            return Err("Invalid clock worker readiness".into());
+        }
+        if state.mode == Mode::Utc {
+            loop {
+                if state.cancel.load(Ordering::Acquire) {
+                    return Err("Clock update cancelled".into());
+                }
+                let desired = state.paused.load(Ordering::Acquire);
+                if desired != acknowledged_pause {
+                    state
+                        .signal
+                        .send(Signal::Deadline(Some(Instant::now() + RESPONSE_LIMIT)))?;
+                    send(
+                        &mut input,
+                        frame(
+                            session,
+                            lifecycle_sequence,
+                            base,
+                            Body::Lifecycle { paused: desired },
+                        ),
+                    )?;
+                    if read_frame(&mut output)?
+                        != Some(frame(
+                            session,
+                            lifecycle_sequence,
+                            base,
+                            Body::LifecycleAck { paused: desired },
+                        ))
+                    {
+                        return Err("Invalid clock lifecycle acknowledgement".into());
+                    }
+                    acknowledged_pause = desired;
+                    lifecycle_sequence = lifecycle_sequence
+                        .checked_add(1)
+                        .ok_or("Clock lifecycle sequence exhausted")?;
+                    state
+                        .update
+                        .lock()
+                        .map_err(|_| "Clock mailbox unavailable")?
+                        .paused = Some(desired);
+                    (state.notify)();
+                    if desired {
+                        state.signal.send(Signal::Deadline(None))?;
+                    } else {
+                        wake = Instant::now();
+                    }
+                    continue;
+                }
+                if acknowledged_pause {
+                    thread::park();
+                } else if let Some(delay) = wake.checked_duration_since(Instant::now()) {
+                    thread::park_timeout(delay);
+                } else {
+                    break;
+                }
             }
+        } else {
             while let Some(delay) = wake.checked_duration_since(Instant::now()) {
                 if state.cancel.load(Ordering::Acquire) {
                     return Err("Clock update cancelled".into());
@@ -312,7 +394,7 @@ fn exchange(
         if state.mode == Mode::Utc {
             state
                 .signal
-                .try_send(Signal::Deadline(wake + RESPONSE_LIMIT))?;
+                .send(Signal::Deadline(Some(wake + RESPONSE_LIMIT)))?;
         }
         sequence = sequence.checked_add(1).ok_or("Clock sequence exhausted")?;
     }
@@ -371,16 +453,35 @@ pub fn check(mode: Mode) -> Result<()> {
     let mut current = clock::Clock::live_fallback(Instant::now())?;
     let mut bridge = Bridge::start(mode, || {})?;
     let mut seen = Vec::new();
+    let mut lifecycle = Vec::new();
+    let mut resume_at = None;
     let start = Instant::now();
     let limit = match mode {
         Mode::Fixture => Duration::from_secs(11),
-        Mode::Utc => Duration::from_secs(77),
+        Mode::Utc => Duration::from_secs(85),
     };
     while start.elapsed() < limit {
         let update = bridge.poll()?;
+        let remained_paused = lifecycle == [true] && update.paused != Some(false);
+        if let Some(paused) = update.paused {
+            lifecycle.push(paused);
+            if paused {
+                resume_at = Some(Instant::now() + RESPONSE_LIMIT + Duration::from_millis(200));
+            }
+        }
         if let Some(snapshot) = update.snapshot {
+            if remained_paused {
+                return Err("UTC worker published a snapshot while paused".into());
+            }
             current.accept_worker(snapshot);
             seen.push(current.text().to_owned());
+            if mode == Mode::Utc && seen.len() == 1 {
+                bridge.set_paused(true);
+            }
+        }
+        if resume_at.is_some_and(|at| Instant::now() >= at) {
+            resume_at = None;
+            bridge.set_paused(false);
         }
         if let Some(result) = update.terminal {
             result?;
@@ -392,7 +493,7 @@ pub fn check(mode: Mode) -> Result<()> {
             );
             return Ok(());
         }
-        if mode == Mode::Utc && seen.len() == 2 {
+        if mode == Mode::Utc && seen.len() >= 2 && lifecycle == [true, false] {
             bridge.shutdown()?;
             bridge
                 .poll()?
@@ -402,7 +503,7 @@ pub fn check(mode: Mode) -> Result<()> {
                 return Err("UTC worker repeated a clock snapshot".into());
             }
             println!(
-                "Continuous worker clock verified: {} -> {} UTC; worker cleaned up.",
+                "Continuous worker clock verified: {} -> {} UTC; pause and resume acknowledged; worker cleaned up.",
                 seen[0], seen[1]
             );
             return Ok(());

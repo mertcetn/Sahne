@@ -84,3 +84,13 @@ The continuous mode uses a fixed development script. Product worker packaging an
 ### Continuous UTC visual result
 
 On November 26, 2026, source `c673dab` displayed 07:39 and then 07:40 UTC in the same 960×600 D3D12 window on an NVIDIA GeForce RTX 3050 Laptop GPU at DPI scale 1. The UTC label retained the worker's accent color across the minute boundary. The log recorded the fallback presentation and one presentation per accepted minute, for three frames in one GPU generation. The preview closed at the configured deadline, and neither the preview nor its worker remained running. Local log at `target/m4-utc-visual/af7933fc4b824b6cb8d0deecff8bf129/stderr.log`.
+
+### Continuous UTC pause and resume
+
+The continuous Windows window mode checks whether the window is minimized on resize notifications. It forwards the latest pause state to the worker and logs acknowledged transitions. The worker uses the same QuickJS context for lifecycle and clock callbacks. The host correlates each transition using a separate monotonic sequence at the current scene revision. Once pause is acknowledged the host parks without scheduling ticks or a response deadline. Resume starts a bounded acknowledgement exchange and triggers a fresh UTC sample. The scene retains its last accepted value while paused. Unchanged content still produces no new snapshot. [winit minimized-state API](https://docs.rs/winit/0.30.13/winit/window/struct.Window.html#method.is_minimized)
+
+The headless UTC command exercises the shared bridge, including a pause longer than the eight-second IPC response deadline, resume and subsequent minute publication. On November 26, 2026, the release check observed 11:17 → 11:18 UTC, both lifecycle acknowledgements and worker cleanup. Three AppContainer controls and the headless rollover fixture passed. Local regression report at `target/sandbox-validation/20549facfa6e41cf9387c42c40775ede/`.
+
+During an idle pause, an unexpected worker exit is detected when the next exchange starts. Closing the preview still cleans up the profile. The Windows minimize and restore path needs visual verification. This development path covers the fixed clock callback. Windows session lock and sleep delivery and integration with local package scripts remain open.
+
+For the Windows visual check, run `wallpaper-preview.exe --example clock --clock-worker-utc --seconds 120`. After the first accepted time appears, minimize the preview and leave it minimized across a UTC minute boundary. Restore it and confirm that the window shows the current UTC minute. The log should show a pause acknowledgement, a resume acknowledgement and the refreshed time in that order.

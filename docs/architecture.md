@@ -681,3 +681,7 @@ The registered interval fixture sends host pause and resume transitions to the r
 ## 84. M4 trusted package lifecycle callbacks
 
 The Windows developer probe can retain a callback object from a trusted flat package. It waits for the worker's readiness message, delivers pause then resume, and verifies one subsequent scene update. Each callback uses the existing QuickJS execution deadline. See [Trusted package lifecycle probe](m4-timers.md#trusted-package-lifecycle-probe).
+
+## 85. M4 Windows UTC preview lifecycle bridge
+
+The continuous UTC preview forwards minimize and restore transitions to its retained AppContainer clock callback. The host correlates lifecycle frames separately from scene ticks and checks the current scene revision. Once paused, the worker waits with no scheduled ticks. Resume triggers a fresh UTC sample. Callback and IPC response deadlines apply during transitions. See [Continuous UTC pause and resume](m4-clock-preview.md#continuous-utc-pause-and-resume).

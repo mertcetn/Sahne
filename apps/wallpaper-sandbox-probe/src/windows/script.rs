@@ -111,6 +111,14 @@ pub struct RetainedCallbacks {
 }
 
 impl RetainedCallbacks {
+    pub fn utc_clock() -> Result<Self> {
+        Self::from_source(&format!(
+            "({})({})",
+            include_str!("script/utc_clock.js"),
+            include_str!("clock_fixture.js")
+        ))
+    }
+
     pub fn from_source(source: &str) -> Result<Self> {
         if !wallpaper_sandbox::is_appcontainer()? {
             return Err("Lifecycle probe refuses non-AppContainer execution".into());

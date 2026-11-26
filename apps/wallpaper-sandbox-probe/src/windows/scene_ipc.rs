@@ -636,12 +636,41 @@ pub fn worker(
     };
     let updates = mode.updates();
     let mut sequence = 1u64;
+    let utc_callbacks = (mode == Mode::Utc)
+        .then(script::RetainedCallbacks::utc_clock)
+        .transpose()?;
+    let mut lifecycle_sequence = 1u64;
+    let mut utc_paused = false;
     while mode == Mode::Utc || sequence <= updates {
         let display_time = if mode.uses_host_timer() || mode == Mode::Utc {
             if sequence > 1 {
                 send(output, update_message(session, sequence, Body::ClockReady))?;
             }
-            let tick = read_frame(input)?.ok_or(MissingFrame("clock tick"))?;
+            let tick = loop {
+                let message = read_frame(input)?.ok_or(MissingFrame("clock tick"))?;
+                if let (Some(callbacks), Body::Lifecycle { paused }) =
+                    (&utc_callbacks, &message.body)
+                {
+                    message.check_context(session, lifecycle_sequence, sequence - 1)?;
+                    if *paused == utc_paused {
+                        return Err("Duplicate clock lifecycle transition".into());
+                    }
+                    callbacks.lifecycle(*paused)?;
+                    utc_paused = *paused;
+                    send(
+                        output,
+                        Message {
+                            body: Body::LifecycleAck { paused: *paused },
+                            ..message
+                        },
+                    )?;
+                    lifecycle_sequence = lifecycle_sequence
+                        .checked_add(1)
+                        .ok_or("Clock lifecycle sequence exhausted")?;
+                } else {
+                    break message;
+                }
+            };
             tick.check_context(session, sequence, sequence - 1)?;
             let Body::ClockTick { utc_minute } = tick.body else {
                 return Err("Expected host clock tick".into());
@@ -658,7 +687,7 @@ pub fn worker(
                 return Err("JavaScript interval did not cancel on its third callback".into());
             }
             edits
-        } else if let Some(callbacks) = &local_callbacks {
+        } else if let Some(callbacks) = local_callbacks.as_ref().or(utc_callbacks.as_ref()) {
             callbacks.edits(&bindings, &display_time)?
         } else if mode != Mode::Typed {
             script::scene_edits(&bindings, &display_time, source.as_deref())?

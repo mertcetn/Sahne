@@ -309,6 +309,12 @@ impl App {
         if let (Some(bridge), Some(clock)) = (self.live_clock.as_ref(), self.clock.as_mut()) {
             match bridge.poll() {
                 Ok(update) => {
+                    if let Some(paused) = update.paused {
+                        eprintln!(
+                            "Clock worker lifecycle acknowledged: {}",
+                            if paused { "pause" } else { "resume" }
+                        );
+                    }
                     if let Some(snapshot) = update.snapshot {
                         clock.accept_worker(snapshot);
                         eprintln!("Accepted worker clock: {} UTC", clock.text());
@@ -430,6 +436,9 @@ impl App {
                     );
                 }
                 state.window.request_redraw();
+                if let Some(bridge) = &self.live_clock {
+                    bridge.set_paused(state.window.is_minimized() == Some(true));
+                }
                 let zero =
                     state.window.inner_size().width == 0 || state.window.inner_size().height == 0;
                 self.state = Some(state);
@@ -455,6 +464,9 @@ impl ApplicationHandler<AppEvent> for App {
         }
     }
     fn suspended(&mut self, events: &ActiveEventLoop) {
+        if let Some(bridge) = &self.live_clock {
+            bridge.set_paused(true);
+        }
         if !self.motion_reason(events, motion::SUSPENDED, true) {
             return;
         }
@@ -605,6 +617,11 @@ impl ApplicationHandler<AppEvent> for App {
                     Ok(())
                 }
                 WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                    if let Some(bridge) = &self.live_clock
+                        && let Some(minimized) = state.window.is_minimized()
+                    {
+                        bridge.set_paused(minimized);
+                    }
                     eprintln!(
                         "Surface event: size={:?} scale={}",
                         state.window.inner_size(),
@@ -657,7 +674,10 @@ impl ApplicationHandler<AppEvent> for App {
                             match live_clock::Bridge::start(mode, move || {
                                 let _ = proxy.send_event(AppEvent::ClockUpdate);
                             }) {
-                                Ok(bridge) => self.live_clock = Some(bridge),
+                                Ok(bridge) => {
+                                    bridge.set_paused(state.window.is_minimized() == Some(true));
+                                    self.live_clock = Some(bridge);
+                                }
                                 Err(error) => eprintln!("Clock worker could not start: {error}"),
                             }
                         }
