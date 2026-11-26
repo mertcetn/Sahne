@@ -693,3 +693,7 @@ The continuous Windows UTC preview subscribes its owned window to lock and unloc
 ## 87. M4 session display notifications for Modern Standby
 
 The continuous UTC preview also subscribes to the interactive session display state. Display off is a separate pause reason, and display on or dim clears that reason. The native adapter validates the display-setting identifier, payload size and state. This lets the preview react to display inactivity on systems where legacy suspend and resume messages are absent. See [Modern Standby test and display notifications](m4-clock-preview.md#modern-standby-test-and-display-notifications).
+
+## 88. M4 callback deadlines and bounded diagnostics
+
+Scene callbacks check the monotonic deadline before returning staged edits and after lifecycle callbacks, in addition to the QuickJS interrupt hook. A script execution failure sends a correlated rejection with a fixed diagnostic. The host reports the phase without printing worker-provided text. See [Callback deadlines and diagnostics](m4-scene-transactions.md#callback-deadlines-and-diagnostics).

@@ -12,6 +12,7 @@ pub const RESULT_BIT: u32 = 1 << 23;
 // Deliberately ungranted target for the embedded scene's terminal rejection test.
 const SCRIPT_BACKGROUND_PROBE: u32 = 4;
 const PANEL_COLOR: Color = Color([51, 102, 153, 255]);
+const SCRIPT_FAILURE_CODE: u16 = 101;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -314,7 +315,7 @@ pub fn read_response(
             .map_err(|_| "Scene program writer queue unavailable")?;
     }
     if mode == Mode::LocalLifecycle {
-        let ready = read_frame(output)?.ok_or(MissingFrame("lifecycle readiness"))?;
+        let ready = read_script_reply(output, session, 3, 0, "lifecycle readiness")?;
         if ready != envelope(session, 3, Body::LifecycleReady) {
             return Err("Unexpected lifecycle readiness".into());
         }
@@ -330,7 +331,7 @@ pub fn read_response(
     let mut timer = match mode {
         Mode::Timer => Some(resumed_timer(MIN_DELAY, |_| Ok(()))?),
         Mode::RegisteredTimer => {
-            let registration = read_frame(output)?.ok_or(MissingFrame("interval registration"))?;
+            let registration = read_script_reply(output, session, 3, 0, "interval registration")?;
             registration.check_context(session, 3, 0)?;
             let Body::RegisterInterval { delay_ms } = registration.body else {
                 return Err("Unexpected interval registration for clock fixture".into());
@@ -353,7 +354,7 @@ pub fn read_response(
     let mut published = 0;
     for sequence in 1..=updates {
         let Some((clock, accent, clock_color, accent_text)) = clock_state.as_ref() else {
-            let batch = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
+            let batch = read_script_reply(output, session, sequence, sequence - 1, "scene batch")?;
             let count = match &batch.body {
                 Body::SceneBatch { edits } => edits.len(),
                 _ => return Err("Expected scene edit batch".into()),
@@ -402,7 +403,7 @@ pub fn read_response(
             || panel.is_some_and(|id| {
                 content(host.scene(), id) != Some(&Content::Rectangle { color: PANEL_COLOR })
             });
-        let accepted = read_frame(output)?.ok_or(MissingFrame("scene batch"))?;
+        let accepted = read_script_reply(output, session, sequence, sequence - 1, "scene batch")?;
         let ack = accept_scene_batch(&mut host, accepted);
         let accent_matches = match content(host.scene(), accent) {
             Some(Content::Text { text, color, .. }) if mode.loads_script() => {
@@ -565,7 +566,8 @@ pub fn worker(
 ) -> Result<()> {
     send(output, envelope(session, 2, Body::Pong { nonce }))?;
     let registered_clock = if mode == Mode::RegisteredTimer {
-        let (callback, delay_ms) = script::RegisteredClock::new()?;
+        let (callback, delay_ms) =
+            script_result(output, session, 3, 0, script::RegisteredClock::new())?;
         send(
             output,
             envelope(session, 3, Body::RegisterInterval { delay_ms }),
@@ -611,7 +613,13 @@ pub fn worker(
     };
     let local_callbacks = if mode == Mode::LocalLifecycle {
         let source = source.as_deref().ok_or("Missing local lifecycle source")?;
-        let callbacks = script::RetainedCallbacks::from_source(source)?;
+        let callbacks = script_result(
+            output,
+            session,
+            3,
+            0,
+            script::RetainedCallbacks::from_source(source),
+        )?;
         send(output, envelope(session, 3, Body::LifecycleReady))?;
         deliver_lifecycle(input, output, session, &callbacks)?;
         Some(callbacks)
@@ -655,7 +663,13 @@ pub fn worker(
                     if *paused == utc_paused {
                         return Err("Duplicate clock lifecycle transition".into());
                     }
-                    callbacks.lifecycle(*paused)?;
+                    script_result(
+                        output,
+                        session,
+                        lifecycle_sequence,
+                        sequence - 1,
+                        callbacks.lifecycle(*paused),
+                    )?;
                     utc_paused = *paused;
                     send(
                         output,
@@ -682,15 +696,33 @@ pub fn worker(
             "12:34".into()
         };
         let edits = if let Some(callback) = &registered_clock {
-            let edits = callback.callbacks.edits(&bindings, &display_time)?;
+            let edits = script_result(
+                output,
+                session,
+                sequence,
+                sequence - 1,
+                callback.callbacks.edits(&bindings, &display_time),
+            )?;
             if callback.cancelled() != (sequence == updates) {
                 return Err("JavaScript interval did not cancel on its third callback".into());
             }
             edits
         } else if let Some(callbacks) = local_callbacks.as_ref().or(utc_callbacks.as_ref()) {
-            callbacks.edits(&bindings, &display_time)?
+            script_result(
+                output,
+                session,
+                sequence,
+                sequence - 1,
+                callbacks.edits(&bindings, &display_time),
+            )?
         } else if mode != Mode::Typed {
-            script::scene_edits(&bindings, &display_time, source.as_deref())?
+            script_result(
+                output,
+                session,
+                sequence,
+                sequence - 1,
+                script::scene_edits(&bindings, &display_time, source.as_deref()),
+            )?
         } else {
             vec![text(&display_time)]
         };
@@ -773,6 +805,54 @@ fn lifecycle_sequence(paused: bool) -> u64 {
     if paused { 4 } else { 5 }
 }
 
+fn script_result<T>(
+    output: &mut impl Write,
+    session: u64,
+    sequence: u64,
+    base_revision: u64,
+    result: Result<T>,
+) -> Result<T> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(_) => {
+            send(
+                output,
+                Message {
+                    session,
+                    sequence,
+                    base_revision,
+                    body: Body::Reject {
+                        code: SCRIPT_FAILURE_CODE,
+                        message: "Script execution failed".into(),
+                    },
+                },
+            )?;
+            Err("Script execution failed".into())
+        }
+    }
+}
+
+fn read_script_reply(
+    output: &mut impl Read,
+    session: u64,
+    sequence: u64,
+    base_revision: u64,
+    phase: &'static str,
+) -> Result<Message> {
+    let reply = read_frame(output)?.ok_or(MissingFrame(phase))?;
+    if matches!(
+        &reply.body,
+        Body::Reject {
+            code: SCRIPT_FAILURE_CODE,
+            ..
+        }
+    ) {
+        reply.check_context(session, sequence, base_revision)?;
+        return Err(format!("Worker script failed during {phase}").into());
+    }
+    Ok(reply)
+}
+
 fn notify_lifecycle(
     output: &mut impl Read,
     requests: &mpsc::SyncSender<Message>,
@@ -783,7 +863,7 @@ fn notify_lifecycle(
     requests
         .try_send(envelope(session, sequence, Body::Lifecycle { paused }))
         .map_err(|_| "Lifecycle writer queue unavailable")?;
-    let ack = read_frame(output)?.ok_or(MissingFrame("lifecycle acknowledgement"))?;
+    let ack = read_script_reply(output, session, sequence, 0, "lifecycle acknowledgement")?;
     if ack != envelope(session, sequence, Body::LifecycleAck { paused }) {
         return Err("Unexpected lifecycle acknowledgement".into());
     }
@@ -804,7 +884,7 @@ fn deliver_lifecycle(
         if event != envelope(session, sequence, Body::Lifecycle { paused }) {
             return Err("Unexpected lifecycle event".into());
         }
-        callbacks.lifecycle(paused)?;
+        script_result(output, session, sequence, 0, callbacks.lifecycle(paused))?;
         send(
             output,
             envelope(session, sequence, Body::LifecycleAck { paused }),

@@ -27,10 +27,15 @@ pub fn run(case: &str) -> Result<()> {
     // Base objects plus source evaluation and Promises; no loaders, native modules,
     // typed arrays, RegExp, Date, host callbacks or browser/system APIs are installed.
     let context = Context::custom::<(intrinsic::Eval, intrinsic::Promise)>(&runtime)?;
-    run_case(case, &runtime, &context, &interrupted)
+    run_case(case, &runtime, &context, &interrupted.flag)
 }
 
-fn bounded_runtime() -> Result<(Runtime, Arc<AtomicBool>)> {
+struct Deadline {
+    at: Instant,
+    flag: Arc<AtomicBool>,
+}
+
+fn bounded_runtime() -> Result<(Runtime, Deadline)> {
     let runtime = Runtime::new()?;
     // Keep the default C allocator: rust-alloc/allocator features would disable this limit.
     runtime.set_memory_limit(HEAP_BYTES);
@@ -39,7 +44,7 @@ fn bounded_runtime() -> Result<(Runtime, Arc<AtomicBool>)> {
     Ok((runtime, interrupted))
 }
 
-fn arm_deadline(runtime: &Runtime) -> Arc<AtomicBool> {
+fn arm_deadline(runtime: &Runtime) -> Deadline {
     let interrupted = Arc::new(AtomicBool::new(false));
     let observed = interrupted.clone();
     let deadline = Instant::now() + Duration::from_millis(100);
@@ -50,7 +55,10 @@ fn arm_deadline(runtime: &Runtime) -> Arc<AtomicBool> {
         }
         expired
     })));
-    interrupted
+    Deadline {
+        at: deadline,
+        flag: interrupted,
+    }
 }
 
 pub struct RegisteredClock {
@@ -160,8 +168,11 @@ impl RetainedCallbacks {
     }
 }
 
-fn check_callback_budget(runtime: &Runtime, interrupted: &AtomicBool) -> Result<()> {
-    if interrupted.load(Ordering::Relaxed) || runtime.is_job_pending() {
+fn check_callback_budget(runtime: &Runtime, deadline: &Deadline) -> Result<()> {
+    if deadline.flag.load(Ordering::Relaxed)
+        || Instant::now() >= deadline.at
+        || runtime.is_job_pending()
+    {
         return Err("Scene callback exceeded its execution budget".into());
     }
     Ok(())
@@ -411,4 +422,19 @@ fn run_scene_callback<'js>(
         }
     }
     Ok(edits)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn elapsed_callback_is_rejected_even_without_a_quickjs_interrupt() {
+        let runtime = Runtime::new().unwrap();
+        let deadline = Deadline {
+            at: Instant::now(),
+            flag: Arc::new(AtomicBool::new(false)),
+        };
+        assert!(check_callback_budget(&runtime, &deadline).is_err());
+    }
 }

@@ -156,6 +156,14 @@ Each run requires a nonempty batch of valid text or RGBA writes. The source is l
 
 A local release run acknowledged two edits to `status` and `tile` and preserved the accepted scene after rejection. A separate run rejected an attempt to assign rectangle text. Profile cleanup passed for both runs. The trusted clock package, embedded script, typed scene, timer and headless live clock regressions passed. Local AppContainer regression report at `target/sandbox-validation/ef779655429d4bb7bb3014433b7db5a6/`.
 
+### Callback deadlines and diagnostics
+
+Scene script setup, update and lifecycle callbacks use the 100 ms monotonic execution budget. After successful evaluation, the worker checks the time again before publishing staged edits or acknowledging a lifecycle transition. The independent host response deadline remains in force.
+
+During a script failure, the worker returns rejection code 101 with a fixed diagnostic and the in-flight session, sequence and base revision. The host validates this envelope and reports which phase failed without printing worker-supplied diagnostic text or script exception details. A failed callback publishes no scene batch, and a failed lifecycle callback receives no acknowledgement. The host stops the worker and cleans up its profile.
+
+Release checks exercised a throwing scene callback and a throwing resume callback. Both reported the failed phase, omitted the exception text and verified profile cleanup. The resume failure stopped before any scene transaction. The scripted scene, registered timer, interrupt and Promise job probes and headless rollover regression passed. Local regression report at `target/sandbox-validation/9d41ca529bf4467fb037cf10f14854cc/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.
