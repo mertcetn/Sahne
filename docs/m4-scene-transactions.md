@@ -210,6 +210,16 @@ Release checks verified changed content, an acknowledged identical write and rej
 
 On November 26, 2026, the D3D12 visual check of `52cd70a` recorded the initial presentation, worker snapshot acceptance and the updated presentation in that order. After worker completion, the 960×600 window still showed `Worker update accepted` on the updated blue panel. Escape closed the preview with two frames in one GPU generation. The initial presentation is recorded in the log. The visual observation covers the retained updated frame. Local log at `target/m4-live-package-visual/1ef39f0367064ff6a49d1381522c2b6f/stderr.log`.
 
+#### Integrated script preview regression
+
+Run the Windows headless regression with PowerShell 7 from the repository root.
+
+```powershell
+pwsh -NoProfile -File tools/test-script-preview.ps1
+```
+
+The runner builds the release binaries and generates local fixtures. It checks changed and unchanged transactions, a Promise-based update, rejection of invalid text, a redacted script exception, the Promise job limit and a missing script. It checks worker profile cleanup for every case that launches an AppContainer. Each run writes a JSON summary and bounded process logs under `target/script-preview-validation/`. Use `-SkipBuild` to check already-built release binaries. This regression covers trusted local input and runs without a renderer.
+
 #### Direct package preview on the desktop
 
 ```powershell

@@ -733,3 +733,7 @@ The fixed animated-shapes example can use the Windows desktop surface. The appli
 ## 97. M4 sandboxed UTC clock desktop attachment
 
 The continuous UTC clock can use the Explorer-owned desktop surface while the AppContainer worker supplies its updates. A hidden top-level window owned by the application receives session and power notifications and remains alive across desktop surface recreation. Worker and snapshot state remain application-owned. See [Continuous UTC clock on the desktop](m4-clock-preview.md#continuous-utc-clock-on-the-desktop).
+
+## 98. M4 direct package cleanup verification
+
+The direct package supervisor reports successful worker profile cleanup before returning the transaction outcome. The Windows headless regression uses that signal to check cleanup after successful and rejected transactions and expects no cleanup signal when package preparation fails before launch. See [Integrated script preview regression](m4-scene-transactions.md#integrated-script-preview-regression).

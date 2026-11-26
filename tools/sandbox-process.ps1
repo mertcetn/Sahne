@@ -5,13 +5,24 @@ function Invoke-SahneGuardedProcess {
         [Parameter(Mandatory)][string[]] $ArgumentList,
         [Parameter(Mandatory)][string] $WorkingDirectory,
         [Parameter(Mandatory)][string] $OutputDirectory,
+        [string] $PackageFolder,
         [ValidateRange(1, 120)][int] $TimeoutSeconds = 20,
         [ValidateRange(1024, 1048576)][int] $OutputLimitBytes = 1048576
     )
     # Start-Process joins ArgumentList into a command line. This caller uses only fixed
-    # case names or base64 self-test payloads; reject tokens requiring shell quoting.
+    # case names or base64 self-test payloads. Quote the package path separately.
     foreach ($argument in $ArgumentList) {
         if ($argument -notmatch '^[A-Za-z0-9+/=._-]+$') { throw 'Unsupported process argument token' }
+    }
+    if ($PSBoundParameters.ContainsKey('PackageFolder')) {
+        if (-not [IO.Path]::IsPathFullyQualified($PackageFolder) -or $PackageFolder -match '["\x00-\x1f]') {
+            throw 'Expected an absolute package folder without control characters or quotes'
+        }
+        $folder = [IO.Path]::TrimEndingDirectorySeparator($PackageFolder)
+        if ($folder.EndsWith('\') -or $folder.EndsWith('/')) {
+            throw 'Expected a package subfolder'
+        }
+        $ArgumentList += '"' + $folder + '"'
     }
     New-Item -ItemType Directory -Path $OutputDirectory -ErrorAction Stop | Out-Null
     $stdout = Join-Path $OutputDirectory 'stdout.log'

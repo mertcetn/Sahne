@@ -229,7 +229,8 @@ fn supervise(
     let base = std::env::current_dir()?.join("target/sandbox-runs");
     fs::create_dir_all(&base)?;
     let root = base.join(format!("preview-{}-{session:016x}", std::process::id()));
-    let case = if program.is_some() {
+    let package_mode = program.is_some();
+    let case = if package_mode {
         "local-script-package"
     } else {
         match state.mode {
@@ -301,6 +302,9 @@ fn supervise(
         .map_err(|_| "Clock channel thread panicked");
     sandbox.cleanup_profile()?;
     joined?;
+    if package_mode {
+        println!("Package worker profile cleanup verified.");
+    }
     let Some(response) = response else {
         return Ok(());
     };
