@@ -35,6 +35,8 @@ $cases = @(
     @{ Name = 'promise-rejection'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; return Promise.reject(new Error("private-fixture-error")); }' }
     @{ Name = 'dom-over-limit-caught'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; try { for (let i = 0; i < 255; i++) document.getElementById("status"); } catch (error) { if (!(error instanceof RangeError)) throw error; } }' }
     @{ Name = 'dom-at-limit'; Changed = 'true'; Script = '(document) => { document.getElementById("status").textContent = "Updated"; for (let i = 0; i < 254; i++) document.getElementById("status"); }' }
+    @{ Name = 'scene-edits-at-limit'; Changed = 'true'; Targets = 32; Script = '(document) => { for (let i = 0; i < 32; i++) { const node = document.getElementById("status" + i); const style = node.style; node.textContent = "Staged"; node.textContent = "Updated"; style.color = [1, 2, 3, 255]; style.color = [4, 5, 6, 255]; } }' }
+    @{ Name = 'initial-scene-edits-over-limit'; Targets = 33; BeforeLaunch = 'edit count outside bounds'; Script = '() => {}' }
     @{ Name = 'missing-script' }
     @{ Name = 'lifecycle-promise'; Lifecycle = $true; Changed = 'true'; Script = '(() => { let phase = 0; return { pause() { return Promise.resolve().then(() => { phase = 1; }); }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Resumed"; } }; })()' }
     @{ Name = 'lifecycle-resume-rejected'; Lifecycle = $true; Script = '({ pause() {}, resume() { return Promise.reject(new Error("private-fixture-error")); }, tick(document) { document.getElementById("status").textContent = "Unexpected"; } })' }
@@ -67,6 +69,12 @@ $results = foreach ($case in $cases) {
     [IO.File]::WriteAllText((Join-Path $inputFolder 'index.html'), '<span id="status" style="width:400px;height:24px">Ready</span>')
     if ($case.ContainsKey('Html')) {
         [IO.File]::WriteAllText((Join-Path $inputFolder 'index.html'), $case.Html)
+    }
+    if ($case.ContainsKey('Targets')) {
+        $elements = for ($index = 0; $index -lt $case.Targets; $index++) {
+            '<span id="status{0}" style="width:400px;height:24px">Ready</span>' -f $index
+        }
+        [IO.File]::WriteAllText((Join-Path $inputFolder 'index.html'), ($elements -join "`n"))
     }
     if ($case.ContainsKey('Image')) {
         $example = Join-Path $repo 'examples/static-image'
@@ -169,6 +177,10 @@ $results = foreach ($case in $cases) {
         $expectedCleanup = 1
         if (-not $case.ContainsKey('Script')) {
             $expectedError = 'MissingSource'
+            $expectedCleanup = 0
+        }
+        if ($case.ContainsKey('BeforeLaunch')) {
+            $expectedError = $case.BeforeLaunch
             $expectedCleanup = 0
         }
         $passed = $passed -and $result.ExitCode -ne 0 -and $cleanupCount -eq $expectedCleanup -and

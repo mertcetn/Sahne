@@ -222,6 +222,8 @@ The runner builds the release binaries and generates local fixtures. It checks c
 
 The November 26, 2026 run accepted callbacks at exactly 64 Promise jobs and 256 DOM operations. It rejected 65 jobs, a rejected Promise, and 257 DOM operations even when the script caught the adapter's exception. The rejected cases staged a write before the failure. They produced no accepted scene update, omitted the private exception text and verified worker profile cleanup. All 20 cases passed. Local report: `target/script-preview-validation/c713f2af04644f8b81ebd1c3050e00d0/summary.json`.
 
+A later run accepted a callback that updated text and color on 32 elements in one 64-edit transaction. Rewriting each property within the same callback still counted as one staged edit per property. A package with 33 text targets required 66 initial properties and failed initialization before launching a worker. All 33 cases passed. Local report: `target/script-preview-validation/4058fccadd8346aab20e2edc8ba9304a/summary.json`.
+
 #### Direct package preview on the desktop
 
 ```powershell

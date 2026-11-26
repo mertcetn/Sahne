@@ -131,6 +131,7 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [ ] Connect script timer registration and lifecycle callbacks to the worker and integrate the adapter with the production script-visible DOM.
 - [x] Verify [live trusted package ticks through Windows lock and sleep](m4-timers.md#live-trusted-package-lifecycle-preview) in the preview window.
 - [ ] Enforce callback and Promise/microtask budgets, bounded host callbacks, and bounded diagnostic output.
+- [x] Verify [DOM, Promise and scene edit boundaries](m4-scene-transactions.md#integrated-script-preview-regression) on the trusted package path.
 - [x] Verify [immutable accepted snapshots and suppression of unchanged clock content](m4-scene-transactions.md#content-snapshots-for-presentation).
 - [x] Add the [host-driven UTC clock renderer path](m4-clock-preview.md) and deterministic rollover mode with CPU checks.
 - [x] Verify the [clock rollover and GPU recovery](m4-clock-preview.md#local-windows-verification) in a local D3D12 window.
