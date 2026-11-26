@@ -23,6 +23,7 @@ use wallpaper_scene::{
 
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
 const RESPONSE_LIMIT: Duration = Duration::from_secs(8);
+const PACKAGE_WORKER_TIMEOUT: &str = "Package worker exchange timed out";
 const TICK_GAP: Duration = Duration::from_millis(1400);
 const MINUTES: [u16; 3] = [1439, 0, 0];
 type WorkerResult<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
@@ -152,7 +153,7 @@ impl Bridge {
             handles_lifecycle: mode == Mode::Utc
                 || package
                     .as_ref()
-                    .is_some_and(|p| p.lifecycle == Lifecycle::Live),
+                    .is_some_and(|p| p.lifecycle.handles_live_events()),
         });
         let shared = Arc::clone(&state);
         let supervisor = thread::Builder::new()
@@ -244,6 +245,7 @@ fn supervise(
             Lifecycle::OneShot => "local-script-package",
             Lifecycle::Check => "preview-lifecycle-package",
             Lifecycle::Live => "live-lifecycle-package",
+            Lifecycle::WatchdogCheck => "live-lifecycle-watchdog-check",
         }
     } else {
         match state.mode {
@@ -289,7 +291,12 @@ fn supervise(
             Ok(Signal::Finished(result)) => break Some(result),
             Ok(Signal::Cancel) => break None,
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                break Some(Err("Clock worker timed out".into()));
+                let reason = if package_mode {
+                    PACKAGE_WORKER_TIMEOUT
+                } else {
+                    "Clock worker timed out"
+                };
+                break Some(Err(reason.into()));
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 break Some(Err("Clock worker channel disappeared".into()));
@@ -773,7 +780,7 @@ fn exchange_package(
     } else {
         (None, 1)
     };
-    let live = lifecycle == Lifecycle::Live;
+    let live = lifecycle.handles_live_events();
     let mut lifecycle_state = (false, 4u64);
     for sequence in 1..=if live { u64::MAX - 5 } else { ticks } {
         let base = sequence - 1;
@@ -952,6 +959,7 @@ pub fn check_package(package: script_package::Prepared) -> Result<()> {
 }
 
 pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
+    let watchdog_check = package.lifecycle == Lifecycle::WatchdogCheck;
     let mut bridge = Bridge::start_package(package, true, || {})?;
     let until = Instant::now() + RESPONSE_LIMIT + Duration::from_secs(3);
     let mut resume_at = None;
@@ -960,6 +968,17 @@ pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
     while Instant::now() < until {
         let update = bridge.poll()?;
         if let Some(result) = update.terminal {
+            if watchdog_check
+                && resumed
+                && updates == 1
+                && update.snapshot.is_none()
+                && result
+                    .as_ref()
+                    .is_err_and(|reason| reason == PACKAGE_WORKER_TIMEOUT)
+            {
+                println!("Live package watchdog stopped worker after one accepted snapshot.");
+                return Ok(());
+            }
             result?;
             return Err("Live package ended before lifecycle verification".into());
         }
@@ -979,6 +998,9 @@ pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
             }
             updates += 1;
             if updates == 2 {
+                if watchdog_check {
+                    return Err("Watchdog worker published an unexpected second snapshot".into());
+                }
                 bridge.shutdown()?;
                 bridge
                     .poll()?

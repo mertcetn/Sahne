@@ -72,6 +72,7 @@ $cases = @(
     @{ Name = 'isolated-script-invalid-timer'; Isolated = $true; Lifecycle = $true; InvalidDelay = $true; Script = '({ intervalMs: 16, tickCount: 4, pause() {}, resume() {}, tick() {} })' }
     @{ Name = 'isolated-script-live'; Isolated = $true; Live = $true; Script = '(() => { let phase = 0, calls = 0; return { intervalMs: 32, pause() { phase = 1; }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Tick " + (++calls); } }; })()' }
     @{ Name = 'isolated-script-live-rejected'; Isolated = $true; Live = $true; RuntimeReject = $true; Script = '(() => { let calls = 0; return { intervalMs: 32, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Tick " + (++calls); if (calls === 2) throw new Error("private-fixture-error"); } }; })()' }
+    @{ Name = 'isolated-script-worker-timeout'; Isolated = $true; Watchdog = $true; Script = '({ intervalMs: 32, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Accepted"; } })' }
 )
 $manifest = '{"formatVersion":1,"apiVersion":1,"id":"probe.integration","name":"Script preview validation","entry":"index.html","script":"update.js","permissions":[],"preferredFps":30}'
 Write-Host "Script preview validation reports in $run"
@@ -120,6 +121,7 @@ $results = foreach ($case in $cases) {
     }
 
     $mode = if ($case.ContainsKey('Intake')) { '--check-package-intake' }
+        elseif ($case.ContainsKey('Watchdog')) { '--check-isolated-script-worker-timeout' }
         elseif ($case.ContainsKey('Isolated') -and $case.ContainsKey('Live')) { '--check-isolated-script-live' }
         elseif ($case.ContainsKey('Isolated') -and $case.ContainsKey('Lifecycle')) { '--check-isolated-script-lifecycle' }
         elseif ($case.ContainsKey('Isolated')) { '--check-isolated-script-preview' }
@@ -153,7 +155,8 @@ $results = foreach ($case in $cases) {
         }
     }
     elseif ($case.ContainsKey('Isolated') -and -not $case.ContainsKey('Lifecycle')) {
-        $successPattern = if ($case.ContainsKey('Live')) { '(?m)^Live package pause, resume and two updates verified\.\r?$' }
+        $successPattern = if ($case.ContainsKey('Watchdog')) { '(?m)^Live package watchdog stopped worker after one accepted snapshot\.\r?$' }
+            elseif ($case.ContainsKey('Live')) { '(?m)^Live package pause, resume and two updates verified\.\r?$' }
             else { $accepted.Replace('(true|false)', 'true') }
         if ($case.ContainsKey('Reject')) {
             $passed = $passed -and $result.ExitCode -ne 0 -and $cleanupCount -eq 0 -and

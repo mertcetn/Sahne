@@ -148,6 +148,16 @@ A failed lifecycle callback sends a bounded rejection and terminates the worker 
 
 In the trusted package release test, pause updated shared state through a Promise. Resume then changed that state in its 64th job, and tick read the result before publishing its edit. A 65-job resume, an unhandled rejection and an unresolved returned Promise each stopped before the resume acknowledgement and tick. Five AppContainer regressions and both headless clock checks passed. The continuous check observed 15:28 → 15:29 UTC with pause, resume and cleanup. Local report at `target/sandbox-validation/28bbb7457be641d7b3e9ead4af73bbdf/`.
 
+### Integrated package watchdog check
+
+```powershell
+target/release/wallpaper-preview.exe --check-isolated-script-worker-timeout $folder
+```
+
+This headless development check takes a live callback package whose first tick changes the scene. A dedicated AppContainer test worker deliberately waits in native code after the second dispatch. The preview must observe the 8-second response deadline, retain the first accepted snapshot, stop the worker and clean up both profiles. The test uses the normal isolated package preparation and live host supervision paths.
+
+The November 26, 2026 run passed all 47 cases. The watchdog case completed in about 8.7 seconds including startup and cleanup. Local report: `target/script-preview-validation/3e78bf95dfd44d71940b83b6806ebf27/summary.json`.
+
 ## Native interval call limits
 
 The retained registered-clock fixture accepts one native interval registration during setup and one cancellation during its final tick. The worker checks the delay before conversion to milliseconds. It must be an integer from 16 through 64, the fixed fixture's supported range. Cancellation requires the sole valid handle. Invalid and repeated calls leave a sticky failure that prevents the worker from sending the affected initialization response, lifecycle acknowledgement or scene batch. The host independently checks the interval request before scheduling it. General package timers remain outside this fixed fixture.

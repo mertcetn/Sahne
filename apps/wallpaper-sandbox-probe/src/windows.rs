@@ -306,6 +306,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "local-lifecycle-package"
         | "preview-lifecycle-package"
         | "live-lifecycle-package"
+        | "live-lifecycle-watchdog-check"
         | "scene-timer"
         | "scene-timer-registration"
         | "preview-clock-utc"

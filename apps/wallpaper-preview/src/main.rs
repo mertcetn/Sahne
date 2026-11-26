@@ -63,6 +63,19 @@ fn main() -> Result<()> {
     let mut args = std::env::args().skip(1).peekable();
     if args
         .peek()
+        .is_some_and(|arg| arg == "--check-isolated-script-worker-timeout")
+    {
+        args.next();
+        let folder = args.next().ok_or("Expected an absolute package folder")?;
+        if args.next().is_some() {
+            return Err("Package worker timeout check takes exactly one folder".into());
+        }
+        let mut package = script_package::prepare_isolated(&folder)?;
+        package.lifecycle = script_package::Lifecycle::WatchdogCheck;
+        return live_clock::check_live_package(package);
+    }
+    if args
+        .peek()
         .is_some_and(|arg| arg == "--check-package-intake")
     {
         args.next();
@@ -92,6 +105,9 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--check-isolated-script-lifecycle <absolute-folder> checks synthetic pause, resume and bounded ticks with separate AppContainer workers."
+                );
+                println!(
+                    "--check-isolated-script-worker-timeout <absolute-folder> runs a headless watchdog fixture with a live callback package."
                 );
                 println!(
                     "--check-trusted-script-lifecycle <absolute-folder> checks pause, resume and one script tick without a window."

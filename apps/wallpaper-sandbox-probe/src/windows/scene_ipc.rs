@@ -22,6 +22,7 @@ pub enum Mode {
     LocalLifecycle,
     PreviewLifecycle,
     LiveLifecycle,
+    LiveLifecycleWatchdog,
     Timer,
     RegisteredTimer,
     Utc,
@@ -37,6 +38,7 @@ impl Mode {
             "local-lifecycle-package" => Some(Self::LocalLifecycle),
             "preview-lifecycle-package" => Some(Self::PreviewLifecycle),
             "live-lifecycle-package" => Some(Self::LiveLifecycle),
+            "live-lifecycle-watchdog-check" => Some(Self::LiveLifecycleWatchdog),
             "scene-timer" => Some(Self::Timer),
             "scene-timer-registration" => Some(Self::RegisteredTimer),
             "preview-clock-utc" => Some(Self::Utc),
@@ -51,8 +53,12 @@ impl Mode {
     fn uses_general_bindings(self) -> bool {
         matches!(
             self,
-            Self::LocalScene | Self::LocalLifecycle | Self::PreviewLifecycle | Self::LiveLifecycle
-        )
+            Self::LocalScene | Self::LocalLifecycle | Self::PreviewLifecycle
+        ) || self.is_live_package()
+    }
+
+    fn is_live_package(self) -> bool {
+        matches!(self, Self::LiveLifecycle | Self::LiveLifecycleWatchdog)
     }
 
     fn updates(self) -> u64 {
@@ -629,16 +635,17 @@ pub fn worker(
     };
     let (local_callbacks, package_ticks) = if matches!(
         mode,
-        Mode::LocalLifecycle | Mode::PreviewLifecycle | Mode::LiveLifecycle
-    ) {
+        Mode::LocalLifecycle | Mode::PreviewLifecycle
+    ) || mode.is_live_package()
+    {
         let source = source.as_deref().ok_or("Missing local lifecycle source")?;
         let (callbacks, timer) = script_result(
             output,
             session,
             3,
             0,
-            if matches!(mode, Mode::PreviewLifecycle | Mode::LiveLifecycle) {
-                script::RetainedCallbacks::from_package_source(source, mode == Mode::LiveLifecycle)
+            if mode == Mode::PreviewLifecycle || mode.is_live_package() {
+                script::RetainedCallbacks::from_package_source(source, mode.is_live_package())
             } else {
                 script::RetainedCallbacks::from_source(source).map(|callbacks| (callbacks, None))
             },
@@ -658,7 +665,7 @@ pub fn worker(
         } else {
             send(output, envelope(session, 3, Body::LifecycleReady))?;
         }
-        if mode != Mode::LiveLifecycle {
+        if !mode.is_live_package() {
             deliver_lifecycle(input, output, session, |paused| callbacks.lifecycle(paused))?;
         }
         (Some(callbacks), timer.map(|timer| u64::from(timer.ticks)))
@@ -690,11 +697,13 @@ pub fn worker(
     let mut utc_paused = false;
     let mut package_paused = false;
     let mut package_lifecycle_sequence = 4;
-    while matches!(mode, Mode::Utc | Mode::LiveLifecycle) || sequence <= updates {
+    while mode == Mode::Utc || mode.is_live_package() || sequence <= updates {
         if package_ticks.is_some() {
             loop {
                 let request = read_frame(input)?.ok_or(MissingFrame("package tick"))?;
-                if let (Mode::LiveLifecycle, Body::Lifecycle { paused }) = (mode, &request.body) {
+                if mode.is_live_package()
+                    && let Body::Lifecycle { paused } = &request.body
+                {
                     request.check_context(session, package_lifecycle_sequence, sequence - 1)?;
                     if *paused == package_paused {
                         return Err("Duplicate package lifecycle transition".into());
@@ -734,6 +743,11 @@ pub fn worker(
                     break;
                 }
             }
+        }
+        if mode == Mode::LiveLifecycleWatchdog && sequence == 2 {
+            // Deliberately unresponsive native test worker, independent of QuickJS limits.
+            std::thread::sleep(Duration::from_secs(15));
+            return Err("Watchdog fixture reached its fallback deadline".into());
         }
         let display_time = if mode.uses_host_timer() || mode == Mode::Utc {
             if sequence > 1 {

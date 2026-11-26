@@ -815,3 +815,7 @@ The package scene bridge checks the session, sequence and base revision before a
 ## 116. M4 isolated scheduled lifecycle check
 
 The isolated lifecycle check uses the same preparation helper and host binding checks as the isolated preview. A separate execution worker runs the bounded synthetic lifecycle and tick sequence. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).
+
+## 117. M4 integrated package watchdog check
+
+The headless watchdog check selects a test worker that accepts one normal live scene transaction and stops responding at the next dispatch. It shares the live host supervisor and its Windows job termination path. The check verifies the timeout outcome, one accepted snapshot and profile cleanup. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).

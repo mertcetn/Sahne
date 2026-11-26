@@ -14,6 +14,13 @@ pub enum Lifecycle {
     OneShot,
     Check,
     Live,
+    WatchdogCheck,
+}
+
+impl Lifecycle {
+    pub fn handles_live_events(self) -> bool {
+        matches!(self, Self::Live | Self::WatchdogCheck)
+    }
 }
 
 pub fn prepare(folder: &str) -> Result<Prepared> {
