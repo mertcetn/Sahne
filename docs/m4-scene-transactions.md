@@ -204,9 +204,11 @@ target/release/wallpaper-preview.exe --check-trusted-script-preview $folder
 target/release/wallpaper-preview.exe --trusted-script-preview $folder --seconds 20
 ```
 
-The headless check performs the same AppContainer exchange without starting D3D12. Window mode presents the compiled initial scene, then starts the worker. The worker runs one callback. The host validates and acknowledges its batch and publishes only changed content. A subsequent deliberate invalid batch tests rollback. The preview continues to display its last accepted scene after worker exit. The input is compiled in the host, and image resources and desktop attachment are outside this mode. Visual verification of the live window remains open.
+The headless check performs the same AppContainer exchange without starting D3D12. Window mode presents the compiled initial scene, then starts the worker. The worker runs one callback. The host validates and acknowledges its batch and publishes only changed content. A subsequent deliberate invalid batch tests rollback. The preview continues to display its last accepted scene after worker exit. The input is compiled in the host, and image resources and desktop attachment are outside this mode.
 
 Release checks verified changed content, an acknowledged identical write and rejection of an invalid first batch. The original headless clock and three AppContainer regression cases passed. The local visual fixture is at `target/m4-retained-scene-package/f7a0e767866745b789a6e91df306833a/`. Local regression report at `target/sandbox-validation/bc9c435b92734305ac1c1b8820771c49/`.
+
+On November 26, 2026, the D3D12 visual check of `52cd70a` recorded the initial presentation, worker snapshot acceptance and the updated presentation in that order. After worker completion, the 960×600 window still showed `Worker update accepted` on the updated blue panel. Escape closed the preview with two frames in one GPU generation. The initial presentation is recorded in the log. The visual observation covers the retained updated frame. Local log at `target/m4-live-package-visual/1ef39f0367064ff6a49d1381522c2b6f/stderr.log`.
 
 ## Content snapshots for presentation
 
