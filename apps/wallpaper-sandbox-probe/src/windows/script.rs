@@ -533,6 +533,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn retained_dom_objects_expire_after_collection() {
+        let runtime = Runtime::new().unwrap();
+        let context = Context::custom::<(intrinsic::Eval,)>(&runtime).unwrap();
+        let bindings = [Binding {
+            name: "status".into(),
+            node: 1,
+            text: Some("Ready".into()),
+            color: Color([255; 4]),
+        }];
+        let run = |source| {
+            context.with(|ctx| {
+                let callback = ctx.eval::<Function, _>(source).unwrap();
+                let staged = stage_scene_callback(&ctx, &bindings, callback, "").unwrap();
+                collect_scene_edits(&ctx, &bindings, staged).unwrap()
+            })
+        };
+        run(r#"(document) => {
+            globalThis.saved = document.getElementById("status");
+            saved.textContent = "First";
+        }"#);
+        let edits = run(r#"(document) => {
+            let expired = false;
+            try { saved.textContent = "Stale"; } catch (_) { expired = true; }
+            if (!expired) throw Error("Old element remained writable");
+            document.getElementById("status").textContent = "Second";
+        }"#);
+        assert_eq!(
+            edits,
+            [Edit::Text {
+                node: 1,
+                value: "Second".into()
+            }]
+        );
+    }
+
+    #[test]
     fn elapsed_callback_is_rejected_even_without_a_quickjs_interrupt() {
         let runtime = Runtime::new().unwrap();
         let deadline = Deadline {

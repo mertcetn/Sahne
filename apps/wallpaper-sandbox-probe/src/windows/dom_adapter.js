@@ -2,8 +2,19 @@
     const ids = Object.create(null);
     const states = [];
     let editCount = 0;
+    let operations = 0;
+    let budgetError;
+    let active = true;
+    function countOperation() {
+        if (!active) throw new Error("Scene callback has ended");
+        if (++operations > 256) budgetError ??= "Too many DOM operations";
+        if (budgetError) throw new RangeError(budgetError);
+    }
     function reserve(dirty) {
-        if (!dirty && ++editCount > 64) throw new RangeError("Too many scene edits");
+        if (!dirty && ++editCount > 64) {
+            budgetError = "Too many scene edits";
+            throw new RangeError(budgetError);
+        }
     }
     for (let index = 0; index < bindings.length; index++) {
         const [name, initialText, initialColor] = bindings[index];
@@ -11,8 +22,12 @@
         const state = { text: initialText, color: initialColor, textDirty: false, colorDirty: false };
         states[index] = state;
         const style = Object.freeze({
-            get color() { return [state.color[0], state.color[1], state.color[2], state.color[3]]; },
+            get color() {
+                countOperation();
+                return [state.color[0], state.color[1], state.color[2], state.color[3]];
+            },
             set color(value) {
+                countOperation();
                 if (!Array.isArray(value) || value.length !== 4) throw new TypeError("Expected RGBA");
                 const copy = [value[0], value[1], value[2], value[3]];
                 for (let i = 0; i < 4; i++) {
@@ -26,8 +41,12 @@
             },
         });
         const element = Object.freeze({
-            get textContent() { return typeof initialText === "string" ? state.text : null; },
+            get textContent() {
+                countOperation();
+                return typeof initialText === "string" ? state.text : null;
+            },
             set textContent(value) {
+                countOperation();
                 if (typeof initialText !== "string" || typeof value !== "string" || value.length > 16384) {
                     throw new TypeError("Invalid text write");
                 }
@@ -35,15 +54,23 @@
                 state.text = value;
                 state.textDirty = true;
             },
-            style,
+            get style() {
+                countOperation();
+                return style;
+            },
         });
         ids[name] = element;
     }
     const document = Object.freeze({
-        getElementById(id) { return typeof id === "string" ? (ids[id] ?? null) : null; },
+        getElementById(id) {
+            countOperation();
+            return typeof id === "string" ? (ids[id] ?? null) : null;
+        },
     });
     const result = callback(document, displayTime);
     return [result, () => {
+        active = false;
+        if (budgetError) throw new RangeError(budgetError);
         const edits = [];
         for (let index = 0; index < states.length; index++) {
             const state = states[index];

@@ -172,6 +172,12 @@ For example, a trusted script run by `--run-trusted-script-package` can return `
 
 The release check acknowledged synchronous and Promise writes in one batch and accepted a write in the 64th queued job. A 65-job queue, an unhandled rejection and an unresolved returned Promise each failed before the host acknowledged any edit. Profile cleanup passed for each run. Four AppContainer regressions and headless rollover also passed. Local report at `target/sandbox-validation/483dafb7748640e6ae42586a1ee70e75/`.
 
+### DOM operation budget
+
+A scene callback can perform up to 256 DOM operations across its synchronous body and Promise jobs. A `getElementById` call counts once, including a lookup that finds no element. Reading or writing `textContent`, reading `style`, and reading or writing its `color` property each count once. The adapter still bounds the batch at 64 distinct property writes. Exceeding either limit fails the entire callback even if the script catches the exception. When the adapter collects the edits, objects obtained from that callback expire. A retained script can obtain fresh bindings on its next tick.
+
+The local release test accepted a write on operation 256 inside a Promise job. Operation 257 failed the invocation even when caught and the host acknowledged no edits. Both runs verified profile cleanup. Four AppContainer regression cases and headless rollover passed. Local report at `target/sandbox-validation/f29755f813d54a4fb370ec26606bfc85/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

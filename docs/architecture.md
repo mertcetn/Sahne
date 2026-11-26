@@ -705,3 +705,7 @@ The one-shot scene callback keeps its staged DOM state until its Promise jobs dr
 ## 90. M4 bounded Promise jobs for retained callbacks
 
 Retained pause, resume and tick callbacks share the scene callback's job drain and failure rules. Lifecycle acknowledgement waits for job completion. Each invocation has its own deadline and rejection tracking. Jobs cannot carry over to another callback. See [Promise jobs in retained callbacks](m4-timers.md#promise-jobs-in-retained-callbacks).
+
+## 91. M4 DOM operation budget
+
+The worker DOM adapter bounds the number of lookups and property accesses in each scene callback, including its Promise jobs. An exceeded budget prevents publishing any staged edit even if script catches the error. Adapter objects expire when the worker collects the batch. See [DOM operation budget](m4-scene-transactions.md#dom-operation-budget).
