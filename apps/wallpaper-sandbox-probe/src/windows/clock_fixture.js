@@ -17,4 +17,11 @@
     if (clock.textContent !== displayTime || observed[0] !== 36) {
         throw new Error("Staged update did not retain its value");
     }
+    const panel = document.getElementById("panel");
+    if (panel !== null) {
+        if (panel.textContent !== null || panel.style.color.join(",") !== "68,68,68,255") {
+            throw new Error("Unexpected rectangle binding state");
+        }
+        panel.style.color = [51, 102, 153, 255];
+    }
 }

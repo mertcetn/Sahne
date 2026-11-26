@@ -129,6 +129,14 @@ The package callback reads the actual initial text and foreground color for each
 
 A trusted local release test started with `12:34`, a custom `Zone` label and two nonwhite foregrounds. The callback read all four source values correctly. The host acknowledged the color-only change and verified rollback and profile cleanup. The embedded script, typed and timer cases and the headless live clock passed. Local report at `target/sandbox-validation/daf1109b36964455a03b7854d83c3518/`.
 
+### Multiple initialized node types
+
+The worker creates adapter objects from the received names and per-node properties. Each binding requires an initial RGBA value. A text record enables `textContent`. A rectangle returns null for `textContent` and accepts only RGBA writes. The worker retains the values from an edit only after the host acknowledges its transaction.
+
+The embedded `scene-script` case binds the `panel` rectangle in addition to the two existing spans. The script reads the rectangle's initial color, writes a new color, and stages both clock edits in the same batch. The host verifies all three results and then verifies rollback on the unauthorized background mutation. The trusted local clock command continues to grant only its two documented bindings.
+
+The release script, typed scene, timer and basic JavaScript probes passed. The local package and headless live rollover also passed. Local report at `target/sandbox-validation/4e3f5bd95be34a4f84778eff8317b1b3c0/`.
+
 ## Content snapshots for presentation
 
 The host keeps the transaction revision separate from the content revision. A valid batch that writes the current values still advances the transaction revision and yields an acknowledgement. It skips the scene copy because it leaves already validated content unchanged. A changed batch replaces the immutable scene only after full validation and advances its content revision. Rejection leaves both the snapshot and accepted revision intact.

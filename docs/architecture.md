@@ -649,3 +649,7 @@ The trusted local clock probe selects its two writable text nodes by author ID a
 ## 76. M4 clock DOM initialization from validated scene
 
 For both package clock probes, the host sends the initial text and foreground RGBA of the two bound nodes in the scene program frame. The codec bounds these properties and rejects duplicate or unbound entries. The worker seeds the callback's DOM from these values before evaluation. The host retains revision and publication authority. See [Initial DOM values from the scene](m4-scene-transactions.md#initial-dom-values-from-the-scene).
+
+## 77. M4 DOM bindings for text and rectangles
+
+The worker builds its DOM adapter inputs from the received author-ID table and initial properties. Text bindings expose text and RGBA, while rectangle bindings expose RGBA. The host grants only the nodes in its selected table. The embedded probe now supplies two text bindings and a named rectangle, verifying three changes in one transaction. See [Multiple initialized node types](m4-scene-transactions.md#multiple-initialized-node-types).

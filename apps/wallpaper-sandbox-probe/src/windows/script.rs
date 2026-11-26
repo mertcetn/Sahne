@@ -2,12 +2,14 @@
 use super::Result;
 use rquickjs::{Context, Error, Runtime, context::intrinsic};
 use std::{
+    collections::BTreeMap,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
 };
+use wallpaper_scene::{Color, transaction::Edit};
 
 pub const RESULT_BIT: u32 = 512;
 const HEAP_BYTES: usize = 16 * 1024 * 1024;
@@ -143,9 +145,62 @@ fn run_case(
     Ok(())
 }
 
-/// Rust resolves the adapter's local indices against the host fixture bindings.
-pub fn clock_edits(
-    bindings: &[(&str, u32, Option<&str>, wallpaper_scene::Color); 2],
+pub struct Binding {
+    pub name: String,
+    pub node: u32,
+    pub text: Option<String>,
+    pub color: Color,
+}
+
+pub fn bindings_from_initial(
+    targets: BTreeMap<String, u32>,
+    initial: Vec<Edit>,
+) -> Result<Vec<Binding>> {
+    let mut text = BTreeMap::new();
+    let mut colors = BTreeMap::new();
+    for edit in initial {
+        match edit {
+            Edit::Text { node, value } => {
+                text.insert(node, value);
+            }
+            Edit::Color { node, value } => {
+                colors.insert(node, value);
+            }
+        }
+    }
+    targets
+        .into_iter()
+        .map(|(name, node)| {
+            Ok(Binding {
+                name,
+                node,
+                text: text.remove(&node),
+                color: colors.remove(&node).ok_or("Missing initial scene color")?,
+            })
+        })
+        .collect()
+}
+
+pub fn apply_accepted_edits(bindings: &mut [Binding], edits: Vec<Edit>) {
+    for edit in edits {
+        match edit {
+            Edit::Text { node, value } => {
+                if let Some(binding) = bindings.iter_mut().find(|binding| binding.node == node) {
+                    binding.text = Some(value);
+                }
+            }
+            Edit::Color { node, value } => {
+                if let Some(binding) = bindings.iter_mut().find(|binding| binding.node == node) {
+                    binding.color = value;
+                }
+            }
+        }
+    }
+}
+
+/// Rust resolves the adapter's local indices against the host-authorized bindings.
+pub fn scene_edits(
+    bindings: &[Binding],
     display_time: &str,
     package_source: Option<&str>,
 ) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
@@ -170,7 +225,7 @@ pub fn clock_edits(
 
 fn run_scene_callback(
     ctx: &rquickjs::Ctx<'_>,
-    bindings: &[(&str, u32, Option<&str>, wallpaper_scene::Color)],
+    bindings: &[Binding],
     callback_source: &str,
     value: &str,
 ) -> Result<Vec<wallpaper_scene::transaction::Edit>> {
@@ -184,12 +239,12 @@ fn run_scene_callback(
         return Err("Scene binding count outside bounds".into());
     }
     let input = Array::new(ctx.clone())?;
-    for (index, (name, _, text, initial_color)) in bindings.iter().enumerate() {
+    for (index, binding) in bindings.iter().enumerate() {
         let entry = Array::new(ctx.clone())?;
-        entry.set(0, *name)?;
-        entry.set(1, *text)?;
+        entry.set(0, binding.name.as_str())?;
+        entry.set(1, binding.text.as_deref())?;
         let color = Array::new(ctx.clone())?;
-        for (channel, value) in initial_color.0.into_iter().enumerate() {
+        for (channel, value) in binding.color.0.into_iter().enumerate() {
             color.set(channel, value)?;
         }
         entry.set(2, color)?;
@@ -211,17 +266,20 @@ fn run_scene_callback(
     for index in 0..count {
         let edit: Array = staged.get(index)?;
         let binding: usize = edit.get(0)?;
-        let (_, node, text, _) = *bindings
+        let binding = bindings
             .get(binding)
             .ok_or("Invalid fixture binding index")?;
         match edit.get::<u8>(1)? {
-            1 if text.is_some() => {
+            1 if binding.text.is_some() => {
                 let value: String = edit.get(2)?;
                 total += value.len();
                 if value.len() > MAX_TEXT_BYTES || total > MAX_BATCH_TEXT_BYTES {
                     return Err("Clock fixture exceeded its UTF-8 text budget".into());
                 }
-                edits.push(Edit::Text { node, value });
+                edits.push(Edit::Text {
+                    node: binding.node,
+                    value,
+                });
             }
             2 => {
                 let color: Array = edit.get(2)?;
@@ -229,7 +287,7 @@ fn run_scene_callback(
                     return Err("Expected four RGBA bytes".into());
                 }
                 edits.push(Edit::Color {
-                    node,
+                    node: binding.node,
                     value: Color([color.get(0)?, color.get(1)?, color.get(2)?, color.get(3)?]),
                 });
             }
