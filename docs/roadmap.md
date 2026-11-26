@@ -185,7 +185,11 @@ The initial target set is Ubuntu LTS/GNOME, Fedora Workstation/GNOME, Linux Mint
 
 Android work begins only after desktop milestones. Revisit service lifecycle, native surfaces, isolated bound workers, multiple Engines, device compatibility, fonts, battery, and thermals; activate G4 only then. macOS needs a separate proposal.
 
-Canvas/WebGL/SVG, custom shaders, network access, audio analysis, additional media, and arbitrary website compatibility remain separate scope decisions. They are not implicit requirements for completing this roadmap.
+Canvas/WebGL/SVG, custom shaders, audio analysis, additional media, and arbitrary website compatibility remain separate scope decisions. They are not implicit requirements for completing this roadmap.
+
+### Optional feature after roadmap completion
+
+- [ ] Evaluate [opt-in internet access for HTML/CSS/JS wallpapers](architecture.md#post-roadmap-wallpaper-network-access) after all current milestones are complete. This includes imported web wallpapers. Keep it outside milestone acceptance and the first release.
 
 ## 11. Task completion and progress tracking
 

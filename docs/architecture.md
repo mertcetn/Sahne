@@ -223,6 +223,12 @@ Synchronous getBoundingClientRect, offsetWidth, and computed-style reads are out
 
 Audio analysis and network access are outside the first release. Future capabilities require an explicit permission model and data minimization.
 
+### Post-roadmap wallpaper network access
+
+After the current roadmap is complete, evaluate an optional HTTPS data API for native and imported web wallpapers. The candidate design keeps direct network access disabled in the worker. A restricted helper would make bounded requests to public endpoints approved by the user for each wallpaper. Permissions would be off by default and revocable.
+
+The initial design should evaluate fixed, credential-free GET requests for data feeds such as weather. Exclude local and private network destinations, including on redirects, and set limits on request frequency, duration and response size. Treat responses as untrusted data and exclude remote script execution. Review privacy and abuse independently of filesystem isolation. Remote services can observe the connection's public IP and request timing, and request parameters can carry data available to the wallpaper.
+
 ## 9. IPC and consistency
 
 - Use typed, length-bounded messages; do not deserialize arbitrary objects.
