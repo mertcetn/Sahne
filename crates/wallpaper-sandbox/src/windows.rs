@@ -36,6 +36,7 @@ mod profile;
 mod registry;
 pub use filesystem::{probe_filesystem, verify_filesystem_fixture};
 use profile::Profile;
+pub use profile::recover_preview_profile;
 pub use registry::probe_registry;
 
 fn wide(value: impl AsRef<std::ffi::OsStr>) -> io::Result<Vec<u16>> {
@@ -725,7 +726,7 @@ pub fn spawn_probe(
     std::fs::create_dir(&bin)?;
     let marker = root.join("denied.txt");
     std::fs::write(&marker, b"Sahne sandbox sentinel")?;
-    let profile = Profile::new(session, root)
+    let mut profile = Profile::new(session, root)
         .map_err(|e| io::Error::other(format!("Create profile: {e}")))?;
     grant_read_execute(&bin, profile.sid)
         .map_err(|e| io::Error::other(format!("Staging ACL: {e}")))?;
@@ -878,6 +879,7 @@ pub fn spawn_probe(
     // SAFETY: Assign before any worker code can run.
     check(unsafe { AssignProcessToJobObject(job.as_raw_handle(), child.process.as_raw_handle()) })?;
     verify_token(child.process.as_raw_handle(), profile.sid)?;
+    profile.record_worker(process.dwProcessId)?;
     let strict_handles = if case == "handles" {
         let mut policy = PROCESS_MITIGATION_STRICT_HANDLE_CHECK_POLICY::default();
         // SAFETY: Query only the new suspended process; correctly sized initialized output.

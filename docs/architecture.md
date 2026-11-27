@@ -823,3 +823,7 @@ The headless watchdog check selects a test worker that accepts one normal live s
 ## 118. M4 AppContainer profile ownership record
 
 Before creating a profile, the sandbox launcher writes and flushes an ownership record in the new run directory. The record contains the generated profile name and an independent random token. Profile setup writes the same record to its storage control file. The host keeps the run record open without sharing through profile cleanup. Abrupt host exit releases the file handle. Recovery still needs to check worker liveness and verify the exact profile and both records before acting. No automatic recovery is enabled.
+
+## 119. M4 explicit preview profile recovery
+
+The launcher records the verified worker PID before resuming the worker. The preview recovery command takes one run directory name and opens its ownership record exclusively. It refuses reparse entries, incomplete records and any run with a live or indeterminate recorded process. It derives the profile location through Windows and compares the storage control record before asking Windows to delete the profile. The command verifies that profile storage is gone. See [Abrupt preview termination](m2-acceptance.md#abrupt-preview-termination).

@@ -2,10 +2,16 @@ use super::*;
 use std::{
     ffi::OsString,
     fs,
-    os::windows::{ffi::OsStringExt, fs::OpenOptionsExt},
+    os::windows::{
+        ffi::OsStringExt,
+        fs::{MetadataExt, OpenOptionsExt},
+    },
     path::{Path, PathBuf},
 };
-use windows_sys::Win32::System::Com::CoTaskMemFree;
+use windows_sys::Win32::{
+    Storage::FileSystem::{FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT},
+    System::Com::CoTaskMemFree,
+};
 
 pub(super) struct Profile {
     name: Vec<u16>,
@@ -13,7 +19,7 @@ pub(super) struct Profile {
     storage: Option<PathBuf>,
     deleted: bool,
     // Keep the run's ownership record exclusively open through profile cleanup.
-    _lease: fs::File,
+    lease: fs::File,
 }
 
 struct TaskAllocation(*mut u16);
@@ -55,61 +61,9 @@ impl Profile {
             sid,
             storage: None,
             deleted: false,
-            _lease: lease,
+            lease,
         };
-        let mut sid_text = ptr::null_mut();
-        // SAFETY: This OS-created SID is live; the returned SID string uses LocalFree.
-        check(unsafe { ConvertSidToStringSidW(profile.sid, &mut sid_text) })?;
-        let _sid_text = LocalAllocation(sid_text.cast());
-        let mut folder = ptr::null_mut();
-        // SAFETY: Terminated SID string and initialized output; independent task allocation.
-        hresult(unsafe { GetAppContainerFolderPath(sid_text, &mut folder) })?;
-        let folder = TaskAllocation(folder);
-        if folder.0.is_null() {
-            return Err(io::Error::other("Null AppContainer storage path"));
-        }
-        let mut length = 0;
-        // SAFETY: Successful OS API returns a terminated UTF-16 string, owned above.
-        // The scan is capped at the Windows extended-path size; no borrowed string escapes.
-        unsafe {
-            while length < 32768 && *folder.0.add(length) != 0 {
-                length += 1;
-            }
-        }
-        if length == 0 || length == 32768 {
-            return Err(io::Error::other("Invalid AppContainer storage path length"));
-        }
-        // SAFETY: The scanned initialized UTF-16 prefix is valid until folder is dropped.
-        let storage = PathBuf::from(OsString::from_wide(unsafe {
-            std::slice::from_raw_parts(folder.0, length)
-        }));
-        // Windows returns the profile's AC local-data child on this configuration.
-        // Bind the observation to the exact owned profile root, never a shared ancestor.
-        let root = if storage.file_name().is_some_and(|name| name == "AC") {
-            storage
-                .parent()
-                .ok_or_else(|| io::Error::other("Missing profile root"))?
-        } else {
-            storage.as_path()
-        };
-        if !root.is_absolute()
-            || !root
-                .file_name()
-                .is_some_and(|name| name.eq_ignore_ascii_case(&text))
-        {
-            return Err(io::Error::other(format!(
-                "AppContainer storage path identity mismatch: expected={text}, actual={:?}",
-                root.file_name()
-            )));
-        }
-        for directory in [storage.as_path(), root] {
-            let metadata = fs::symlink_metadata(directory)?;
-            if !metadata.is_dir() || metadata.file_type().is_symlink() {
-                return Err(io::Error::other(
-                    "AppContainer storage positive control is not a directory",
-                ));
-            }
-        }
+        let (storage, root) = profile_storage(profile.sid, &text)?;
         // A fresh nonempty storage control proves cleanup removes data, not only an
         // already-empty profile directory. Close it before launching/deleting the profile.
         let canary = storage.join("sahne-cleanup-control.txt");
@@ -124,8 +78,16 @@ impl Profile {
         if fs::read(&canary)? != ownership.as_bytes() {
             return Err(io::Error::other("Profile storage content control failed"));
         }
-        profile.storage = Some(root.to_path_buf());
+        profile.storage = Some(root);
         Ok(profile)
+    }
+
+    pub(super) fn record_worker(&mut self, pid: u32) -> io::Result<()> {
+        if pid == 0 {
+            return Err(io::Error::other("Invalid AppContainer worker PID"));
+        }
+        writeln!(self.lease, "worker={pid}")?;
+        self.lease.sync_all()
     }
 
     pub(super) fn cleanup(&mut self) -> io::Result<()> {
@@ -166,5 +128,176 @@ impl Drop for Profile {
             }
             FreeSid(self.sid);
         }
+    }
+}
+
+fn profile_storage(sid: PSID, text: &str) -> io::Result<(PathBuf, PathBuf)> {
+    let mut sid_text = ptr::null_mut();
+    // SAFETY: This OS-created SID is live; the returned SID string uses LocalFree.
+    check(unsafe { ConvertSidToStringSidW(sid, &mut sid_text) })?;
+    let _sid_text = LocalAllocation(sid_text.cast());
+    let mut folder = ptr::null_mut();
+    // SAFETY: Terminated SID string and initialized output; independent task allocation.
+    hresult(unsafe { GetAppContainerFolderPath(sid_text, &mut folder) })?;
+    let folder = TaskAllocation(folder);
+    if folder.0.is_null() {
+        return Err(io::Error::other("Null AppContainer storage path"));
+    }
+    let mut length = 0;
+    // SAFETY: Successful OS API returns a terminated UTF-16 string, owned above.
+    // The scan is capped at the Windows extended-path size; no borrowed string escapes.
+    unsafe {
+        while length < 32768 && *folder.0.add(length) != 0 {
+            length += 1;
+        }
+    }
+    if length == 0 || length == 32768 {
+        return Err(io::Error::other("Invalid AppContainer storage path length"));
+    }
+    // SAFETY: The scanned initialized UTF-16 prefix is valid until folder is dropped.
+    let storage = PathBuf::from(OsString::from_wide(unsafe {
+        std::slice::from_raw_parts(folder.0, length)
+    }));
+    // Windows returns the profile's AC local-data child on this configuration.
+    // Bind the observation to the exact owned profile root, never a shared ancestor.
+    let root = if storage.file_name().is_some_and(|name| name == "AC") {
+        storage
+            .parent()
+            .ok_or_else(|| io::Error::other("Missing profile root"))?
+    } else {
+        storage.as_path()
+    };
+    if !root.is_absolute()
+        || !root
+            .file_name()
+            .is_some_and(|name| name.eq_ignore_ascii_case(text))
+    {
+        return Err(io::Error::other(format!(
+            "AppContainer storage path identity mismatch: expected={text}, actual={:?}",
+            root.file_name()
+        )));
+    }
+    for directory in [storage.as_path(), root] {
+        let metadata = fs::symlink_metadata(directory)?;
+        if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(io::Error::other(
+                "AppContainer storage positive control is not a directory",
+            ));
+        }
+    }
+    let root = root.to_path_buf();
+    Ok((storage, root))
+}
+
+struct DerivedSid(PSID);
+impl Drop for DerivedSid {
+    fn drop(&mut self) {
+        // SAFETY: Owns the SID returned by DeriveAppContainerSidFromAppContainerName.
+        unsafe { FreeSid(self.0) };
+    }
+}
+
+fn read_record(file: &fs::File) -> io::Result<String> {
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(io::Error::other("Expected a regular profile record"));
+    }
+    let mut bytes = Vec::new();
+    file.take(129).read_to_end(&mut bytes)?;
+    if bytes.len() > 128 {
+        return Err(io::Error::other("Profile record exceeds size limit"));
+    }
+    String::from_utf8(bytes).map_err(|_| io::Error::other("Invalid profile record encoding"))
+}
+
+fn process_exited(pid: u32) -> io::Result<bool> {
+    // SAFETY: Requests a synchronization-only handle for a strictly parsed PID.
+    let handle = match unsafe { own(OpenProcess(SYNCHRONIZE, 0, pid)) } {
+        Err(error) if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) => {
+            return Ok(true);
+        }
+        result => result?,
+    };
+    // SAFETY: Zero-time query on the owned process handle.
+    match unsafe { WaitForSingleObject(handle.as_raw_handle(), 0) } {
+        WAIT_OBJECT_0 => Ok(true),
+        WAIT_TIMEOUT => Ok(false),
+        _ => Err(io::Error::last_os_error()),
+    }
+}
+
+/// Recover a single preview or intake run from the current workspace.
+pub fn recover_preview_profile(run_name: &str) -> io::Result<()> {
+    let invalid = || io::Error::other("Invalid preview profile ownership record");
+    let suffix = run_name
+        .strip_prefix("preview-")
+        .or_else(|| run_name.strip_prefix("intake-"))
+        .ok_or_else(invalid)?;
+    let (host, session) = suffix.split_once('-').ok_or_else(invalid)?;
+    let host_pid = host
+        .parse::<u32>()
+        .ok()
+        .filter(|pid| *pid != 0)
+        .ok_or_else(invalid)?;
+    let session_id = u64::from_str_radix(session, 16).map_err(|_| invalid())?;
+    if host != host_pid.to_string() || session != format!("{session_id:016x}") {
+        return Err(invalid());
+    }
+    let mut run = std::env::current_dir()?;
+    for name in ["target", "sandbox-runs", run_name] {
+        run.push(name);
+        let metadata = fs::symlink_metadata(&run)?;
+        if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(invalid());
+        }
+    }
+    let lease = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(run.join("profile-lease"))?;
+    let record = read_record(&lease)?;
+    let (ownership, worker_line) = record
+        .strip_suffix('\n')
+        .and_then(|s| s.rsplit_once('\n'))
+        .ok_or_else(invalid)?;
+    let worker = worker_line.strip_prefix("worker=").ok_or_else(invalid)?;
+    let worker_pid = worker
+        .parse::<u32>()
+        .ok()
+        .filter(|pid| *pid != 0 && *pid != host_pid)
+        .ok_or_else(invalid)?;
+    let profile = format!("Sahne.Spike.{host_pid}.{session_id:016x}");
+    let prefix = format!("sahne-profile-v1\n{profile}\n");
+    let token = ownership.strip_prefix(&prefix).ok_or_else(invalid)?;
+    let token_id = u64::from_str_radix(token, 16).map_err(|_| invalid())?;
+    if token != format!("{token_id:016x}") || worker != worker_pid.to_string() {
+        return Err(invalid());
+    }
+    if !process_exited(host_pid)? || !process_exited(worker_pid)? {
+        return Err(io::Error::other("Preview profile still has a live process"));
+    }
+    let name = wide(&profile)?;
+    let mut sid = ptr::null_mut();
+    // SAFETY: The validated profile name and SID output remain live for this call.
+    hresult(unsafe { DeriveAppContainerSidFromAppContainerName(name.as_ptr(), &mut sid) })?;
+    let sid = DerivedSid(sid);
+    let (storage, root) = profile_storage(sid.0, &profile)?;
+    let control = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(storage.join("sahne-cleanup-control.txt"))?;
+    if read_record(&control)? != format!("{ownership}\n") {
+        return Err(invalid());
+    }
+    drop(control);
+    // SAFETY: Both run records match the exact profile and neither recorded process is alive.
+    hresult(unsafe { DeleteAppContainerProfile(name.as_ptr()) })?;
+    match fs::symlink_metadata(root) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+        Ok(_) => Err(io::Error::other(
+            "AppContainer storage remains after recovery",
+        )),
     }
 }

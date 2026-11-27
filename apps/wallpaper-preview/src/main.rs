@@ -63,6 +63,19 @@ fn main() -> Result<()> {
     let mut args = std::env::args().skip(1).peekable();
     if args
         .peek()
+        .is_some_and(|arg| arg == "--recover-preview-profile")
+    {
+        args.next();
+        let run = args.next().ok_or("Expected a preview or intake run name")?;
+        if args.next().is_some() {
+            return Err("Profile recovery takes exactly one run name".into());
+        }
+        wallpaper_sandbox::recover_preview_profile(&run)?;
+        println!("Recovered orphaned AppContainer profile.");
+        return Ok(());
+    }
+    if args
+        .peek()
         .is_some_and(|arg| arg == "--check-isolated-script-worker-timeout")
     {
         args.next();
@@ -88,6 +101,9 @@ fn main() -> Result<()> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" => {
+                println!(
+                    "--recover-preview-profile <run-name> checks and removes one orphaned AppContainer profile from target/sandbox-runs."
+                );
                 println!(
                     "Usage: wallpaper-preview [--desktop] [--example static|image|groups|groups-effects|animated-shapes|clock] [--seconds 1..3600] [--test-recreate 1..10 | --test-device-loss | --test-pixels]\nTrusted Windows D3D12 scenes only. --example compiles original embedded sources; no external file path. Escape closes window mode. Test recreation does not restart Explorer. Pixel test requires groups-effects, window mode, --seconds 1..30 and no other test mode; it exits after checking 18 fixed root-texture pixels. animated-shapes runs its fixed native program at a 30 FPS cap. Use --desktop to attach behind Windows icons or Space to pause/resume in window mode. --reference-pose freezes animated-shapes at exactly 1 s for visual reference; use it in window mode without other test flags. clock shows host-provided UTC time in window mode. --test-clock-rollover requires clock and --seconds 5..30; it demonstrates 23:59 to 00:00. --clock-worker-snapshot <run-folder> displays a retained worker value with --example clock. --check-clock-worker-snapshot <run-folder> verifies that value without opening a window. --clock-worker-live requires --example clock --seconds 8..30 and the sibling sandbox probe. --check-clock-worker-live runs the same bridge without a window. --clock-worker-utc uses current UTC minutes with --example clock. --check-clock-worker-utc verifies two live UTC updates without opening a window."
                 );
