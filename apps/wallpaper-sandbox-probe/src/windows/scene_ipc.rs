@@ -803,8 +803,17 @@ pub fn worker(
                     return Ok(());
                 }
                 Mode::LiveLifecycleWrongMessage => {
-                    send(output, update_message(session, sequence, Body::ClockReady))?;
-                    return Ok(());
+                    // A fixed burst fits in the pipe. Keep it open so the host must
+                    // reject on message kind without waiting for EOF or a deadline.
+                    let response = update_message(session, sequence, Body::ClockReady);
+                    let mut burst = Vec::new();
+                    for _ in 0..16 {
+                        write_frame(&mut burst, &response)?;
+                    }
+                    output.write_all(&burst)?;
+                    output.flush()?;
+                    std::thread::sleep(Duration::from_secs(15));
+                    return Err("Unexpected message fixture reached its fallback deadline".into());
                 }
                 Mode::LiveLifecycleStale => {
                     send(

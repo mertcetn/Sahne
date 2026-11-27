@@ -863,3 +863,7 @@ The live package bridge records the latest revision after writing its acknowledg
 ## 128. M4 pending package program write
 
 The exchange tracks whether the scene program write has started and completed. The independent supervisor can distinguish a deadline during that write from later callback or response timeouts, stop the worker, and join the I/O thread. The headless fixture verifies this outcome over the isolated package path. See [Package program write deadline](m4-timers.md#package-program-write-deadline).
+
+## 129. M4 unexpected response burst
+
+The live package bridge reads the expected response for one tick and terminates when the first message has an unexpected kind. The wrong-message fixture sends a bounded burst and keeps the pipe open. The check requires the immediate protocol rejection, preservation of the first accepted snapshot and Job and profile cleanup.

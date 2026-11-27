@@ -164,7 +164,7 @@ The `--check-isolated-script-stale-batch <absolute-folder>` fixture sends the pr
 
 The `--check-isolated-script-truncated-batch <absolute-folder>` fixture closes the channel partway through the second response. The preview must report a truncated batch, keep the first snapshot and clean up both profiles.
 
-The regression runner also uses `--check-isolated-script-wrong-session`, `--check-isolated-script-skipped-sequence` and `--check-isolated-script-wrong-message` with the same live callback package shape. Each case expects one accepted snapshot, rejection of the second response without another snapshot, and cleanup of both profiles.
+The regression runner also uses `--check-isolated-script-wrong-session`, `--check-isolated-script-skipped-sequence` and `--check-isolated-script-wrong-message` with the same live callback package shape. Each case expects one accepted snapshot, rejection of the next response without another snapshot, and cleanup of both profiles. The wrong-message fixture sends a fixed burst of 16 unexpected responses and leaves its pipe open. The preview must report an unexpected message before the watchdog deadline.
 
 ### Sustained live acknowledgements
 
