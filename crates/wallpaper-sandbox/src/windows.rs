@@ -36,7 +36,7 @@ mod profile;
 mod registry;
 pub use filesystem::{probe_filesystem, verify_filesystem_fixture};
 use profile::Profile;
-pub use profile::recover_preview_profile;
+pub use profile::{recover_pending_preview_profiles, recover_preview_profile};
 pub use registry::probe_registry;
 
 fn wide(value: impl AsRef<std::ffi::OsStr>) -> io::Result<Vec<u16>> {
@@ -879,7 +879,7 @@ pub fn spawn_probe(
     // SAFETY: Assign before any worker code can run.
     check(unsafe { AssignProcessToJobObject(job.as_raw_handle(), child.process.as_raw_handle()) })?;
     verify_token(child.process.as_raw_handle(), profile.sid)?;
-    profile.record_worker(process.dwProcessId)?;
+    profile.record_worker(process.dwProcessId, root)?;
     let strict_handles = if case == "handles" {
         let mut policy = PROCESS_MITIGATION_STRICT_HANDLE_CHECK_POLICY::default();
         // SAFETY: Query only the new suspended process; correctly sized initialized output.

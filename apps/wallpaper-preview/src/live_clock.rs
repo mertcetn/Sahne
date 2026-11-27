@@ -212,6 +212,7 @@ fn supervise(
     receiver: mpsc::Receiver<Signal>,
     package: Option<script_package::Prepared>,
 ) -> WorkerResult<()> {
+    crate::package_intake::recover_profiles_on_startup();
     let exe = std::env::current_exe()?.with_file_name("wallpaper-sandbox-probe.exe");
     if !exe.metadata()?.is_file() {
         return Err("Missing sibling sandbox probe executable".into());

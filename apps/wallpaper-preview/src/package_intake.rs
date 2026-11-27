@@ -2,7 +2,7 @@ use super::Result;
 use std::{
     fs,
     io::{self, Read, Write},
-    sync::mpsc,
+    sync::{Once, mpsc},
     thread,
     time::Duration,
 };
@@ -34,8 +34,20 @@ pub fn load_script(folder: &str) -> Result<(FlatOutput, Body)> {
     Ok((output, program.ok_or("Missing isolated script program")?))
 }
 
+pub fn recover_profiles_on_startup() {
+    static RECOVER: Once = Once::new();
+    RECOVER.call_once(
+        || match wallpaper_sandbox::recover_pending_preview_profiles() {
+            Ok(0) => {}
+            Ok(count) => println!("Recovered orphaned AppContainer profiles: {count}."),
+            Err(error) => eprintln!("Could not check pending AppContainer profiles: {error}"),
+        },
+    );
+}
+
 fn load_package(folder: &str, scripted: bool) -> Result<(FlatOutput, Option<Body>)> {
     let snapshot = wallpaper_platform::package_directory::collect_snapshot(folder)?;
+    recover_profiles_on_startup();
     let exe = std::env::current_exe()?.with_file_name("wallpaper-sandbox-probe.exe");
     let session = wallpaper_sandbox::random_id()?;
     let nonce = wallpaper_sandbox::random_id()?;
