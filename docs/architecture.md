@@ -819,3 +819,7 @@ The isolated lifecycle check uses the same preparation helper and host binding c
 ## 117. M4 integrated package watchdog check
 
 The headless watchdog check selects a test worker that accepts one normal live scene transaction and stops responding at the next dispatch. It shares the live host supervisor and its Windows job termination path. The check verifies the timeout outcome, one accepted snapshot and profile cleanup. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).
+
+## 118. M4 AppContainer profile ownership record
+
+Before creating a profile, the sandbox launcher writes and flushes an ownership record in the new run directory. The record contains the generated profile name and an independent random token. Profile setup writes the same record to its storage control file. The host keeps the run record open without sharing through profile cleanup. Abrupt host exit releases the file handle. Recovery still needs to check worker liveness and verify the exact profile and both records before acting. No automatic recovery is enabled.

@@ -725,8 +725,8 @@ pub fn spawn_probe(
     std::fs::create_dir(&bin)?;
     let marker = root.join("denied.txt");
     std::fs::write(&marker, b"Sahne sandbox sentinel")?;
-    let profile =
-        Profile::new(session).map_err(|e| io::Error::other(format!("Create profile: {e}")))?;
+    let profile = Profile::new(session, root)
+        .map_err(|e| io::Error::other(format!("Create profile: {e}")))?;
     grant_read_execute(&bin, profile.sid)
         .map_err(|e| io::Error::other(format!("Staging ACL: {e}")))?;
     if case == "filesystem" {

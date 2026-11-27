@@ -1,5 +1,10 @@
 use super::*;
-use std::{ffi::OsString, fs, os::windows::ffi::OsStringExt, path::PathBuf};
+use std::{
+    ffi::OsString,
+    fs,
+    os::windows::{ffi::OsStringExt, fs::OpenOptionsExt},
+    path::{Path, PathBuf},
+};
 use windows_sys::Win32::System::Com::CoTaskMemFree;
 
 pub(super) struct Profile {
@@ -7,6 +12,8 @@ pub(super) struct Profile {
     pub(super) sid: PSID,
     storage: Option<PathBuf>,
     deleted: bool,
+    // Keep the run's ownership record exclusively open through profile cleanup.
+    _lease: fs::File,
 }
 
 struct TaskAllocation(*mut u16);
@@ -18,8 +25,17 @@ impl Drop for TaskAllocation {
 }
 
 impl Profile {
-    pub(super) fn new(id: u64) -> io::Result<Self> {
+    pub(super) fn new(id: u64, run: &Path) -> io::Result<Self> {
         let text = format!("Sahne.Spike.{}.{id:016x}", std::process::id());
+        let token = random_id()?;
+        let ownership = format!("sahne-profile-v1\n{text}\n{token:016x}\n");
+        let mut lease = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .share_mode(0)
+            .open(run.join("profile-lease"))?;
+        lease.write_all(ownership.as_bytes())?;
+        lease.sync_all()?;
         let name = wide(&text)?;
         let mut sid = ptr::null_mut();
         // SAFETY: Terminated strings/output remain valid; no capabilities are requested.
@@ -39,6 +55,7 @@ impl Profile {
             sid,
             storage: None,
             deleted: false,
+            _lease: lease,
         };
         let mut sid_text = ptr::null_mut();
         // SAFETY: This OS-created SID is live; the returned SID string uses LocalFree.
@@ -101,9 +118,10 @@ impl Profile {
                 .write(true)
                 .create_new(true)
                 .open(&canary)?;
-            file.write_all(b"Sahne profile cleanup control")?;
+            file.write_all(ownership.as_bytes())?;
+            file.sync_all()?;
         }
-        if fs::read(&canary)? != b"Sahne profile cleanup control" {
+        if fs::read(&canary)? != ownership.as_bytes() {
             return Err(io::Error::other("Profile storage content control failed"));
         }
         profile.storage = Some(root.to_path_buf());
