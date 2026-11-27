@@ -1,6 +1,10 @@
 # M2 loopback diagnosis
 
-Date: November 14, 2026. Status: receiving-side AppContainer block observed on the local Windows 11 build 26200 machine. G2 remains incomplete.
+Updated November 27, 2026. The controlled IPv4 TCP loopback check has acceptance evidence on the local Windows 11 build 26200 machine. Overall G2 remains incomplete.
+
+## Acceptance rule
+
+The controlled fixture requires a successful host listener control, a verified AppContainer with zero capabilities and successful profile cleanup. Either a direct native access-denied result or a native timeout with a WFP AppContainer Loopback block correlated to the verified worker's TCP source port satisfies the loopback check. A timeout alone, receiving-side evidence without sender correlation, or an allowed connection is inconclusive or fails. This decision covers the recorded IPv4 TCP loopback fixture only.
 
 ## Finding
 
@@ -29,13 +33,13 @@ The script refuses non-administrator execution before launching anything. It run
 
 Results are retained in a fresh ignored `target/loopback-diagnostics/<id>/` directory: bounded probe logs, filtered event XML, query logs and `summary.json`. XML loading prohibits DTDs/external resolution and limits each file/document to 1 MiB. The summary records the binary SHA256, run interval, port, native exit status and matched drop timestamps/filter IDs. Reports contain local paths and process/network metadata; review before sharing.
 
-`LoopbackDropConfirmed` requires the native fixture's specific timeout rejection, completed host process, verified AppContainer/zero-capability marker, profile cleanup, and independently matching WFP evidence. The matcher requires:
+`LoopbackDropConfirmed` requires the native fixture's specific timeout rejection, completed host process, verified AppContainer identity with zero capabilities, profile cleanup and WFP evidence correlated to the worker. The WFP matcher requires:
 
 - A classify-drop event during this run, IPv4 TCP, both addresses exactly 127.0.0.1 and the exact listener port.
 - Incoming loopback direction, the exact host PID, and the full receiving image path below its drive letter. Netsh supplies an NT device path, so the drive/device mapping itself is not independently verified.
 - `AppContainer Loopback` filter origin and the event's exact nonzero filter ID in an App Isolation sublayer entry with `FWP_ACTION_BLOCK`.
 
-Missing, malformed, stale or unrelated records do not pass. The native `--case network` still exits nonzero for a timeout; the ordinary runner still excludes this investigative case and does not reinterpret it as a passing native result. The elevated diagnostic supplies separate OS evidence. It currently expects this machine's timeout behavior; an immediate native access denial should be reviewed through the ordinary runner instead.
+The native `--case network` retains its original exit status for a timeout. The elevated diagnostic reports `LoopbackAccepted=true` for `ExplicitDenialConfirmed` or `LoopbackDropConfirmed`. It skips WFP queries when the probe reports a direct denial. The ordinary default runner excludes the separately evaluated loopback fixture.
 
 The WFP event identifies the receiving side. The diagnostic also samples the Windows TCP table during the fixture and retains only a matching loopback connection attributed to the staged worker by executable path and parent PID. The report sets `SenderCorrelated` only when there is one verified sender observation and its source port agrees with a matching WFP drop. A missing or ambiguous observation leaves the receiving-side result available. The receiving event itself still does not carry the worker's package SID. This evidence covers the controlled IPv4 TCP fixture on the recorded Windows configuration. Production validation and G2 remain open. [Windows TCP table and PID display](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/netstat)
 

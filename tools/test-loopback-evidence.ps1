@@ -57,3 +57,16 @@ if (@(Find-SahneLoopbackDrop -Events $missing @parameters).Count -ne 0) { throw 
 [xml]$empty = '<netEvents />'
 if (@(Find-SahneLoopbackDrop -Events $empty @parameters).Count -ne 0) { throw 'Missing events accepted' }
 Write-Output "Loopback matcher checks passed: 2 positive, $($mutations.Count + 3) negative."
+
+$verified = "Verified AppContainer identity and zero capabilities;`nProfile cleanup verified: test`n"
+$explicit = $verified + "Explicit TCP access denial confirmed for network.`nProbe passed; test`n"
+$timeout = 'Network test inconclusive or allowed: Err((TimedOut, None))'
+if ((Get-SahneLoopbackAcceptance Exited 0 $explicit '' $false) -ne 'ExplicitDenialConfirmed') { throw 'Native denial rejected' }
+if ((Get-SahneLoopbackAcceptance Exited 1 $verified $timeout $true) -ne 'LoopbackDropConfirmed') { throw 'Correlated block rejected' }
+if ((Get-SahneLoopbackAcceptance Exited 1 $verified $timeout $false) -ne 'Inconclusive') { throw 'Uncorrelated timeout accepted' }
+if ((Get-SahneLoopbackAcceptance Exited 1 $verified 'Network test inconclusive or allowed: Ok(())' $true) -ne 'Inconclusive') { throw 'Allowed connection accepted' }
+if ((Get-SahneLoopbackAcceptance TimedOut 1 $verified $timeout $true) -ne 'Inconclusive') { throw 'Host timeout accepted' }
+if ((Get-SahneLoopbackAcceptance Exited 1 $verified "$timeout Attempt cleanup failed:" $true) -ne 'Inconclusive') { throw 'Failed cleanup accepted' }
+if ((Get-SahneLoopbackAcceptance Exited 1 'Verified AppContainer identity and zero capabilities;' $timeout $true) -ne 'Inconclusive') { throw 'Missing cleanup accepted' }
+if ((Get-SahneLoopbackAcceptance Exited 0 ($explicit.Replace('for network.', 'for network-egress.')) '' $false) -ne 'Inconclusive') { throw 'Wrong native case accepted' }
+Write-Output 'Loopback acceptance checks passed: 2 positive, 6 negative.'

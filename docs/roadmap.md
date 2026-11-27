@@ -146,6 +146,7 @@ The content contract agrees with accepted/rejected input and visual behavior. Su
 - [x] Visually verify the [sandboxed static package behind Windows icons](m3-manifest.md#windows-sandboxed-package-preview) and observe one frame in a 15-second idle run.
 - [ ] Integrate package/resource validation and restricted helper processing for untrusted parsing/media/font operations before accepting those inputs.
 - [ ] Re-run the complete sandbox failure suite through the integrated content path.
+- [x] Verify the controlled IPv4 TCP loopback block using [worker-correlated WFP evidence](m2-loopback.md#acceptance-rule) on the local Windows configuration.
 
 ### Completion evidence
 

@@ -43,3 +43,21 @@ function Find-SahneLoopbackDrop {
         catch { continue } # Missing, malformed or newer schema fields never satisfy acceptance.
     }
 }
+
+function Get-SahneLoopbackAcceptance {
+    param([string] $Completion, [int] $ExitCode, [string] $Stdout, [string] $Stderr, [bool] $SenderCorrelated)
+    if ($Completion -ne 'Exited' -or $Stderr.Contains('Attempt cleanup failed:') -or
+        ([regex]::Matches($Stdout, '(?m)^Profile cleanup verified:')).Count -ne 1 -or
+        -not $Stdout.Contains('Verified AppContainer identity and zero capabilities;')) {
+        return 'Inconclusive'
+    }
+    if ($ExitCode -eq 0 -and $Stdout -match '(?m)^Explicit TCP access denial confirmed for network\.\r?$' -and
+        $Stdout -match '(?m)^Probe passed;') {
+        return 'ExplicitDenialConfirmed'
+    }
+    if ($ExitCode -eq 1 -and $SenderCorrelated -and
+        $Stderr.Contains('Network test inconclusive or allowed: Err((TimedOut, None))')) {
+        return 'LoopbackDropConfirmed'
+    }
+    return 'Inconclusive'
+}

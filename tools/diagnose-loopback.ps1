@@ -78,7 +78,9 @@ $netsh = Join-Path $env:SystemRoot 'System32/netsh.exe'
 $matches = @()
 $senderDrops = @()
 $uniqueSender = if ($senders.Count -eq 1) { @($senders.Values)[0] } else { $null }
-foreach ($direction in @('localport', 'remoteport')) {
+$nativeStatus = Get-SahneLoopbackAcceptance -Completion $run.Completion -ExitCode $run.ExitCode -Stdout $stdout -Stderr $stderr
+$directions = if ($nativeStatus -ne 'ExplicitDenialConfirmed') { @('localport', 'remoteport') }
+foreach ($direction in $directions) {
     $eventPath = Join-Path $output "$direction.xml"
     $queryOutput = & $netsh wfp show netevents "file=$eventPath" protocol=6 `
         localaddr=127.0.0.1 remoteaddr=127.0.0.1 "$direction=$port" timewindow=30 2>&1
@@ -106,15 +108,9 @@ foreach ($direction in @('localport', 'remoteport')) {
     }
     finally { $reader.Dispose() }
 }
-$status = 'Inconclusive'
-# The native case deliberately remains strict. Only supplement its specific
-# timeout rejection with independently matched AppContainer blocking evidence.
-if ($run.ExitCode -eq 1 -and $stderr.Contains('Network test inconclusive or allowed: Err((TimedOut, None))') -and
-    -not $stderr.Contains('Attempt cleanup failed:') -and
-    ([regex]::Matches($stdout, '(?m)^Profile cleanup verified:')).Count -eq 1 -and
-    $stdout.Contains('Verified AppContainer identity and zero capabilities;') -and $matches.Count -gt 0) {
-    $status = 'LoopbackDropConfirmed'
-}
+$senderCorrelated = $senderDrops.Count -gt 0
+$status = Get-SahneLoopbackAcceptance -Completion $run.Completion -ExitCode $run.ExitCode `
+    -Stdout $stdout -Stderr $stderr -SenderCorrelated $senderCorrelated
 [ordered]@{
     Status = $status
     StartedUtc = $started.ToString('O')
@@ -123,13 +119,14 @@ if ($run.ExitCode -eq 1 -and $stderr.Contains('Network test inconclusive or allo
     ListenerPort = $port
     ProbeExitCode = $run.ExitCode
     Completion = $run.Completion
+    LoopbackAccepted = $status -ne 'Inconclusive'
     G2Complete = $false
     MatchingDrops = $matches
     SenderObservations = @($senders.Values)
-    SenderCorrelated = ($status -eq 'LoopbackDropConfirmed' -and $senderDrops.Count -gt 0)
+    SenderCorrelated = $senderCorrelated
     SenderMatchingDrops = $senderDrops
-    Note = 'Receiving-host AppContainer Loopback block, matched by run interval, host PID, image path suffix and listener port. This is supplemental local fixture evidence; the native timeout alone still fails.'
+    Note = 'Controlled IPv4 TCP loopback accepts explicit native denial or a native timeout with a WFP block correlated to the verified worker source port. Overall G2 is assessed separately.'
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'summary.json')
 Write-Output "Loopback diagnostics retained at $output"
-if ($status -ne 'LoopbackDropConfirmed') { throw 'No matching AppContainer loopback block proved the timeout; evidence is inconclusive.' }
-Write-Output 'LoopbackDropConfirmed: matching receiving-side AppContainer block; no network permission changed.'
+if ($status -eq 'Inconclusive') { throw 'Loopback acceptance requires explicit denial or a WFP block correlated to the test worker.' }
+Write-Output "$status. Controlled IPv4 TCP loopback accepted."
