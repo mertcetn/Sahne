@@ -16,13 +16,14 @@ pub enum Lifecycle {
     Live,
     WatchdogCheck,
     WorkerExitCheck,
+    StaleBatchCheck,
 }
 
 impl Lifecycle {
     pub fn handles_live_events(self) -> bool {
         matches!(
             self,
-            Self::Live | Self::WatchdogCheck | Self::WorkerExitCheck
+            Self::Live | Self::WatchdogCheck | Self::WorkerExitCheck | Self::StaleBatchCheck
         )
     }
 }

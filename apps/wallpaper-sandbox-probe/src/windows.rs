@@ -308,6 +308,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "live-lifecycle-package"
         | "live-lifecycle-watchdog-check"
         | "live-lifecycle-exit-check"
+        | "live-lifecycle-stale-check"
         | "scene-timer"
         | "scene-timer-registration"
         | "preview-clock-utc"

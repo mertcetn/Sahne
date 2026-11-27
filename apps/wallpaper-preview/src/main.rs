@@ -81,6 +81,9 @@ fn main() -> Result<()> {
         Some("--check-isolated-script-worker-exit") => {
             Some(script_package::Lifecycle::WorkerExitCheck)
         }
+        Some("--check-isolated-script-stale-batch") => {
+            Some(script_package::Lifecycle::StaleBatchCheck)
+        }
         _ => None,
     };
     if let Some(lifecycle) = worker_failure_check {
@@ -133,6 +136,9 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--check-isolated-script-worker-exit <absolute-folder> checks premature worker exit after a live scene update."
+                );
+                println!(
+                    "--check-isolated-script-stale-batch <absolute-folder> checks that the live bridge refuses an already acknowledged update."
                 );
                 println!(
                     "--check-trusted-script-lifecycle <absolute-folder> checks pause, resume and one script tick without a window."

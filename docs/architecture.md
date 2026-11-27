@@ -843,3 +843,7 @@ The launcher passes the preconfigured Job in the Windows process creation attrib
 ## 123. M4 worker exit during a live update
 
 The package bridge treats end of stream before a scene batch as a terminal worker failure. It leaves the last published snapshot available and runs the normal Job and profile cleanup. The headless exit fixture checks this outcome after one accepted update. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).
+
+## 124. M4 stale live scene response
+
+The package bridge treats a mismatched session, sequence or base revision as a terminal transport error before passing a message to the scene transaction. The headless stale-batch fixture returns the already acknowledged first batch when the host dispatches the second tick. The preview check requires the context error, one published snapshot and normal profile cleanup.

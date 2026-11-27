@@ -24,6 +24,7 @@ pub enum Mode {
     LiveLifecycle,
     LiveLifecycleWatchdog,
     LiveLifecycleExit,
+    LiveLifecycleStale,
     Timer,
     RegisteredTimer,
     Utc,
@@ -41,6 +42,7 @@ impl Mode {
             "live-lifecycle-package" => Some(Self::LiveLifecycle),
             "live-lifecycle-watchdog-check" => Some(Self::LiveLifecycleWatchdog),
             "live-lifecycle-exit-check" => Some(Self::LiveLifecycleExit),
+            "live-lifecycle-stale-check" => Some(Self::LiveLifecycleStale),
             "scene-timer" => Some(Self::Timer),
             "scene-timer-registration" => Some(Self::RegisteredTimer),
             "preview-clock-utc" => Some(Self::Utc),
@@ -62,7 +64,10 @@ impl Mode {
     fn is_live_package(self) -> bool {
         matches!(
             self,
-            Self::LiveLifecycle | Self::LiveLifecycleWatchdog | Self::LiveLifecycleExit
+            Self::LiveLifecycle
+                | Self::LiveLifecycleWatchdog
+                | Self::LiveLifecycleExit
+                | Self::LiveLifecycleStale
         )
     }
 
@@ -702,6 +707,7 @@ pub fn worker(
     let mut utc_paused = false;
     let mut package_paused = false;
     let mut package_lifecycle_sequence = 4;
+    let mut acknowledged_fixture_batch = None;
     while mode == Mode::Utc || mode.is_live_package() || sequence <= updates {
         if package_ticks.is_some() {
             loop {
@@ -757,6 +763,15 @@ pub fn worker(
                     return Err("Watchdog fixture reached its fallback deadline".into());
                 }
                 Mode::LiveLifecycleExit => return Ok(()),
+                Mode::LiveLifecycleStale => {
+                    send(
+                        output,
+                        acknowledged_fixture_batch
+                            .take()
+                            .ok_or("Missing fixture batch")?,
+                    )?;
+                    return Ok(());
+                }
                 _ => {}
             }
         }
@@ -841,6 +856,9 @@ pub fn worker(
         let ack = read_frame(input)?.ok_or(MissingFrame("scene acknowledgement"))?;
         if ack != update_message(session, sequence, Body::SceneAck { revision: sequence }) {
             return Err("Worker did not receive the expected scene acknowledgement".into());
+        }
+        if mode == Mode::LiveLifecycleStale && sequence == 1 {
+            acknowledged_fixture_batch = Some(batch.clone());
         }
         if let Body::SceneBatch { edits } = batch.body {
             script::apply_accepted_edits(&mut bindings, edits);
