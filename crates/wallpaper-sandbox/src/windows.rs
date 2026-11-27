@@ -160,11 +160,11 @@ struct Attributes {
     initialized: bool,
 }
 impl Attributes {
-    fn new() -> io::Result<Self> {
+    fn new(count: u32) -> io::Result<Self> {
         let mut size = 0;
         // SAFETY: Size query uses null buffer as required by the API.
         unsafe {
-            InitializeProcThreadAttributeList(ptr::null_mut(), 2, 0, &mut size);
+            InitializeProcThreadAttributeList(ptr::null_mut(), count, 0, &mut size);
         }
         if size == 0 {
             return Err(io::Error::last_os_error());
@@ -174,7 +174,9 @@ impl Attributes {
             initialized: false,
         };
         // SAFETY: The buffer is 16-byte aligned and at least the requested size.
-        check(unsafe { InitializeProcThreadAttributeList(attributes.pointer(), 2, 0, &mut size) })?;
+        check(unsafe {
+            InitializeProcThreadAttributeList(attributes.pointer(), count, 0, &mut size)
+        })?;
         attributes.initialized = true;
         Ok(attributes)
     }
@@ -561,7 +563,7 @@ struct Child {
 }
 impl Drop for Child {
     fn drop(&mut self) {
-        // SAFETY: Owns the newly created process, including failures before Job assignment/resume.
+        // SAFETY: Owns the newly created process, including failures before resume.
         unsafe {
             TerminateProcess(self.process.as_raw_handle(), 1);
             WaitForSingleObject(self.process.as_raw_handle(), 1000);
@@ -805,16 +807,12 @@ pub fn spawn_probe(
         Reserved: 0,
     };
     let inherited = [child_in.as_raw_handle(), child_out.as_raw_handle()];
-    let mut attributes = Attributes::new()?;
-    attributes.set(PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize, &caps)?;
-    attributes.set(PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize, &inherited)?;
     let mut startup = STARTUPINFOEXW::default();
     startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
     startup.StartupInfo.hStdInput = child_in.as_raw_handle();
     startup.StartupInfo.hStdOutput = child_out.as_raw_handle();
     startup.StartupInfo.hStdError = child_out.as_raw_handle();
-    startup.lpAttributeList = attributes.pointer();
     // Windows resolves the AppContainer profile while constructing the child environment.
     // Copy only OS location metadata, never the caller's full environment (tokens/proxies/PATH).
     let mut environment = Vec::new();
@@ -850,9 +848,16 @@ pub fn spawn_probe(
         cpu::DEFAULT_RATE
     };
     cpu::configure(job.as_raw_handle(), cpu_rate)?;
+    let jobs = [job.as_raw_handle()];
+    let mut attributes = Attributes::new(3)?;
+    attributes.set(PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize, &caps)?;
+    attributes.set(PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize, &inherited)?;
+    attributes.set(PROC_THREAD_ATTRIBUTE_JOB_LIST as usize, &jobs)?;
+    startup.lpAttributeList = attributes.pointer();
     profile.record_launch_intent()?;
     let mut process = PROCESS_INFORMATION::default();
-    // SAFETY: All strings, environment, handles, security capabilities and attribute buffers live through process creation. Only listed handles inherit; worker starts suspended.
+    // SAFETY: All attribute buffers and handles live through creation. Windows starts
+    // the worker suspended in the configured job; only the listed pipe handles inherit.
     check(unsafe {
         CreateProcessW(
             app.as_ptr(),
@@ -870,6 +875,7 @@ pub fn spawn_probe(
             &mut process,
         )
     })?;
+    drop(attributes);
     // SAFETY: CreateProcess succeeded and transferred both handles.
     let child = unsafe {
         Child {
@@ -877,8 +883,20 @@ pub fn spawn_probe(
             thread: own(process.hThread)?,
         }
     };
-    // SAFETY: Assign before any worker code can run.
-    check(unsafe { AssignProcessToJobObject(job.as_raw_handle(), child.process.as_raw_handle()) })?;
+    let mut in_job = 0;
+    // SAFETY: Queries the exact owned child and job handles before the child can run.
+    check(unsafe {
+        IsProcessInJob(
+            child.process.as_raw_handle(),
+            job.as_raw_handle(),
+            &mut in_job,
+        )
+    })?;
+    if in_job == 0 {
+        return Err(io::Error::other(
+            "AppContainer worker was not created in its job",
+        ));
+    }
     verify_token(child.process.as_raw_handle(), profile.sid)?;
     profile.record_worker(process.dwProcessId)?;
     let strict_handles = if case == "handles" {
