@@ -167,6 +167,13 @@ fn worker(args: &[String]) -> Result<()> {
     let Body::Ping { nonce } = request.body else {
         return Err("Expected Ping".into());
     };
+    if case == "package-write-stall-check" {
+        write_frame(&mut output, &envelope(session, 2, Body::Pong { nonce }))?;
+        output.flush()?;
+        // Native test fixture stops reading before the host sends its scene program.
+        std::thread::sleep(Duration::from_secs(15));
+        return Err("Package write fixture reached its fallback deadline".into());
+    }
     if matches!(
         case.as_str(),
         "package-snapshot" | "package-script-snapshot"

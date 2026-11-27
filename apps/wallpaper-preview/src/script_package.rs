@@ -21,6 +21,7 @@ pub enum Lifecycle {
     WrongSessionCheck,
     SkippedSequenceCheck,
     WrongMessageCheck,
+    WriteStallCheck,
 }
 
 impl Lifecycle {

@@ -69,6 +69,8 @@ The November 27, 2026 run passed all 55 package cases, including the three real-
 
 A subsequent run passed all 56 package cases and recorded 128 consecutive live acknowledgements and both profile cleanups at the 16 ms minimum interval. The fixture checked that later callbacks read previously acknowledged values. This is sustained valid traffic; integrated unsolicited traffic and backpressure checks remain open. Local report: `target/script-preview-validation/8eb0651111414af480e47e75369939b9/summary.json`.
 
+A follow-up run passed all 57 package cases. When an isolated execution worker completed the handshake and stopped reading, the 32 KiB script program write was still pending at the host deadline. The preview stopped the worker, joined the I/O thread, verified both profile cleanups and published no updates. This covers host-side program-write backpressure. Local report: `target/script-preview-validation/60dadb166b5a4b4ea865197889abac59/summary.json`.
+
 The November 27, 2026 package regression passed all 49 cases. Its stale-batch case observed one accepted snapshot, a terminal context rejection and both AppContainer profile cleanups. Local report: `target/script-preview-validation/a0a163885e044380838b98afef58e944/summary.json`.
 
 A follow-up run passed all 50 cases. Its truncated-response case distinguished incomplete data from clean end of stream and preserved the first accepted snapshot while cleaning up both profiles. Local report: `target/script-preview-validation/be50656d4e77491d9c3a6ce57a90e2dd/summary.json`.

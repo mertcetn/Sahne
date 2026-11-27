@@ -695,6 +695,7 @@ pub fn spawn_probe(
         "live-lifecycle-wrong-session-check",
         "live-lifecycle-skipped-sequence-check",
         "live-lifecycle-wrong-message-check",
+        "package-write-stall-check",
         "scene-timer",
         "scene-timer-registration",
         "preview-clock-utc",

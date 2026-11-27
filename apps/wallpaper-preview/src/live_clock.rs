@@ -7,7 +7,7 @@ use std::{
     io::{Read, Write},
     sync::{
         Mutex, OnceLock,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
         mpsc,
     },
     thread::{self, JoinHandle},
@@ -24,6 +24,9 @@ use wallpaper_scene::{
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
 const RESPONSE_LIMIT: Duration = Duration::from_secs(8);
 const PACKAGE_WORKER_TIMEOUT: &str = "Package worker exchange timed out";
+const PACKAGE_WRITE_TIMEOUT: &str = "Package scene program write remained pending at the deadline";
+const WRITE_PENDING: u8 = 1;
+const WRITE_COMPLETE: u8 = 2;
 const PACKAGE_WORKER_EOF: &str = "Package worker closed before sending a scene batch";
 const PACKAGE_WORKER_CONTEXT: &str = "Package worker response context did not match";
 const PACKAGE_WORKER_TRUNCATED: &str = "Package worker closed during a scene batch";
@@ -105,6 +108,7 @@ struct ChannelState {
     cancel: AtomicBool,
     paused: AtomicBool,
     acknowledged_revision: AtomicU64,
+    program_write: AtomicU8,
     channel_thread: OnceLock<thread::Thread>,
     notify: Box<dyn Fn() + Send + Sync>,
     signal: mpsc::SyncSender<Signal>,
@@ -152,6 +156,7 @@ impl Bridge {
             cancel: AtomicBool::new(false),
             paused: AtomicBool::new(paused),
             acknowledged_revision: AtomicU64::new(0),
+            program_write: AtomicU8::new(0),
             channel_thread: OnceLock::new(),
             notify: Box::new(notify),
             signal,
@@ -259,6 +264,7 @@ fn supervise(
             Lifecycle::WrongSessionCheck => "live-lifecycle-wrong-session-check",
             Lifecycle::SkippedSequenceCheck => "live-lifecycle-skipped-sequence-check",
             Lifecycle::WrongMessageCheck => "live-lifecycle-wrong-message-check",
+            Lifecycle::WriteStallCheck => "package-write-stall-check",
         }
     } else {
         match state.mode {
@@ -304,7 +310,11 @@ fn supervise(
             Ok(Signal::Finished(result)) => break Some(result),
             Ok(Signal::Cancel) => break None,
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                let reason = if package_mode {
+                let reason = if package_mode
+                    && state.program_write.load(Ordering::Acquire) == WRITE_PENDING
+                {
+                    PACKAGE_WRITE_TIMEOUT
+                } else if package_mode {
                     PACKAGE_WORKER_TIMEOUT
                 } else {
                     "Clock worker timed out"
@@ -765,7 +775,9 @@ fn exchange_package(
         .snapshot_after(None)
         .ok_or("Missing initial package scene")?
         .key;
+    state.program_write.store(WRITE_PENDING, Ordering::Release);
     send(&mut input, frame(session, 2, 0, program))?;
+    state.program_write.store(WRITE_COMPLETE, Ordering::Release);
     let (delay, ticks) = if lifecycle != Lifecycle::OneShot {
         let ready = read_frame(&mut output)?.ok_or("Missing package lifecycle readiness")?;
         ready.check_context(session, 3, 0)?;
@@ -968,6 +980,12 @@ mod package_transport_tests {
 }
 
 pub fn check_package(package: script_package::Prepared) -> Result<()> {
+    let write_stall = package.lifecycle == Lifecycle::WriteStallCheck;
+    if write_stall
+        && !matches!(&package.program, Body::SceneProgram { source, .. } if source.len() == 32 * 1024)
+    {
+        return Err("Write stall check requires a 32 KiB script source".into());
+    }
     let bridge = Bridge::start_package(package, false, || {})?;
     let mut changed = false;
     let until = Instant::now() + RESPONSE_LIMIT + Duration::from_secs(3);
@@ -975,6 +993,20 @@ pub fn check_package(package: script_package::Prepared) -> Result<()> {
         let update = bridge.poll()?;
         changed |= update.snapshot.is_some();
         if let Some(result) = update.terminal {
+            if write_stall {
+                if !changed
+                    && result
+                        .as_ref()
+                        .is_err_and(|reason| reason == PACKAGE_WRITE_TIMEOUT)
+                {
+                    println!(
+                        "Package watchdog stopped worker while the program write was pending."
+                    );
+                    return Ok(());
+                }
+                result?;
+                return Err("Expected a pending package program write at the deadline".into());
+            }
             result?;
             println!(
                 "Live package transaction verified; scene changed={changed}; worker cleaned up."

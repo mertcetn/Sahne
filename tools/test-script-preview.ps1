@@ -73,6 +73,7 @@ $cases = @(
     @{ Name = 'isolated-script-live'; Isolated = $true; Live = $true; Script = '(() => { let phase = 0, calls = 0; return { intervalMs: 32, pause() { phase = 1; }, resume() { if (phase !== 1) throw new Error("private-fixture-error"); phase = 2; }, tick(document) { if (phase !== 2) throw new Error("private-fixture-error"); document.getElementById("status").textContent = "Tick " + (++calls); } }; })()' }
     @{ Name = 'isolated-script-live-rejected'; Isolated = $true; Live = $true; RuntimeReject = $true; Script = '(() => { let calls = 0; return { intervalMs: 32, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Tick " + (++calls); if (calls === 2) throw new Error("private-fixture-error"); } }; })()' }
     @{ Name = 'isolated-script-ack-pressure'; Isolated = $true; AckPressure = $true; Script = '(() => { let calls = 0; return { intervalMs: 16, pause() {}, resume() {}, tick(document) { const node = document.getElementById("status"); if (calls > 0 && node.textContent !== "Tick " + calls) throw new Error("private-fixture-error"); node.textContent = "Tick " + (++calls); } }; })()' }
+    @{ Name = 'isolated-script-write-stall'; Isolated = $true; WriteStall = $true; ScriptBytes = 32 * 1024; Script = '(document) => { document.getElementById("status").textContent = "Updated"; }' }
     @{ Name = 'isolated-script-live-heap-limit'; Isolated = $true; Live = $true; RuntimeReject = $true; Script = '(() => { let calls = 0; return { intervalMs: 250, pause() {}, resume() {}, tick(document) { const node = document.getElementById("status"); node.textContent = "Tick " + (++calls); if (calls !== 2) return; const allocations = []; try { for (let i = 0; i < 64; i++) allocations.push(new Array(65536).fill(1)); } catch (error) { allocations.length = 0; if (error instanceof InternalError && error.message === "out of memory") throw error; } } }; })()' }
     @{ Name = 'isolated-script-live-stack-limit'; Isolated = $true; Live = $true; RuntimeReject = $true; Script = '(() => { let calls = 0; function depth(n) { return n === 0 ? 0 : 1 + depth(n - 1); } return { intervalMs: 250, pause() {}, resume() {}, tick(document) { const node = document.getElementById("status"); node.textContent = "Tick " + (++calls); if (calls !== 2) return; try { depth(10000); } catch (error) { if (error instanceof RangeError && error.message.includes("stack")) throw error; } } }; })()' }
     @{ Name = 'isolated-script-worker-timeout'; Isolated = $true; Watchdog = $true; Script = '({ intervalMs: 32, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Accepted"; } })' }
@@ -141,6 +142,7 @@ $results = foreach ($case in $cases) {
         elseif ($case.ContainsKey('TruncatedBatch')) { '--check-isolated-script-truncated-batch' }
         elseif ($case.ContainsKey('ContextFault')) { "--check-isolated-script-$($case.ContextFault)" }
         elseif ($case.ContainsKey('AckPressure')) { '--check-isolated-script-ack-pressure' }
+        elseif ($case.ContainsKey('WriteStall')) { '--check-isolated-script-write-stall' }
         elseif ($case.ContainsKey('Isolated') -and $case.ContainsKey('Live')) { '--check-isolated-script-live' }
         elseif ($case.ContainsKey('Isolated') -and $case.ContainsKey('Lifecycle')) { '--check-isolated-script-lifecycle' }
         elseif ($case.ContainsKey('Isolated')) { '--check-isolated-script-preview' }
@@ -185,6 +187,7 @@ $results = foreach ($case in $cases) {
                 else { '(?m)^Live package rejected the invalid context and preserved one accepted snapshot\.\r?$' }
             }
             elseif ($case.ContainsKey('AckPressure')) { '(?m)^Live package ACK pressure verified: (?<revisions>[0-9]+) revisions\.\r?$' }
+            elseif ($case.ContainsKey('WriteStall')) { '(?m)^Package watchdog stopped worker while the program write was pending\.\r?$' }
             elseif ($case.ContainsKey('Live')) { '(?m)^Live package pause, resume and two updates verified\.\r?$' }
             else { $accepted.Replace('(true|false)', 'true') }
         if ($case.ContainsKey('Reject')) {

@@ -859,3 +859,7 @@ The isolated live regression exercises a response from another session, a skippe
 ## 127. M4 sustained live acknowledgement check
 
 The live package bridge records the latest revision after writing its acknowledgement. The headless pressure check waits for at least 128 acknowledged revisions with one tick outstanding at a time. This measures the exchange independently of the latest-value snapshot mailbox. See [Sustained live acknowledgements](m4-timers.md#sustained-live-acknowledgements).
+
+## 128. M4 pending package program write
+
+The exchange tracks whether the scene program write has started and completed. The independent supervisor can distinguish a deadline during that write from later callback or response timeouts, stop the worker, and join the I/O thread. The headless fixture verifies this outcome over the isolated package path. See [Package program write deadline](m4-timers.md#package-program-write-deadline).

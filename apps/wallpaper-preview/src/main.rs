@@ -76,6 +76,9 @@ fn main() -> Result<()> {
         return Ok(());
     }
     let worker_failure_check = match args.peek().map(String::as_str) {
+        Some("--check-isolated-script-write-stall") => {
+            Some(script_package::Lifecycle::WriteStallCheck)
+        }
         Some("--check-isolated-script-wrong-session") => {
             Some(script_package::Lifecycle::WrongSessionCheck)
         }
@@ -107,6 +110,9 @@ fn main() -> Result<()> {
         }
         let mut package = script_package::prepare_isolated(&folder)?;
         package.lifecycle = lifecycle;
+        if lifecycle == script_package::Lifecycle::WriteStallCheck {
+            return live_clock::check_package(package);
+        }
         return live_clock::check_live_package(package);
     }
     if args
@@ -158,6 +164,9 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--check-isolated-script-truncated-batch <absolute-folder> checks a worker exit during a scene response."
+                );
+                println!(
+                    "--check-isolated-script-write-stall <absolute-folder> checks watchdog cleanup while the worker leaves a 32 KiB script program unread."
                 );
                 println!(
                     "--check-trusted-script-lifecycle <absolute-folder> checks pause, resume and one script tick without a window."

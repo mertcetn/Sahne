@@ -170,6 +170,10 @@ The regression runner also uses `--check-isolated-script-wrong-session`, `--chec
 
 Run `--check-isolated-script-ack-pressure <absolute-folder>` with a live callback package that produces changing snapshots. The headless check waits for at least 128 acknowledged revisions after synthetic resume and verifies both AppContainer profile cleanups. The runner uses a 16 ms interval and checks from JavaScript that each callback sees the value acknowledged for its predecessor. The revision count measures acknowledged transactions independently of snapshot coalescing in the preview.
 
+### Package program write deadline
+
+The headless `--check-isolated-script-write-stall <absolute-folder>` fixture prepares a package with a 32 KiB script. The execution worker completes the handshake and stops reading before the host sends the scene program. The check requires the host watchdog to expire while the write is still pending, the I/O thread to exit, both profiles to be cleaned up, and zero scene updates.
+
 The November 27, 2026 regression passed all 48 cases. The early-exit case preserved the first snapshot and detected the closed channel before the watchdog deadline. Local report: `target/script-preview-validation/0d25640fcd5240be98bf62f3a7716316/summary.json`.
 
 ## Native interval call limits
