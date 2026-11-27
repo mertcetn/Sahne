@@ -164,6 +164,8 @@ The `--check-isolated-script-stale-batch <absolute-folder>` fixture sends the pr
 
 The `--check-isolated-script-truncated-batch <absolute-folder>` fixture closes the channel partway through the second response. The preview must report a truncated batch, keep the first snapshot and clean up both profiles.
 
+The regression runner also uses `--check-isolated-script-wrong-session`, `--check-isolated-script-skipped-sequence` and `--check-isolated-script-wrong-message` with the same live callback package shape. Each case expects one accepted snapshot, rejection of the second response without another snapshot, and cleanup of both profiles.
+
 The November 27, 2026 regression passed all 48 cases. The early-exit case preserved the first snapshot and detected the closed channel before the watchdog deadline. Local report: `target/script-preview-validation/0d25640fcd5240be98bf62f3a7716316/summary.json`.
 
 ## Native interval call limits

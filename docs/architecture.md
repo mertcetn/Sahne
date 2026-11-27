@@ -851,3 +851,7 @@ The package bridge treats a mismatched session, sequence or base revision as a t
 ## 125. M4 incomplete scene response
 
 The preview distinguishes an incomplete frame from end of stream between frames. Both outcomes terminate the exchange before further scene changes are applied. The headless truncated-batch fixture checks cleanup and retention of the first snapshot over a real AppContainer pipe. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).
+
+## 126. M4 live response context checks
+
+The isolated live regression exercises a response from another session, a skipped response sequence and an unexpected message kind over the real AppContainer pipe. The preview rejects the response before it reaches the scene transaction, retains the first accepted snapshot and cleans up both profiles.

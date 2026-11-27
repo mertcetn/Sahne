@@ -75,6 +75,15 @@ fn main() -> Result<()> {
         return Ok(());
     }
     let worker_failure_check = match args.peek().map(String::as_str) {
+        Some("--check-isolated-script-wrong-session") => {
+            Some(script_package::Lifecycle::WrongSessionCheck)
+        }
+        Some("--check-isolated-script-skipped-sequence") => {
+            Some(script_package::Lifecycle::SkippedSequenceCheck)
+        }
+        Some("--check-isolated-script-wrong-message") => {
+            Some(script_package::Lifecycle::WrongMessageCheck)
+        }
         Some("--check-isolated-script-worker-timeout") => {
             Some(script_package::Lifecycle::WatchdogCheck)
         }

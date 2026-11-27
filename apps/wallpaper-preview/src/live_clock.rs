@@ -27,6 +27,7 @@ const PACKAGE_WORKER_TIMEOUT: &str = "Package worker exchange timed out";
 const PACKAGE_WORKER_EOF: &str = "Package worker closed before sending a scene batch";
 const PACKAGE_WORKER_CONTEXT: &str = "Package worker response context did not match";
 const PACKAGE_WORKER_TRUNCATED: &str = "Package worker closed during a scene batch";
+const PACKAGE_WORKER_WRONG_MESSAGE: &str = "Unexpected package worker response";
 const TICK_GAP: Duration = Duration::from_millis(1400);
 const MINUTES: [u16; 3] = [1439, 0, 0];
 type WorkerResult<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
@@ -253,6 +254,9 @@ fn supervise(
             Lifecycle::WorkerExitCheck => "live-lifecycle-exit-check",
             Lifecycle::StaleBatchCheck => "live-lifecycle-stale-check",
             Lifecycle::TruncatedBatchCheck => "live-lifecycle-truncated-check",
+            Lifecycle::WrongSessionCheck => "live-lifecycle-wrong-session-check",
+            Lifecycle::SkippedSequenceCheck => "live-lifecycle-skipped-sequence-check",
+            Lifecycle::WrongMessageCheck => "live-lifecycle-wrong-message-check",
         }
     } else {
         match state.mode {
@@ -742,7 +746,7 @@ fn accept_package_response(
             ..
         } => true,
         Body::SceneBatch { .. } => false,
-        _ => return Err("Unexpected package worker response".into()),
+        _ => return Err(PACKAGE_WORKER_WRONG_MESSAGE.into()),
     };
     Ok((accept_scene_batch(host, batch), worker_rejected))
 }
@@ -992,6 +996,14 @@ pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
         Lifecycle::TruncatedBatchCheck => Some((
             PACKAGE_WORKER_TRUNCATED,
             "Live package rejected a truncated batch and preserved one accepted snapshot.",
+        )),
+        Lifecycle::WrongSessionCheck | Lifecycle::SkippedSequenceCheck => Some((
+            PACKAGE_WORKER_CONTEXT,
+            "Live package rejected the invalid context and preserved one accepted snapshot.",
+        )),
+        Lifecycle::WrongMessageCheck => Some((
+            PACKAGE_WORKER_WRONG_MESSAGE,
+            "Live package rejected the unexpected message and preserved one accepted snapshot.",
         )),
         _ => None,
     };

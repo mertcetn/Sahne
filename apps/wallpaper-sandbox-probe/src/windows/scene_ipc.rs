@@ -26,6 +26,9 @@ pub enum Mode {
     LiveLifecycleExit,
     LiveLifecycleStale,
     LiveLifecycleTruncated,
+    LiveLifecycleWrongSession,
+    LiveLifecycleSkippedSequence,
+    LiveLifecycleWrongMessage,
     Timer,
     RegisteredTimer,
     Utc,
@@ -45,6 +48,9 @@ impl Mode {
             "live-lifecycle-exit-check" => Some(Self::LiveLifecycleExit),
             "live-lifecycle-stale-check" => Some(Self::LiveLifecycleStale),
             "live-lifecycle-truncated-check" => Some(Self::LiveLifecycleTruncated),
+            "live-lifecycle-wrong-session-check" => Some(Self::LiveLifecycleWrongSession),
+            "live-lifecycle-skipped-sequence-check" => Some(Self::LiveLifecycleSkippedSequence),
+            "live-lifecycle-wrong-message-check" => Some(Self::LiveLifecycleWrongMessage),
             "scene-timer" => Some(Self::Timer),
             "scene-timer-registration" => Some(Self::RegisteredTimer),
             "preview-clock-utc" => Some(Self::Utc),
@@ -71,6 +77,9 @@ impl Mode {
                 | Self::LiveLifecycleExit
                 | Self::LiveLifecycleStale
                 | Self::LiveLifecycleTruncated
+                | Self::LiveLifecycleWrongSession
+                | Self::LiveLifecycleSkippedSequence
+                | Self::LiveLifecycleWrongMessage
         )
     }
 
@@ -766,6 +775,37 @@ pub fn worker(
                     return Err("Watchdog fixture reached its fallback deadline".into());
                 }
                 Mode::LiveLifecycleExit => return Ok(()),
+                Mode::LiveLifecycleWrongSession | Mode::LiveLifecycleSkippedSequence => {
+                    let response_session = if mode == Mode::LiveLifecycleWrongSession {
+                        session.wrapping_add(1).max(1)
+                    } else {
+                        session
+                    };
+                    let response_sequence = if mode == Mode::LiveLifecycleSkippedSequence {
+                        sequence + 1
+                    } else {
+                        sequence
+                    };
+                    send(
+                        output,
+                        Message {
+                            session: response_session,
+                            sequence: response_sequence,
+                            base_revision: sequence - 1,
+                            body: Body::SceneBatch {
+                                edits: vec![Edit::Color {
+                                    node: clock,
+                                    value: PANEL_COLOR,
+                                }],
+                            },
+                        },
+                    )?;
+                    return Ok(());
+                }
+                Mode::LiveLifecycleWrongMessage => {
+                    send(output, update_message(session, sequence, Body::ClockReady))?;
+                    return Ok(());
+                }
                 Mode::LiveLifecycleStale => {
                     send(
                         output,

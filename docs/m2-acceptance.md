@@ -63,7 +63,9 @@ See [Windows AppContainer intake check](m3-manifest.md#windows-appcontainer-inta
 
 The [M4 advisory refresh](m2-js-dependencies.md#m4-advisory-refresh) checked all 243 locked crates.io versions and the embedded engine's upstream advisories. It confirmed the existing renderer findings and the need to retain the G2 decision until the remaining source and isolation work is complete.
 
-The preview's package response reader has a local byte-stream regression after the host has accepted revision 1. Responses with a different session, repeated or skipped sequence, stale base revision, unexpected message kind or truncated frame fail without changing the accepted revision or snapshot. Real AppContainer fixtures cover the repeated batch with its original base revision and an incomplete response payload. Other malformed response cases still need process-level coverage.
+The preview's package response reader has a local byte-stream regression after the host has accepted revision 1. Responses with a different session, repeated or skipped sequence, stale base revision, unexpected message kind or truncated frame fail without changing the accepted revision or snapshot. Real AppContainer fixtures cover a different session, skipped sequence, unexpected message kind, a repeated batch with its original base revision and an incomplete response payload.
+
+The November 27, 2026 run passed all 55 package cases, including the three real-process response context cases. Each preserved the first snapshot and verified both profile cleanups. Integrated pressure and acknowledgement traffic remain open. Local report: `target/script-preview-validation/753e1278ce2746b9a4ac7e26a8eb8232/summary.json`.
 
 The November 27, 2026 package regression passed all 49 cases. Its stale-batch case observed one accepted snapshot, a terminal context rejection and both AppContainer profile cleanups. Local report: `target/script-preview-validation/a0a163885e044380838b98afef58e944/summary.json`.
 

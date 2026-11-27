@@ -79,6 +79,14 @@ $cases = @(
     @{ Name = 'isolated-script-stale-batch'; Isolated = $true; StaleBatch = $true; Script = '({ intervalMs: 250, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Accepted"; } })' }
     @{ Name = 'isolated-script-truncated-batch'; Isolated = $true; TruncatedBatch = $true; Script = '({ intervalMs: 250, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Accepted"; } })' }
 )
+foreach ($fault in @('wrong-session', 'skipped-sequence', 'wrong-message')) {
+    $cases += @{
+        Name = "isolated-script-$fault"
+        Isolated = $true
+        ContextFault = $fault
+        Script = '({ intervalMs: 250, pause() {}, resume() {}, tick(document) { document.getElementById("status").textContent = "Accepted"; } })'
+    }
+}
 $manifest = '{"formatVersion":1,"apiVersion":1,"id":"probe.integration","name":"Script preview validation","entry":"index.html","script":"update.js","permissions":[],"preferredFps":30}'
 Write-Host "Script preview validation reports in $run"
 $results = foreach ($case in $cases) {
@@ -130,6 +138,7 @@ $results = foreach ($case in $cases) {
         elseif ($case.ContainsKey('WorkerExit')) { '--check-isolated-script-worker-exit' }
         elseif ($case.ContainsKey('StaleBatch')) { '--check-isolated-script-stale-batch' }
         elseif ($case.ContainsKey('TruncatedBatch')) { '--check-isolated-script-truncated-batch' }
+        elseif ($case.ContainsKey('ContextFault')) { "--check-isolated-script-$($case.ContextFault)" }
         elseif ($case.ContainsKey('Isolated') -and $case.ContainsKey('Live')) { '--check-isolated-script-live' }
         elseif ($case.ContainsKey('Isolated') -and $case.ContainsKey('Lifecycle')) { '--check-isolated-script-lifecycle' }
         elseif ($case.ContainsKey('Isolated')) { '--check-isolated-script-preview' }
@@ -167,6 +176,12 @@ $results = foreach ($case in $cases) {
             elseif ($case.ContainsKey('WorkerExit')) { '(?m)^Live package worker exit preserved one accepted snapshot\.\r?$' }
             elseif ($case.ContainsKey('StaleBatch')) { '(?m)^Live package rejected a stale batch and preserved one accepted snapshot\.\r?$' }
             elseif ($case.ContainsKey('TruncatedBatch')) { '(?m)^Live package rejected a truncated batch and preserved one accepted snapshot\.\r?$' }
+            elseif ($case.ContainsKey('ContextFault')) {
+                if ($case.ContextFault -eq 'wrong-message') {
+                    '(?m)^Live package rejected the unexpected message and preserved one accepted snapshot\.\r?$'
+                }
+                else { '(?m)^Live package rejected the invalid context and preserved one accepted snapshot\.\r?$' }
+            }
             elseif ($case.ContainsKey('Live')) { '(?m)^Live package pause, resume and two updates verified\.\r?$' }
             else { $accepted.Replace('(true|false)', 'true') }
         if ($case.ContainsKey('Reject')) {

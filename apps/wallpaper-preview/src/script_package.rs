@@ -18,6 +18,9 @@ pub enum Lifecycle {
     WorkerExitCheck,
     StaleBatchCheck,
     TruncatedBatchCheck,
+    WrongSessionCheck,
+    SkippedSequenceCheck,
+    WrongMessageCheck,
 }
 
 impl Lifecycle {
@@ -29,6 +32,9 @@ impl Lifecycle {
                 | Self::WorkerExitCheck
                 | Self::StaleBatchCheck
                 | Self::TruncatedBatchCheck
+                | Self::WrongSessionCheck
+                | Self::SkippedSequenceCheck
+                | Self::WrongMessageCheck
         )
     }
 }
