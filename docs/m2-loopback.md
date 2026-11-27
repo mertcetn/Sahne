@@ -37,7 +37,7 @@ Results are retained in a fresh ignored `target/loopback-diagnostics/<id>/` dire
 
 Missing, malformed, stale or unrelated records do not pass. The native `--case network` still exits nonzero for a timeout; the ordinary runner still excludes this investigative case and does not reinterpret it as a passing native result. The elevated diagnostic supplies separate OS evidence. It currently expects this machine's timeout behavior; an immediate native access denial should be reviewed through the ordinary runner instead.
 
-This is receiving-side evidence for the controlled local fixture. It does not independently identify the sender's ephemeral socket or match a worker package SID in that receiving record. Another process deliberately targeting the same short-lived port during this interval has not been modeled. It does not certify every address family, protocol, broker, Windows build or firewall configuration. The elevated host run is recorded separately from ordinary non-elevated corpus runs. Production validation and G2 remain open.
+The WFP event identifies the receiving side. The diagnostic also samples the Windows TCP table during the fixture and retains only a matching loopback connection attributed to the staged worker by executable path and parent PID. The report sets `SenderCorrelated` only when there is one verified sender observation and its source port agrees with a matching WFP drop. A missing or ambiguous observation leaves the receiving-side result available. The receiving event itself still does not carry the worker's package SID. This evidence covers the controlled IPv4 TCP fixture on the recorded Windows configuration. Production validation and G2 remain open. [Windows TCP table and PID display](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/netstat)
 
 ## Local evidence
 
@@ -48,6 +48,8 @@ Pure matcher checks passed one valid event and twenty rejection cases, including
 The default native corpus also passed all thirty-one cases, thirty-seven profile cleanups and one registry cleanup in report `a3376f1e5bb741f79764ef4f44abcccc`, with `G2Complete=false`. All twenty workspace Rust tests, Clippy with warnings denied, formatting, PowerShell syntax, runner self-checks and local documentation links passed. The existing incremental-cache hardlink/copy notices remain. No hosted workflow or other Windows build was tested.
 
 The elevated diagnostic was repeated on November 27, 2026 with the current local release probe. It returned `LoopbackDropConfirmed` and matched two receiving-side AppContainer Loopback drops for the fixture listener on port 65217. Both events identified filter 73076. The native probe returned its strict timeout failure and profile cleanup passed. The diagnostic read existing filtered records without changing policy. Local report: `target/loopback-diagnostics/67515ba0713d491da1486529bfa817df/summary.json`. This rerun leaves the native acceptance rule and G2 decision in place.
+
+A separate elevated run on November 27 returned `SenderCorrelated=true`. Windows reported one sender observation for worker PID 7760 on source port 63362, connected toward listener port 63360. Both matched receiving-side WFP drops reported remote port 63362 and filter 73076. The matcher suite passed two positive and twenty-one negative cases. Local report: `target/loopback-diagnostics/85bb6cf829aa4ac5b74d12ff9b13587b/summary.json`.
 
 ## Primary sources reviewed
 

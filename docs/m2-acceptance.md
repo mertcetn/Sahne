@@ -77,7 +77,7 @@ On November 27, 2026, the full default sandbox suite passed 50 cases and confirm
 
 The separate strict `network` loopback case failed. The host connected to its own local fixture and the AppContainer worker's connection timed out without an explicit access-denied result. The profile was cleaned up. The timeout remains inconclusive under the existing acceptance rule. The default suite includes the distinct `network-egress` case, which passed, and reports `G2Complete=false`. Separate loopback report: `target/sandbox-validation/d16feee6575f408a9e2d594ee1795972/summary.json`.
 
-A separate elevated read-only rerun matched two receiving-side WFP AppContainer Loopback drops for its own test port. The raw timeout remains a failure under the native rule. See [Local loopback evidence](m2-loopback.md#local-evidence).
+A separate elevated read-only rerun matched two receiving-side WFP AppContainer Loopback drops for its own test port. A subsequent run correlated both drops with the source port of the verified worker in the Windows TCP table. The raw timeout remains a failure under the native rule. See [Local loopback evidence](m2-loopback.md#local-evidence).
 
 The isolated live package path now has a real-worker watchdog regression. The test worker publishes one valid snapshot and stops responding at the second tick. The host deadline terminates the job and verifies both profile cleanups. This covers an unresponsive worker after startup. Host-death cleanup and the remaining process-level fault cases stay open. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).
 

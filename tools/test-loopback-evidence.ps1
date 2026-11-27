@@ -23,6 +23,8 @@ $parameters = @{
     FinishedUtc = [DateTimeOffset]'2026-11-14T17:19:29Z'
 }
 if (@(Find-SahneLoopbackDrop -Events $fixture @parameters).Count -ne 1) { throw 'Positive fixture rejected' }
+if (@(Find-SahneLoopbackDrop -Events $fixture @parameters -SenderPort 54738).Count -ne 1) { throw 'Matching sender port rejected' }
+if (@(Find-SahneLoopbackDrop -Events $fixture @parameters -SenderPort 54739).Count -ne 0) { throw 'Mismatched sender port accepted' }
 $mutations = @(
     @('header/timeStamp', '2026-11-14T17:19:25Z'),
     @('header/timeStamp', '2026-11-14T17:19:30Z'),
@@ -54,4 +56,4 @@ $node.ParentNode.RemoveChild($node) | Out-Null
 if (@(Find-SahneLoopbackDrop -Events $missing @parameters).Count -ne 0) { throw 'Missing PID accepted' }
 [xml]$empty = '<netEvents />'
 if (@(Find-SahneLoopbackDrop -Events $empty @parameters).Count -ne 0) { throw 'Missing events accepted' }
-Write-Output "Loopback matcher checks passed: 1 positive, $($mutations.Count + 2) negative."
+Write-Output "Loopback matcher checks passed: 2 positive, $($mutations.Count + 3) negative."

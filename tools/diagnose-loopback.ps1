@@ -20,8 +20,48 @@ if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
 $output = Join-Path $repo ("target/loopback-diagnostics/" + [guid]::NewGuid().ToString('N'))
 $started = [DateTime]::UtcNow
 $binaryHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash
-$run = Invoke-SahneGuardedProcess -FilePath $binary -ArgumentList @('--case', 'network') `
-    -WorkingDirectory $repo -OutputDirectory $output
+$watch = Start-ThreadJob -ArgumentList $PSScriptRoot, $binary, $repo, $output -ScriptBlock {
+    param($tools, $probe, $workingDirectory, $reportDirectory)
+    $ErrorActionPreference = 'Stop'
+    . (Join-Path $tools 'sandbox-process.ps1')
+    Invoke-SahneGuardedProcess -FilePath $probe -ArgumentList @('--case', 'network') `
+        -WorkingDirectory $workingDirectory -OutputDirectory $reportDirectory
+}
+$senders = @{}
+try {
+    $stdoutPath = Join-Path $output 'stdout.log'
+    $netstat = Join-Path $env:SystemRoot 'System32/netstat.exe'
+    while ($watch.State -in @('NotStarted', 'Running')) {
+        if ($senders.Count -lt 8 -and (Test-Path -LiteralPath $stdoutPath)) {
+            $partial = Read-SahneBoundedLog -Path $stdoutPath
+            $portLine = [regex]::Match($partial, '(?m)^Loopback host control passed: 127\.0\.0\.1:(\d+)\r?$')
+            $pidLine = [regex]::Match($partial, '(?m)^Loopback host process: (\d+)\r?$')
+            $imageLine = [regex]::Match($partial, '(?m)^Loopback worker image: ([^\r\n]+)\r?$')
+            if ($portLine.Success -and $pidLine.Success -and $imageLine.Success) {
+                $listenPort = [int]$portLine.Groups[1].Value
+                $probeHostId = [int]$pidLine.Groups[1].Value
+                $workerImage = [IO.Path]::GetFullPath($imageLine.Groups[1].Value)
+                foreach ($line in (& $netstat -ano -p tcp)) {
+                    if ($line -notmatch "^\s*TCP\s+127\.0\.0\.1:(?<sender>\d+)\s+127\.0\.0\.1:$listenPort\s+SYN_SENT\s+(?<owner>\d+)\s*$") { continue }
+                    $sourcePort = [int]$Matches.sender
+                    $owner = [int]$Matches.owner
+                    $key = "$owner/$sourcePort"
+                    if ($senders.ContainsKey($key) -or $senders.Count -ge 8) { continue }
+                    try {
+                        $worker = Get-CimInstance Win32_Process -Filter "ProcessId = $owner" -OperationTimeoutSec 1
+                        if ($null -ne $worker -and $worker.ParentProcessId -eq $probeHostId -and $worker.ExecutablePath -ieq $workerImage) {
+                            $senders[$key] = [pscustomobject]@{ WorkerPid = $owner; SenderPort = $sourcePort; ListenerPort = $listenPort }
+                        }
+                    }
+                    catch { continue }
+                }
+            }
+        }
+        Start-Sleep -Milliseconds 40
+    }
+    $run = Receive-Job -Job $watch -Wait
+}
+finally { Remove-Job -Job $watch -Force }
 $stdout = Read-SahneBoundedLog -Path $run.StdoutPath
 $stderr = Read-SahneBoundedLog -Path $run.StderrPath
 $finished = [DateTimeOffset]::UtcNow
@@ -36,6 +76,8 @@ if ($port -lt 1 -or $port -gt 65535) { throw 'Invalid fixture listener port.' }
 # events may be unavailable; missing events never prove either denial or access.
 $netsh = Join-Path $env:SystemRoot 'System32/netsh.exe'
 $matches = @()
+$senderDrops = @()
+$uniqueSender = if ($senders.Count -eq 1) { @($senders.Values)[0] } else { $null }
 foreach ($direction in @('localport', 'remoteport')) {
     $eventPath = Join-Path $output "$direction.xml"
     $queryOutput = & $netsh wfp show netevents "file=$eventPath" protocol=6 `
@@ -56,6 +98,11 @@ foreach ($direction in @('localport', 'remoteport')) {
         $matches += @(Find-SahneLoopbackDrop -Events $events -ListenerPort $port `
             -HostProcessId ([int]$hostIds[0].Groups[1].Value) -HostImage $binary `
             -StartedUtc $started -FinishedUtc $finished)
+        if ($null -ne $uniqueSender -and $uniqueSender.ListenerPort -eq $port) {
+            $senderDrops += @(Find-SahneLoopbackDrop -Events $events -ListenerPort $port `
+                -HostProcessId ([int]$hostIds[0].Groups[1].Value) -HostImage $binary `
+                -StartedUtc $started -FinishedUtc $finished -SenderPort $uniqueSender.SenderPort)
+        }
     }
     finally { $reader.Dispose() }
 }
@@ -78,6 +125,9 @@ if ($run.ExitCode -eq 1 -and $stderr.Contains('Network test inconclusive or allo
     Completion = $run.Completion
     G2Complete = $false
     MatchingDrops = $matches
+    SenderObservations = @($senders.Values)
+    SenderCorrelated = ($status -eq 'LoopbackDropConfirmed' -and $senderDrops.Count -gt 0)
+    SenderMatchingDrops = $senderDrops
     Note = 'Receiving-host AppContainer Loopback block, matched by run interval, host PID, image path suffix and listener port. This is supplemental local fixture evidence; the native timeout alone still fails.'
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'summary.json')
 Write-Output "Loopback diagnostics retained at $output"
