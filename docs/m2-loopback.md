@@ -49,6 +49,8 @@ The default native corpus also passed all thirty-one cases, thirty-seven profile
 
 ## Primary sources reviewed
 
+The elevated diagnostic was repeated on November 27, 2026 with the current local release probe. It returned `LoopbackDropConfirmed` and matched two receiving-side AppContainer Loopback drops for the fixture listener on port 65217. Both events identified filter 73076. The native probe returned its strict timeout failure and profile cleanup passed. The diagnostic read existing filtered records without changing policy. Local report: `target/loopback-diagnostics/67515ba0713d491da1486529bfa817df/summary.json`. This rerun leaves the native acceptance rule and G2 decision in place.
+
 - [Microsoft: troubleshooting UWP connectivity with WFP](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall), consulted November 14, 2026: loopback isolation and correlation of classify-drop events. Its exemption instructions are not applied here.
 - [Project Zero: Understanding Network Access in Windows AppContainers](https://projectzero.google/2021/08/understanding-network-access-windows-app.html), consulted November 14, 2026: incoming drops can silently discard traffic while outgoing blocks can return an error. The local WFP records, rather than this general explanation alone, establish the observed cause.
 - Local Windows `netsh wfp show netevents help`, consulted November 14, 2026: protocol/address/port/time filters. Read-only option queries and event enumeration require administrator elevation on this machine.
