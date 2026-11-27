@@ -839,3 +839,7 @@ The version 2 journal records launch intent and flushes it before the launcher c
 ## 122. M4 worker Job membership at process creation
 
 The launcher passes the preconfigured Job in the Windows process creation attributes, alongside the AppContainer identity and the pipe handle list. It verifies membership in that exact Job before resuming the child. This applies kill-on-close protection from process creation, including the interval before the worker PID is recorded. Profile recovery still preserves launch-intent-only records because they lack a worker PID. [Windows process attributes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)
+
+## 123. M4 worker exit during a live update
+
+The package bridge treats end of stream before a scene batch as a terminal worker failure. It leaves the last published snapshot available and runs the normal Job and profile cleanup. The headless exit fixture checks this outcome after one accepted update. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).

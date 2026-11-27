@@ -158,6 +158,10 @@ This headless development check takes a live callback package whose first tick c
 
 The November 26, 2026 run passed all 47 cases. The watchdog case completed in about 8.7 seconds including startup and cleanup. Local report: `target/script-preview-validation/3e78bf95dfd44d71940b83b6806ebf27/summary.json`.
 
+For the same package shape, `--check-isolated-script-worker-exit <absolute-folder>` runs a separate test worker that exits on the second dispatch before sending a reply. The check requires one accepted snapshot, a clean end-of-stream diagnostic, and cleanup of both profiles.
+
+The November 27, 2026 regression passed all 48 cases. The early-exit case preserved the first snapshot and detected the closed channel before the watchdog deadline. Local report: `target/script-preview-validation/0d25640fcd5240be98bf62f3a7716316/summary.json`.
+
 ## Native interval call limits
 
 The retained registered-clock fixture accepts one native interval registration during setup and one cancellation during its final tick. The worker checks the delay before conversion to milliseconds. It must be an integer from 16 through 64, the fixed fixture's supported range. Cancellation requires the sole valid handle. Invalid and repeated calls leave a sticky failure that prevents the worker from sending the affected initialization response, lifecycle acknowledgement or scene batch. The host independently checks the interval request before scheduling it. General package timers remain outside this fixed fixture.

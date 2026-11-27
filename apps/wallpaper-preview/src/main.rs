@@ -74,17 +74,23 @@ fn main() -> Result<()> {
         println!("Recovered orphaned AppContainer profile.");
         return Ok(());
     }
-    if args
-        .peek()
-        .is_some_and(|arg| arg == "--check-isolated-script-worker-timeout")
-    {
+    let worker_failure_check = match args.peek().map(String::as_str) {
+        Some("--check-isolated-script-worker-timeout") => {
+            Some(script_package::Lifecycle::WatchdogCheck)
+        }
+        Some("--check-isolated-script-worker-exit") => {
+            Some(script_package::Lifecycle::WorkerExitCheck)
+        }
+        _ => None,
+    };
+    if let Some(lifecycle) = worker_failure_check {
         args.next();
         let folder = args.next().ok_or("Expected an absolute package folder")?;
         if args.next().is_some() {
-            return Err("Package worker timeout check takes exactly one folder".into());
+            return Err("Package worker failure check takes exactly one folder".into());
         }
         let mut package = script_package::prepare_isolated(&folder)?;
-        package.lifecycle = script_package::Lifecycle::WatchdogCheck;
+        package.lifecycle = lifecycle;
         return live_clock::check_live_package(package);
     }
     if args
@@ -124,6 +130,9 @@ fn main() -> Result<()> {
                 );
                 println!(
                     "--check-isolated-script-worker-timeout <absolute-folder> runs a headless watchdog fixture with a live callback package."
+                );
+                println!(
+                    "--check-isolated-script-worker-exit <absolute-folder> checks premature worker exit after a live scene update."
                 );
                 println!(
                     "--check-trusted-script-lifecycle <absolute-folder> checks pause, resume and one script tick without a window."

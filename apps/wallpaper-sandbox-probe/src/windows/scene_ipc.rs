@@ -23,6 +23,7 @@ pub enum Mode {
     PreviewLifecycle,
     LiveLifecycle,
     LiveLifecycleWatchdog,
+    LiveLifecycleExit,
     Timer,
     RegisteredTimer,
     Utc,
@@ -39,6 +40,7 @@ impl Mode {
             "preview-lifecycle-package" => Some(Self::PreviewLifecycle),
             "live-lifecycle-package" => Some(Self::LiveLifecycle),
             "live-lifecycle-watchdog-check" => Some(Self::LiveLifecycleWatchdog),
+            "live-lifecycle-exit-check" => Some(Self::LiveLifecycleExit),
             "scene-timer" => Some(Self::Timer),
             "scene-timer-registration" => Some(Self::RegisteredTimer),
             "preview-clock-utc" => Some(Self::Utc),
@@ -58,7 +60,10 @@ impl Mode {
     }
 
     fn is_live_package(self) -> bool {
-        matches!(self, Self::LiveLifecycle | Self::LiveLifecycleWatchdog)
+        matches!(
+            self,
+            Self::LiveLifecycle | Self::LiveLifecycleWatchdog | Self::LiveLifecycleExit
+        )
     }
 
     fn updates(self) -> u64 {
@@ -744,10 +749,16 @@ pub fn worker(
                 }
             }
         }
-        if mode == Mode::LiveLifecycleWatchdog && sequence == 2 {
-            // Deliberately unresponsive native test worker, independent of QuickJS limits.
-            std::thread::sleep(Duration::from_secs(15));
-            return Err("Watchdog fixture reached its fallback deadline".into());
+        if sequence == 2 {
+            match mode {
+                Mode::LiveLifecycleWatchdog => {
+                    // Deliberately unresponsive native test worker, independent of QuickJS limits.
+                    std::thread::sleep(Duration::from_secs(15));
+                    return Err("Watchdog fixture reached its fallback deadline".into());
+                }
+                Mode::LiveLifecycleExit => return Ok(()),
+                _ => {}
+            }
         }
         let display_time = if mode.uses_host_timer() || mode == Mode::Utc {
             if sequence > 1 {

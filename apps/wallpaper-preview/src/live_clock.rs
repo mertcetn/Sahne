@@ -24,6 +24,7 @@ use wallpaper_scene::{
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
 const RESPONSE_LIMIT: Duration = Duration::from_secs(8);
 const PACKAGE_WORKER_TIMEOUT: &str = "Package worker exchange timed out";
+const PACKAGE_WORKER_EOF: &str = "Package worker closed before sending a scene batch";
 const TICK_GAP: Duration = Duration::from_millis(1400);
 const MINUTES: [u16; 3] = [1439, 0, 0];
 type WorkerResult<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
@@ -247,6 +248,7 @@ fn supervise(
             Lifecycle::Check => "preview-lifecycle-package",
             Lifecycle::Live => "live-lifecycle-package",
             Lifecycle::WatchdogCheck => "live-lifecycle-watchdog-check",
+            Lifecycle::WorkerExitCheck => "live-lifecycle-exit-check",
         }
     } else {
         match state.mode {
@@ -718,7 +720,7 @@ fn accept_package_response(
     sequence: u64,
     base: u64,
 ) -> WorkerResult<(Message, bool)> {
-    let batch = read_frame(output)?.ok_or("Missing package scene batch")?;
+    let batch = read_frame(output)?.ok_or(PACKAGE_WORKER_EOF)?;
     batch.check_context(session, sequence, base)?;
     let worker_rejected = match &batch.body {
         Body::Reject {
@@ -960,7 +962,17 @@ pub fn check_package(package: script_package::Prepared) -> Result<()> {
 }
 
 pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
-    let watchdog_check = package.lifecycle == Lifecycle::WatchdogCheck;
+    let expected_failure = match package.lifecycle {
+        Lifecycle::WatchdogCheck => Some((
+            PACKAGE_WORKER_TIMEOUT,
+            "Live package watchdog stopped worker after one accepted snapshot.",
+        )),
+        Lifecycle::WorkerExitCheck => Some((
+            PACKAGE_WORKER_EOF,
+            "Live package worker exit preserved one accepted snapshot.",
+        )),
+        _ => None,
+    };
     let mut bridge = Bridge::start_package(package, true, || {})?;
     let until = Instant::now() + RESPONSE_LIMIT + Duration::from_secs(3);
     let mut resume_at = None;
@@ -969,15 +981,15 @@ pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
     while Instant::now() < until {
         let update = bridge.poll()?;
         if let Some(result) = update.terminal {
-            if watchdog_check
+            if let Some((expected_error, evidence)) = expected_failure
                 && resumed
                 && updates == 1
                 && update.snapshot.is_none()
                 && result
                     .as_ref()
-                    .is_err_and(|reason| reason == PACKAGE_WORKER_TIMEOUT)
+                    .is_err_and(|reason| reason == expected_error)
             {
-                println!("Live package watchdog stopped worker after one accepted snapshot.");
+                println!("{evidence}");
                 return Ok(());
             }
             result?;
@@ -999,8 +1011,8 @@ pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
             }
             updates += 1;
             if updates == 2 {
-                if watchdog_check {
-                    return Err("Watchdog worker published an unexpected second snapshot".into());
+                if expected_failure.is_some() {
+                    return Err("Failure fixture published an unexpected second snapshot".into());
                 }
                 bridge.shutdown()?;
                 bridge
