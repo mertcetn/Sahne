@@ -25,6 +25,7 @@ pub enum Mode {
     LiveLifecycleWatchdog,
     LiveLifecycleExit,
     LiveLifecycleStale,
+    LiveLifecycleTruncated,
     Timer,
     RegisteredTimer,
     Utc,
@@ -43,6 +44,7 @@ impl Mode {
             "live-lifecycle-watchdog-check" => Some(Self::LiveLifecycleWatchdog),
             "live-lifecycle-exit-check" => Some(Self::LiveLifecycleExit),
             "live-lifecycle-stale-check" => Some(Self::LiveLifecycleStale),
+            "live-lifecycle-truncated-check" => Some(Self::LiveLifecycleTruncated),
             "scene-timer" => Some(Self::Timer),
             "scene-timer-registration" => Some(Self::RegisteredTimer),
             "preview-clock-utc" => Some(Self::Utc),
@@ -68,6 +70,7 @@ impl Mode {
                 | Self::LiveLifecycleWatchdog
                 | Self::LiveLifecycleExit
                 | Self::LiveLifecycleStale
+                | Self::LiveLifecycleTruncated
         )
     }
 
@@ -770,6 +773,26 @@ pub fn worker(
                             .take()
                             .ok_or("Missing fixture batch")?,
                     )?;
+                    return Ok(());
+                }
+                Mode::LiveLifecycleTruncated => {
+                    let mut bytes = Vec::new();
+                    write_frame(
+                        &mut bytes,
+                        &update_message(
+                            session,
+                            sequence,
+                            Body::SceneBatch {
+                                edits: vec![Edit::Color {
+                                    node: clock,
+                                    value: PANEL_COLOR,
+                                }],
+                            },
+                        ),
+                    )?;
+                    bytes.pop();
+                    output.write_all(&bytes)?;
+                    output.flush()?;
                     return Ok(());
                 }
                 _ => {}

@@ -162,6 +162,8 @@ For the same package shape, `--check-isolated-script-worker-exit <absolute-folde
 
 The `--check-isolated-script-stale-batch <absolute-folder>` fixture sends the previously acknowledged update in response to the second dispatch. The preview must reject the obsolete transport context, keep the first snapshot and clean up both profiles.
 
+The `--check-isolated-script-truncated-batch <absolute-folder>` fixture closes the channel partway through the second response. The preview must report a truncated batch, keep the first snapshot and clean up both profiles.
+
 The November 27, 2026 regression passed all 48 cases. The early-exit case preserved the first snapshot and detected the closed channel before the watchdog deadline. Local report: `target/script-preview-validation/0d25640fcd5240be98bf62f3a7716316/summary.json`.
 
 ## Native interval call limits

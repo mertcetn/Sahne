@@ -847,3 +847,7 @@ The package bridge treats end of stream before a scene batch as a terminal worke
 ## 124. M4 stale live scene response
 
 The package bridge treats a mismatched session, sequence or base revision as a terminal transport error before passing a message to the scene transaction. The headless stale-batch fixture returns the already acknowledged first batch when the host dispatches the second tick. The preview check requires the context error, one published snapshot and normal profile cleanup.
+
+## 125. M4 incomplete scene response
+
+The preview distinguishes an incomplete frame from end of stream between frames. Both outcomes terminate the exchange before further scene changes are applied. The headless truncated-batch fixture checks cleanup and retention of the first snapshot over a real AppContainer pipe. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).

@@ -691,6 +691,7 @@ pub fn spawn_probe(
         "live-lifecycle-watchdog-check",
         "live-lifecycle-exit-check",
         "live-lifecycle-stale-check",
+        "live-lifecycle-truncated-check",
         "scene-timer",
         "scene-timer-registration",
         "preview-clock-utc",

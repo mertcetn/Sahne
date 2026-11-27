@@ -63,9 +63,11 @@ See [Windows AppContainer intake check](m3-manifest.md#windows-appcontainer-inta
 
 The [M4 advisory refresh](m2-js-dependencies.md#m4-advisory-refresh) checked all 243 locked crates.io versions and the embedded engine's upstream advisories. It confirmed the existing renderer findings and the need to retain the G2 decision until the remaining source and isolation work is complete.
 
-The preview's package response reader has a local byte-stream regression after the host has accepted revision 1. Responses with a different session, repeated or skipped sequence, stale base revision, unexpected message kind or truncated frame fail without changing the accepted revision or snapshot. A real AppContainer fixture now covers the repeated batch with its original base revision. Other malformed response cases still need process-level coverage.
+The preview's package response reader has a local byte-stream regression after the host has accepted revision 1. Responses with a different session, repeated or skipped sequence, stale base revision, unexpected message kind or truncated frame fail without changing the accepted revision or snapshot. Real AppContainer fixtures cover the repeated batch with its original base revision and an incomplete response payload. Other malformed response cases still need process-level coverage.
 
 The November 27, 2026 package regression passed all 49 cases. Its stale-batch case observed one accepted snapshot, a terminal context rejection and both AppContainer profile cleanups. Local report: `target/script-preview-validation/a0a163885e044380838b98afef58e944/summary.json`.
+
+A follow-up run passed all 50 cases. Its truncated-response case distinguished incomplete data from clean end of stream and preserved the first accepted snapshot while cleaning up both profiles. Local report: `target/script-preview-validation/be50656d4e77491d9c3a6ce57a90e2dd/summary.json`.
 
 The isolated live package path now has a real-worker watchdog regression. The test worker publishes one valid snapshot and stops responding at the second tick. The host deadline terminates the job and verifies both profile cleanups. This covers an unresponsive worker after startup. Host-death cleanup and the remaining process-level fault cases stay open. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).
 
