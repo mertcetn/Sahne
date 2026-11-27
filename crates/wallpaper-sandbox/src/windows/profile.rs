@@ -38,7 +38,7 @@ impl Profile {
     pub(super) fn new(id: u64, run: &Path) -> io::Result<Self> {
         let text = format!("Sahne.Spike.{}.{id:016x}", std::process::id());
         let token = random_id()?;
-        let ownership = format!("sahne-profile-v1\n{text}\n{token:016x}\n");
+        let ownership = format!("sahne-profile-v2\n{text}\n{token:016x}\n");
         let mut lease = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -84,15 +84,24 @@ impl Profile {
             return Err(io::Error::other("Profile storage content control failed"));
         }
         profile.storage = Some(root);
+        profile.index_run(run)?;
         Ok(profile)
     }
 
-    pub(super) fn record_worker(&mut self, pid: u32, run: &Path) -> io::Result<()> {
+    pub(super) fn record_launch_intent(&mut self) -> io::Result<()> {
+        writeln!(self.lease, "launching")?;
+        self.lease.sync_all()
+    }
+
+    pub(super) fn record_worker(&mut self, pid: u32) -> io::Result<()> {
         if pid == 0 {
             return Err(io::Error::other("Invalid AppContainer worker PID"));
         }
         writeln!(self.lease, "worker={pid}")?;
-        self.lease.sync_all()?;
+        self.lease.sync_all()
+    }
+
+    fn index_run(&mut self, run: &Path) -> io::Result<()> {
         let Some(run_name) = run.file_name().and_then(|name| name.to_str()) else {
             return Ok(());
         };
@@ -267,6 +276,51 @@ fn process_exited(pid: u32) -> io::Result<bool> {
     }
 }
 
+fn parse_profile_record<'a>(
+    record: &'a str,
+    profile: &str,
+    host: u32,
+) -> io::Result<(&'a str, Option<u32>)> {
+    let invalid = || io::Error::other("Invalid preview profile ownership record");
+    let v2 = record.starts_with("sahne-profile-v2\n");
+    let version = if v2 {
+        "sahne-profile-v2"
+    } else {
+        "sahne-profile-v1"
+    };
+    let prefix = format!("{version}\n{profile}\n");
+    let (token, state) = record
+        .strip_prefix(&prefix)
+        .and_then(|rest| rest.split_once('\n'))
+        .ok_or_else(invalid)?;
+    let token_id = u64::from_str_radix(token, 16).map_err(|_| invalid())?;
+    if token != format!("{token_id:016x}") {
+        return Err(invalid());
+    }
+    let ownership = &record[..prefix.len() + token.len() + 1];
+    if v2 && state.is_empty() {
+        return Ok((ownership, None));
+    }
+    let worker_state = if v2 {
+        state.strip_prefix("launching\n").ok_or_else(invalid)?
+    } else {
+        state
+    };
+    let worker = worker_state
+        .strip_prefix("worker=")
+        .and_then(|line| line.strip_suffix('\n'))
+        .ok_or_else(invalid)?;
+    let pid = worker
+        .parse::<u32>()
+        .ok()
+        .filter(|pid| *pid != 0 && *pid != host)
+        .ok_or_else(invalid)?;
+    if worker != pid.to_string() {
+        return Err(invalid());
+    }
+    Ok((ownership, Some(pid)))
+}
+
 fn is_preview_run(name: &str) -> bool {
     name.starts_with("preview-") || name.starts_with("intake-")
 }
@@ -340,24 +394,9 @@ pub fn recover_preview_profile(run_name: &str) -> io::Result<()> {
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(run.join("profile-lease"))?;
     let record = read_record(&lease)?;
-    let (ownership, worker_line) = record
-        .strip_suffix('\n')
-        .and_then(|s| s.rsplit_once('\n'))
-        .ok_or_else(invalid)?;
-    let worker = worker_line.strip_prefix("worker=").ok_or_else(invalid)?;
-    let worker_pid = worker
-        .parse::<u32>()
-        .ok()
-        .filter(|pid| *pid != 0 && *pid != host_pid)
-        .ok_or_else(invalid)?;
     let profile = format!("Sahne.Spike.{host_pid}.{session_id:016x}");
-    let prefix = format!("sahne-profile-v1\n{profile}\n");
-    let token = ownership.strip_prefix(&prefix).ok_or_else(invalid)?;
-    let token_id = u64::from_str_radix(token, 16).map_err(|_| invalid())?;
-    if token != format!("{token_id:016x}") || worker != worker_pid.to_string() {
-        return Err(invalid());
-    }
-    if !process_exited(host_pid)? || !process_exited(worker_pid)? {
+    let (ownership, worker_pid) = parse_profile_record(&record, &profile, host_pid)?;
+    if !process_exited(host_pid)? || !worker_pid.map_or(Ok(true), process_exited)? {
         return Err(io::Error::other("Preview profile still has a live process"));
     }
     let name = wide(&profile)?;
@@ -370,7 +409,7 @@ pub fn recover_preview_profile(run_name: &str) -> io::Result<()> {
         .read(true)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(storage.join("sahne-cleanup-control.txt"))?;
-    if read_record(&control)? != format!("{ownership}\n") {
+    if read_record(&control)? != ownership {
         return Err(invalid());
     }
     drop(control);
@@ -388,5 +427,38 @@ pub fn recover_preview_profile(run_name: &str) -> io::Result<()> {
         Ok(_) => Err(io::Error::other(
             "AppContainer storage remains after recovery",
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_profile_record;
+
+    #[test]
+    fn only_versioned_prelaunch_or_complete_worker_records_are_recoverable() {
+        let profile = "Sahne.Spike.7.0000000000000001";
+        let v1 = format!("sahne-profile-v1\n{profile}\n0000000000000002\n");
+        let v2 = v1.replace("profile-v1", "profile-v2");
+        assert!(parse_profile_record(&v1, profile, 7).is_err());
+        assert_eq!(
+            parse_profile_record(&v2, profile, 7).unwrap(),
+            (v2.as_str(), None)
+        );
+        for suffix in [
+            "launch",
+            "launching\n",
+            "launching\nworker=9",
+            "worker=9\n",
+            "launching\nworker=7\n",
+        ] {
+            assert!(parse_profile_record(&format!("{v2}{suffix}"), profile, 7).is_err());
+        }
+        for (ownership, state) in [(&v1, "worker=9\n"), (&v2, "launching\nworker=9\n")] {
+            let record = format!("{ownership}{state}");
+            assert_eq!(
+                parse_profile_record(&record, profile, 7).unwrap(),
+                (ownership.as_str(), Some(9))
+            );
+        }
     }
 }

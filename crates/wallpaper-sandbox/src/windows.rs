@@ -850,6 +850,7 @@ pub fn spawn_probe(
         cpu::DEFAULT_RATE
     };
     cpu::configure(job.as_raw_handle(), cpu_rate)?;
+    profile.record_launch_intent()?;
     let mut process = PROCESS_INFORMATION::default();
     // SAFETY: All strings, environment, handles, security capabilities and attribute buffers live through process creation. Only listed handles inherit; worker starts suspended.
     check(unsafe {
@@ -879,7 +880,7 @@ pub fn spawn_probe(
     // SAFETY: Assign before any worker code can run.
     check(unsafe { AssignProcessToJobObject(job.as_raw_handle(), child.process.as_raw_handle()) })?;
     verify_token(child.process.as_raw_handle(), profile.sid)?;
-    profile.record_worker(process.dwProcessId, root)?;
+    profile.record_worker(process.dwProcessId)?;
     let strict_handles = if case == "handles" {
         let mut policy = PROCESS_MITIGATION_STRICT_HANDLE_CHECK_POLICY::default();
         // SAFETY: Query only the new suspended process; correctly sized initialized output.

@@ -830,4 +830,8 @@ The launcher records the verified worker PID before resuming the worker. The pre
 
 ## 120. M4 indexed recovery at preview worker startup
 
-The preview and intake launchers index the recovery record after storing the worker PID and before resuming the worker. Normal cleanup removes the marker. Before launching its first sandbox worker, a new preview process examines up to 128 entries in the working directory's pending profile index. A marker only selects a candidate for the existing ownership and process-liveness checks. Entries with incomplete records or unverified processes remain untouched. The explicit recovery command remains available for a single run.
+The preview and intake launchers index the recovery record after the profile storage control is verified. Normal cleanup removes the marker. Before launching its first sandbox worker, a new preview process examines up to 128 entries in the working directory's pending profile index. A marker only selects a candidate for the existing ownership and process-liveness checks. The explicit recovery command remains available for a single run.
+
+## 121. M4 recovery before worker creation
+
+The version 2 journal records launch intent and flushes it before the launcher calls Windows to create a worker. An intact ownership record without launch intent identifies a run that ended before worker creation. Recovery checks the host and the matching storage control for that phase. Once launch intent is present, recovery requires a complete worker PID and checks that process as well. An unfinished launch record is left in place. Version 1 records require a complete PID.
