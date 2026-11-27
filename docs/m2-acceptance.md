@@ -69,6 +69,8 @@ The November 27, 2026 package regression passed all 49 cases. Its stale-batch ca
 
 A follow-up run passed all 50 cases. Its truncated-response case distinguished incomplete data from clean end of stream and preserved the first accepted snapshot while cleaning up both profiles. Local report: `target/script-preview-validation/be50656d4e77491d9c3a6ce57a90e2dd/summary.json`.
 
+The November 27, 2026 resource run passed 52 package cases. In two isolated live cases the second tick staged a change before exercising the heap or stack limit. Both returned a generic worker rejection, preserved revision 1 and cleaned up both profiles. The separate `js-memory` and `js-stack` probes confirmed the engine's specific allocation and stack errors without a deadline interrupt. Local package report: `target/script-preview-validation/87ca357f6f4c4e10ad2643bbbaea5d97/summary.json`.
+
 The isolated live package path now has a real-worker watchdog regression. The test worker publishes one valid snapshot and stops responding at the second tick. The host deadline terminates the job and verifies both profile cleanups. This covers an unresponsive worker after startup. Host-death cleanup and the remaining process-level fault cases stay open. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).
 
 ### Abrupt preview termination
