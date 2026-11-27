@@ -56,6 +56,7 @@ fn main() -> Result<()> {
     let mut check_script_lifecycle = false;
     let mut live_script_lifecycle = false;
     let mut isolated_script_preparation = false;
+    let mut check_script_ack_pressure = false;
     let mut sandbox_package_folder = None;
     let mut worker_live = None;
     let mut check_worker_live = false;
@@ -144,6 +145,9 @@ fn main() -> Result<()> {
                     "--check-isolated-script-lifecycle <absolute-folder> checks synthetic pause, resume and bounded ticks with separate AppContainer workers."
                 );
                 println!(
+                    "--check-isolated-script-ack-pressure <absolute-folder> checks at least 128 live revisions without a window."
+                );
+                println!(
                     "--check-isolated-script-worker-timeout <absolute-folder> runs a headless watchdog fixture with a live callback package."
                 );
                 println!(
@@ -226,6 +230,7 @@ fn main() -> Result<()> {
             | "--isolated-script-live"
             | "--check-isolated-script-preview"
             | "--check-isolated-script-live"
+            | "--check-isolated-script-ack-pressure"
             | "--check-isolated-script-lifecycle"
             | "--check-trusted-script-lifecycle" => {
                 if script_package_folder.is_some() {
@@ -233,7 +238,8 @@ fn main() -> Result<()> {
                 }
                 check_script_package = arg.starts_with("--check-");
                 check_script_lifecycle = arg.ends_with("-lifecycle");
-                live_script_lifecycle = arg.ends_with("-live");
+                check_script_ack_pressure = arg == "--check-isolated-script-ack-pressure";
+                live_script_lifecycle = arg.ends_with("-live") || check_script_ack_pressure;
                 isolated_script_preparation =
                     arg.starts_with("--isolated-") || arg.starts_with("--check-isolated-");
                 script_package_folder = Some(args.next().ok_or("Missing script package folder")?);
@@ -308,7 +314,9 @@ fn main() -> Result<()> {
     }
     if check_script_package {
         let package = script_package.ok_or("Missing script preview package")?;
-        return if live_script_lifecycle {
+        return if check_script_ack_pressure {
+            live_clock::check_live_package_ack_pressure(package)
+        } else if live_script_lifecycle {
             live_clock::check_live_package(package)
         } else {
             live_clock::check_package(package)

@@ -7,7 +7,7 @@ use std::{
     io::{Read, Write},
     sync::{
         Mutex, OnceLock,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
     thread::{self, JoinHandle},
@@ -104,6 +104,7 @@ struct ChannelState {
     update: Mutex<Update>,
     cancel: AtomicBool,
     paused: AtomicBool,
+    acknowledged_revision: AtomicU64,
     channel_thread: OnceLock<thread::Thread>,
     notify: Box<dyn Fn() + Send + Sync>,
     signal: mpsc::SyncSender<Signal>,
@@ -150,6 +151,7 @@ impl Bridge {
             update: Mutex::new(Update::default()),
             cancel: AtomicBool::new(false),
             paused: AtomicBool::new(paused),
+            acknowledged_revision: AtomicU64::new(0),
             channel_thread: OnceLock::new(),
             notify: Box::new(notify),
             signal,
@@ -861,6 +863,11 @@ fn exchange_package(
                 .snapshot = Some(accepted);
             (state.notify)();
         }
+        if live {
+            state
+                .acknowledged_revision
+                .store(sequence, Ordering::Release);
+        }
     }
     if live {
         return Err("Package tick sequence exhausted".into());
@@ -980,6 +987,14 @@ pub fn check_package(package: script_package::Prepared) -> Result<()> {
 }
 
 pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
+    check_live_package_until(package, 2)
+}
+
+pub fn check_live_package_ack_pressure(package: script_package::Prepared) -> Result<()> {
+    check_live_package_until(package, 128)
+}
+
+fn check_live_package_until(package: script_package::Prepared, minimum_acks: u64) -> Result<()> {
     let expected_failure = match package.lifecycle {
         Lifecycle::WatchdogCheck => Some((
             PACKAGE_WORKER_TIMEOUT,
@@ -1044,18 +1059,25 @@ pub fn check_live_package(package: script_package::Prepared) -> Result<()> {
                 return Err("Live package changed before resume".into());
             }
             updates += 1;
-            if updates == 2 {
-                if expected_failure.is_some() {
-                    return Err("Failure fixture published an unexpected second snapshot".into());
-                }
-                bridge.shutdown()?;
-                bridge
-                    .poll()?
-                    .terminal
-                    .ok_or("Missing live package cleanup result")??;
-                println!("Live package pause, resume and two updates verified.");
-                return Ok(());
+            if updates >= 2 && expected_failure.is_some() {
+                return Err("Failure fixture published an unexpected second snapshot".into());
             }
+        }
+        if updates >= 2
+            && bridge.state.acknowledged_revision.load(Ordering::Acquire) >= minimum_acks
+        {
+            bridge.shutdown()?;
+            bridge
+                .poll()?
+                .terminal
+                .ok_or("Missing live package cleanup result")??;
+            if minimum_acks == 2 {
+                println!("Live package pause, resume and two updates verified.");
+            } else {
+                let acknowledged = bridge.state.acknowledged_revision.load(Ordering::Acquire);
+                println!("Live package ACK pressure verified: {acknowledged} revisions.");
+            }
+            return Ok(());
         }
         thread::sleep(POLL_INTERVAL);
     }

@@ -166,6 +166,10 @@ The `--check-isolated-script-truncated-batch <absolute-folder>` fixture closes t
 
 The regression runner also uses `--check-isolated-script-wrong-session`, `--check-isolated-script-skipped-sequence` and `--check-isolated-script-wrong-message` with the same live callback package shape. Each case expects one accepted snapshot, rejection of the second response without another snapshot, and cleanup of both profiles.
 
+### Sustained live acknowledgements
+
+Run `--check-isolated-script-ack-pressure <absolute-folder>` with a live callback package that produces changing snapshots. The headless check waits for at least 128 acknowledged revisions after synthetic resume and verifies both AppContainer profile cleanups. The runner uses a 16 ms interval and checks from JavaScript that each callback sees the value acknowledged for its predecessor. The revision count measures acknowledged transactions independently of snapshot coalescing in the preview.
+
 The November 27, 2026 regression passed all 48 cases. The early-exit case preserved the first snapshot and detected the closed channel before the watchdog deadline. Local report: `target/script-preview-validation/0d25640fcd5240be98bf62f3a7716316/summary.json`.
 
 ## Native interval call limits

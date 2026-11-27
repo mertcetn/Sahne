@@ -855,3 +855,7 @@ The preview distinguishes an incomplete frame from end of stream between frames.
 ## 126. M4 live response context checks
 
 The isolated live regression exercises a response from another session, a skipped response sequence and an unexpected message kind over the real AppContainer pipe. The preview rejects the response before it reaches the scene transaction, retains the first accepted snapshot and cleans up both profiles.
+
+## 127. M4 sustained live acknowledgement check
+
+The live package bridge records the latest revision after writing its acknowledgement. The headless pressure check waits for at least 128 acknowledged revisions with one tick outstanding at a time. This measures the exchange independently of the latest-value snapshot mailbox. See [Sustained live acknowledgements](m4-timers.md#sustained-live-acknowledgements).
