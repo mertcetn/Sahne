@@ -71,6 +71,12 @@ A follow-up run passed all 50 cases. Its truncated-response case distinguished i
 
 The November 27, 2026 resource run passed 52 package cases. In two isolated live cases the second tick staged a change before exercising the heap or stack limit. Both returned a generic worker rejection, preserved revision 1 and cleaned up both profiles. The separate `js-memory` and `js-stack` probes confirmed the engine's specific allocation and stack errors without a deadline interrupt. Local package report: `target/script-preview-validation/87ca357f6f4c4e10ad2643bbbaea5d97/summary.json`.
 
+### Baseline sandbox revalidation
+
+On November 27, 2026, the full default sandbox suite passed 50 cases and confirmed 56 profile cleanups on the local Windows machine. The run used the existing release binary with `-SkipBuild`. The source tree was clean and the latest commit only changed tests and documentation. Local report: `target/sandbox-validation/75449bcbcb5c421c8d04c2e3e6060bf0/summary.json`.
+
+The separate strict `network` loopback case failed. The host connected to its own local fixture and the AppContainer worker's connection timed out without an explicit access-denied result. The profile was cleaned up. The timeout remains inconclusive under the existing acceptance rule. The default suite includes the distinct `network-egress` case, which passed, and reports `G2Complete=false`. Separate loopback report: `target/sandbox-validation/d16feee6575f408a9e2d594ee1795972/summary.json`.
+
 The isolated live package path now has a real-worker watchdog regression. The test worker publishes one valid snapshot and stops responding at the second tick. The host deadline terminates the job and verifies both profile cleanups. This covers an unresponsive worker after startup. Host-death cleanup and the remaining process-level fault cases stay open. See [Integrated package watchdog check](m4-timers.md#integrated-package-watchdog-check).
 
 ### Abrupt preview termination
