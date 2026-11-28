@@ -602,7 +602,7 @@ fn host(args: &[String]) -> Result<()> {
             "Channel case: ipc-rights. Actual inherited streams must reject DACL reads, DACL changes and wrong-direction data I/O with access denied, while the normal protocol succeeds. All cases verify protected host-user-only pipe DACLs and use data-only inherited handles."
         );
         println!(
-            "Filesystem case: filesystem. Synthetic private/staged targets have host positive controls. Worker file-rights, private listing and file/directory creation requests must be denied. Staged data/executable and System32/kernel32.dll reads plus staging listing must succeed. No user files are inspected; post-stop contents/namespace are checked."
+            "Filesystem case: filesystem. Synthetic private/staged targets have host positive controls. Worker file-rights, private listing and file/directory creation requests must be denied. Staged data/executable reads, staging listing and header reads from System32 kernel32.dll, KernelBase.dll and ntdll.dll must succeed. No user files are inspected; post-stop contents/namespace are checked."
         );
         println!(
             "Host-write cases: ipc-write-drain and ipc-write-stall. A dedicated writer sends one Ping plus a fixed 1 MiB pressure fixture. Drain validates every byte and EOF; stall must keep the writer pending until the host deadline kills the worker and both I/O threads join. This is a transport-only fixture, not package/source input."
@@ -880,7 +880,7 @@ fn host(args: &[String]) -> Result<()> {
                 }
                 if case == "filesystem" {
                     println!(
-                        "Filesystem matrix verified: sixteen direct OS denials (error 5); staged data/executable and System32/kernel32.dll reads plus staging listing permitted."
+                        "Filesystem matrix verified: sixteen direct OS denials (error 5); staged data/executable reads, staging listing and System32 kernel32.dll, KernelBase.dll and ntdll.dll header reads permitted."
                     );
                 }
                 if case == "registry" {

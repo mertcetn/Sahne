@@ -426,7 +426,7 @@ The fixed ipc-rights worker fixture requires direct OS denial of DACL reads/chan
 
 The fixed filesystem case stages original synthetic private/read-only files. Only its fresh private directory/file receive protected host-user-only DACLs; staging retains the existing exact-profile read/execute grant. Host positive controls precede eleven worker file-right denials, private listing denial and four creation denials. Native FFI remains confined to wallpaper-sandbox, with the fixed filesystem matrix isolated in its windows/filesystem module.
 
-The worker separately confirms staged text/executable reads, staging enumeration and a selected public Windows DLL header read. After stop/join, the host checks synthetic contents and namespace. These observations do not constitute a complete filesystem or loaded-library inventory. No existing user/system ACL, permission, dependency, arbitrary source path or resource limit changes. Broader G2 and production policy remain open. See [Filesystem matrix and permitted reads](m2-filesystem.md).
+The worker separately confirms staged text/executable reads, staging enumeration and two-byte header reads from the fixed System32 files kernel32.dll, KernelBase.dll and ntdll.dll. After stop/join, the host checks synthetic contents and namespace. These observations cover a subset of filesystem reads. Broader G2 and production policy remain open. See [Filesystem matrix and permitted reads](m2-filesystem.md).
 
 ## 26. M2 explicit profile-storage cleanup
 

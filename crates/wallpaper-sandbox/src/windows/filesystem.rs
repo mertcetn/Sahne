@@ -134,7 +134,11 @@ pub fn probe_filesystem(root: &Path) -> io::Result<()> {
     require_mz(&root.join("bin/probe.exe"))?;
     let system = std::env::var_os("SystemRoot")
         .ok_or_else(|| io::Error::other("Missing curated SystemRoot"))?;
-    require_mz(&PathBuf::from(system).join("System32/kernel32.dll"))?;
+    let system32 = PathBuf::from(system).join("System32");
+    for name in ["kernel32.dll", "KernelBase.dll", "ntdll.dll"] {
+        require_mz(&system32.join(name))
+            .map_err(|error| io::Error::other(format!("System32/{name} read control: {error}")))?;
+    }
     let listing = fs::read_dir(root.join("bin"))?.collect::<io::Result<Vec<_>>>()?;
     if listing.len() != 2 {
         return Err(io::Error::other("Staged directory listing mismatch"));

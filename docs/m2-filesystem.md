@@ -45,10 +45,14 @@ The same worker must perform these positive checks before it can report success:
 | bin/probe.exe | Open and read the two-byte MZ header | The staged executable can be read as data |
 | bin/ | Enumerate both expected entries | Staging names are visible to the worker |
 | SystemRoot/System32/kernel32.dll | Open and read the two-byte MZ header | A selected public Windows system file can be read |
+| SystemRoot/System32/KernelBase.dll | Open and read the two-byte MZ header | A second Windows API library can be read |
+| SystemRoot/System32/ntdll.dll | Open and read the two-byte MZ header | A Windows native API library can be read |
 
 SystemRoot comes from the existing curated child environment. The system-file check never loads a new library or modifies system data. These are selected observations, not exhaustive tracing of executable imports, loaded DLLs, fonts, registry, all system directories or AppContainer-private storage. A standard AppContainer is not a filesystem with only two readable files. This experiment must not be described as blanket filesystem invisibility or a fully read-only private profile.
 
 ## Validation and remaining work
+
+On November 28, 2026, the Windows probe confirmed the three System32 header reads, all sixteen synthetic denials and unchanged synthetic fixtures after worker exit. The rebuilt default suite passed all 50 cases with 56 profile cleanups. Local report: `target/sandbox-validation/8d26130427d94497a9e90515ed7718f2/summary.json`.
 
 The initial release run passed with mask 0x1017 and unchanged post-stop fixtures in `6452-276a561563399a66`. The final release regression repeated that complete result in `33268-8cf70295a27aceec`. All twenty-seven expected-success scenarios passed, totaling thirty-three restricted worker launches including recovery fixtures. The complete transcript is retained under ignored target/sandbox-runs/filesystem-regression.log. The inconclusive loopback-network case is deliberately excluded from that expected-success set.
 
@@ -64,3 +68,5 @@ Primary documentation consulted November 12, 2026:
 - [CreateFileW desired access, sharing and creation semantics](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)
 - [SetNamedSecurityInfoW protected DACL application](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-setnamedsecurityinfow)
 - [AppContainer file isolation and its scope](https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation)
+
+References consulted on November 28, 2026 for the additional DLL observations are [default system resource access in a regular AppContainer](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer) and [the Windows PE file format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
