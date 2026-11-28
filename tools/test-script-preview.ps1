@@ -58,6 +58,8 @@ $cases = @(
     @{ Name = 'intake-missing-script'; Intake = $true; Reject = 'validation' }
     @{ Name = 'intake-invalid-html'; Intake = $true; Script = '() => {}'; Html = '<unknown></unknown>'; Reject = 'compilation' }
     @{ Name = 'intake-invalid-css'; Intake = $true; Script = '() => {}'; Html = '<span style="position:fixed">Ready</span>'; Reject = 'compilation' }
+    @{ Name = 'intake-custom-font-face'; Intake = $true; Script = '() => {}'; Css = '@font-face {font-family:Fixture;src:url(fixture.ttf)}'; Font = $true; Reject = 'compilation' }
+    @{ Name = 'intake-custom-font-family'; Intake = $true; Script = '() => {}'; Css = '#status {font-family:Fixture}'; Reject = 'compilation' }
     @{ Name = 'intake-image'; Intake = $true; Image = 'valid' }
     @{ Name = 'intake-invalid-image'; Intake = $true; Image = 'invalid'; Reject = 'compilation' }
     @{ Name = 'intake-html-over-limit'; Intake = $true; Script = '() => {}'; HtmlBytes = (1024 * 1024) + 1; Reject = 'compilation' }
@@ -99,6 +101,13 @@ $results = foreach ($case in $cases) {
     [IO.File]::WriteAllText((Join-Path $inputFolder 'index.html'), '<span id="status" style="width:400px;height:24px">Ready</span>')
     if ($case.ContainsKey('Html')) {
         [IO.File]::WriteAllText((Join-Path $inputFolder 'index.html'), $case.Html)
+    }
+    if ($case.ContainsKey('Css')) {
+        [IO.File]::WriteAllText((Join-Path $inputFolder 'index.html'), '<link rel="stylesheet" href="style.css"><span id="status">Ready</span>')
+        [IO.File]::WriteAllText((Join-Path $inputFolder 'style.css'), $case.Css)
+    }
+    if ($case.ContainsKey('Font')) {
+        Copy-Item -LiteralPath (Join-Path $repo 'assets/fonts/NotoSans.ttf') -Destination (Join-Path $inputFolder 'fixture.ttf')
     }
     if ($case.ContainsKey('Targets')) {
         $elements = for ($index = 0; $index -lt $case.Targets; $index++) {

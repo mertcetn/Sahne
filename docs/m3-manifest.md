@@ -78,6 +78,8 @@ target/release/wallpaper-preview.exe --sandboxed-package-preview $folder --secon
 
 This development command opens a D3D12 window after the same intake checks pass and the helper exits. It displays the static flat scene and its decoded images. Text uses the bundled Noto Sans font. Package scripts and custom fonts are outside this preview mode. Escape closes the window. The optional `--seconds` sets a time limit between 1 and 3600 seconds. Use `--check-package-intake` to verify the same package without opening a window.
 
+Package CSS supports `font-size` for the bundled font. The restricted compiler rejects both `@font-face` and `font-family`. The headless intake suite checks both rejections, including an `@font-face` declaration whose referenced font file is present in the package.
+
 On November 26, 2026, the user confirmed that both the `Sahne / PNG` text and the checkerboard image from `examples/static-image` were visible in the 960×600 window. The log records AppContainer profile cleanup before the first D3D12 presentation. Local evidence is under `target/m4-sandbox-window-visual/d6d6058798d8455cac2366fcecac332a/`.
 
 Add `--desktop` to display the same static scene behind Windows icons. The application validates the package before attaching to the desktop.

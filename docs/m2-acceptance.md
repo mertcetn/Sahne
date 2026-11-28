@@ -73,6 +73,8 @@ A follow-up run passed all 57 package cases. When an isolated execution worker c
 
 On 2026-11-27, all 57 package cases passed with the expanded unexpected-message fixture. The worker sent 16 unexpected control messages after a valid frame and kept the pipe open. The preview rejected the first unexpected message, retained the single accepted snapshot, and verified cleanup of both AppContainer profiles. The case exited successfully after 1.22 seconds, before the fixture's 15-second wait could end. Local report: `target/script-preview-validation/67feb26e8cab4071ae4cef4a3dc5f739/summary.json`.
 
+On 2026-11-28, all 59 package cases passed. The two new cases verified that AppContainer intake rejects package-defined font faces and font-family selection during compilation and cleans up the helper profile. The font-face fixture included the referenced TrueType file. Local report: `target/script-preview-validation/c4dee13c1009437794a4280b2b4f61d7/summary.json`.
+
 The November 27, 2026 package regression passed all 49 cases. Its stale-batch case observed one accepted snapshot, a terminal context rejection and both AppContainer profile cleanups. Local report: `target/script-preview-validation/a0a163885e044380838b98afef58e944/summary.json`.
 
 A follow-up run passed all 50 cases. Its truncated-response case distinguished incomplete data from clean end of stream and preserved the first accepted snapshot while cleaning up both profiles. Local report: `target/script-preview-validation/be50656d4e77491d9c3a6ce57a90e2dd/summary.json`.
