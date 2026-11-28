@@ -58,6 +58,15 @@ if (@(Find-SahneLoopbackDrop -Events $missing @parameters).Count -ne 0) { throw 
 if (@(Find-SahneLoopbackDrop -Events $empty @parameters).Count -ne 0) { throw 'Missing events accepted' }
 Write-Output "Loopback matcher checks passed: 2 positive, $($mutations.Count + 3) negative."
 
+[xml]$fixtureV6 = $fixture.OuterXml.Replace('FWP_IP_VERSION_V4','FWP_IP_VERSION_V6').
+    Replace('AddrV4','AddrV6.byteArray16').Replace('127.0.0.1','::1')
+if (@(Find-SahneLoopbackDrop -Events $fixtureV6 @parameters -IPv6 -SenderPort 54738).Count -ne 1) { throw 'IPv6 positive fixture rejected' }
+if (@(Find-SahneLoopbackDrop -Events $fixtureV6 @parameters).Count -ne 0) { throw 'IPv6 event accepted for IPv4' }
+if (@(Find-SahneLoopbackDrop -Events $fixture @parameters -IPv6).Count -ne 0) { throw 'IPv4 event accepted for IPv6' }
+$fixtureV6.SelectSingleNode('/netEvents/item/header/remoteAddrV6.byteArray16').InnerText = '::2'
+if (@(Find-SahneLoopbackDrop -Events $fixtureV6 @parameters -IPv6).Count -ne 0) { throw 'Non-loopback IPv6 peer accepted' }
+Write-Output 'IPv6 matcher checks passed: 1 positive, 3 negative.'
+
 $verified = "Verified AppContainer identity and zero capabilities;`nProfile cleanup verified: test`n"
 $explicit = $verified + "Explicit TCP access denial confirmed for network.`nProbe passed; test`n"
 $timeout = 'Network test inconclusive or allowed: Err((TimedOut, None))'
@@ -69,4 +78,6 @@ if ((Get-SahneLoopbackAcceptance TimedOut 1 $verified $timeout $true) -ne 'Incon
 if ((Get-SahneLoopbackAcceptance Exited 1 $verified "$timeout Attempt cleanup failed:" $true) -ne 'Inconclusive') { throw 'Failed cleanup accepted' }
 if ((Get-SahneLoopbackAcceptance Exited 1 'Verified AppContainer identity and zero capabilities;' $timeout $true) -ne 'Inconclusive') { throw 'Missing cleanup accepted' }
 if ((Get-SahneLoopbackAcceptance Exited 0 ($explicit.Replace('for network.', 'for network-egress.')) '' $false) -ne 'Inconclusive') { throw 'Wrong native case accepted' }
-Write-Output 'Loopback acceptance checks passed: 2 positive, 6 negative.'
+if ((Get-SahneLoopbackAcceptance Exited 0 ($explicit.Replace('for network.', 'for network-loopback-v6.')) '' $false -IPv6) -ne 'ExplicitDenialConfirmed') { throw 'Native IPv6 denial rejected' }
+if ((Get-SahneLoopbackAcceptance Exited 0 $explicit '' $false -IPv6) -ne 'Inconclusive') { throw 'Native IPv4 denial accepted for IPv6' }
+Write-Output 'Loopback acceptance checks passed: 3 positive, 7 negative.'

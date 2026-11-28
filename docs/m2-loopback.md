@@ -57,9 +57,11 @@ A separate elevated run on November 27 returned `SenderCorrelated=true`. Windows
 
 ## IPv6 TCP fixture
 
-Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case network-loopback-v6` to test TCP on `[::1]`. A host connection to the same listener is accepted and drained before the zero-capability AppContainer worker tries to connect. The worker sends no application payload and performs no DNS lookup. The fixture accepts an explicit OS access denial. A timeout stays inconclusive. The IPv4 WFP diagnostic and its matching rules apply to the IPv4 fixture. [Microsoft WFP loopback diagnostics](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall)
+Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case network-loopback-v6` to test TCP on `[::1]`. A host connection to the same listener is accepted and drained before the zero-capability AppContainer worker tries to connect. The worker sends no application payload and performs no DNS lookup. The native fixture accepts an explicit OS access denial and treats a timeout as inconclusive. From an elevated PowerShell, run `pwsh -NoProfile -File tools/diagnose-loopback.ps1 -IPv6` to check for receiving-side AppContainer blocks on the exact IPv6 loopback address, listener port and host process. A timeout is accepted by the diagnostic only if a matching block names the source port independently observed for the verified worker. [Microsoft WFP loopback diagnostics](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall)
 
 On November 28, 2026, the host control passed on `[::1]:55719`. The worker's connection attempt timed out and the AppContainer profile cleanup passed. The strict fixture exited with an inconclusive result. Local report: `target/ipv6-loopback-validation/b16ccabd065f4c85b358809cf3130bb8/result.json`. Formatting, Clippy, 184 Rust tests and all 50 default Windows sandbox cases passed with 56 profile cleanups.
+
+The elevated IPv6 diagnostic then reported `LoopbackDropConfirmed` and `SenderCorrelated=true`. The IPv4 regression produced the same result with the default option. These are local TCP loopback results. IPv6 egress, UDP and DNS remain open. Local reports: `target/loopback-diagnostics/f11eaa9cc4ea4abf93c456b705bf612c/summary.json` (IPv6) and `target/loopback-diagnostics/90e2887248d245faaa702c0234170db4/summary.json` (IPv4).
 
 ## Primary sources reviewed
 

@@ -1,7 +1,7 @@
 # Read-only WFP diagnostics for the fixed loopback fixture; never grants network access.
 #Requires -Version 7.0
 [CmdletBinding()]
-param()
+param([switch] $IPv6)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (-not $IsWindows) { throw 'This diagnostic requires Windows.' }
@@ -20,11 +20,18 @@ if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
 $output = Join-Path $repo ("target/loopback-diagnostics/" + [guid]::NewGuid().ToString('N'))
 $started = [DateTime]::UtcNow
 $binaryHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash
-$watch = Start-ThreadJob -ArgumentList $PSScriptRoot, $binary, $repo, $output -ScriptBlock {
-    param($tools, $probe, $workingDirectory, $reportDirectory)
+$case, $address, $endpoint, $netstatProtocol = if ($IPv6) {
+    'network-loopback-v6', '::1', '[::1]', 'tcpv6'
+} else {
+    'network', '127.0.0.1', '127.0.0.1', 'tcp'
+}
+$endpointPattern = [regex]::Escape($endpoint)
+$portPattern = "(?m)^Loopback host control passed: ${endpointPattern}:(\d+)\r?$"
+$watch = Start-ThreadJob -ArgumentList $PSScriptRoot, $binary, $repo, $output, $case -ScriptBlock {
+    param($tools, $probe, $workingDirectory, $reportDirectory, $probeCase)
     $ErrorActionPreference = 'Stop'
     . (Join-Path $tools 'sandbox-process.ps1')
-    Invoke-SahneGuardedProcess -FilePath $probe -ArgumentList @('--case', 'network') `
+    Invoke-SahneGuardedProcess -FilePath $probe -ArgumentList @('--case', $probeCase) `
         -WorkingDirectory $workingDirectory -OutputDirectory $reportDirectory
 }
 $senders = @{}
@@ -34,15 +41,15 @@ try {
     while ($watch.State -in @('NotStarted', 'Running')) {
         if ($senders.Count -lt 8 -and (Test-Path -LiteralPath $stdoutPath)) {
             $partial = Read-SahneBoundedLog -Path $stdoutPath
-            $portLine = [regex]::Match($partial, '(?m)^Loopback host control passed: 127\.0\.0\.1:(\d+)\r?$')
+            $portLine = [regex]::Match($partial, $portPattern)
             $pidLine = [regex]::Match($partial, '(?m)^Loopback host process: (\d+)\r?$')
             $imageLine = [regex]::Match($partial, '(?m)^Loopback worker image: ([^\r\n]+)\r?$')
             if ($portLine.Success -and $pidLine.Success -and $imageLine.Success) {
                 $listenPort = [int]$portLine.Groups[1].Value
                 $probeHostId = [int]$pidLine.Groups[1].Value
                 $workerImage = [IO.Path]::GetFullPath($imageLine.Groups[1].Value)
-                foreach ($line in (& $netstat -ano -p tcp)) {
-                    if ($line -notmatch "^\s*TCP\s+127\.0\.0\.1:(?<sender>\d+)\s+127\.0\.0\.1:$listenPort\s+SYN_SENT\s+(?<owner>\d+)\s*$") { continue }
+                foreach ($line in (& $netstat -ano -p $netstatProtocol)) {
+                    if ($line -notmatch "^\s*TCP\s+${endpointPattern}:(?<sender>\d+)\s+${endpointPattern}:$listenPort\s+SYN_SENT\s+(?<owner>\d+)\s*$") { continue }
                     $sourcePort = [int]$Matches.sender
                     $owner = [int]$Matches.owner
                     $key = "$owner/$sourcePort"
@@ -65,7 +72,7 @@ finally { Remove-Job -Job $watch -Force }
 $stdout = Read-SahneBoundedLog -Path $run.StdoutPath
 $stderr = Read-SahneBoundedLog -Path $run.StderrPath
 $finished = [DateTimeOffset]::UtcNow
-$ports = [regex]::Matches($stdout, '(?m)^Loopback host control passed: 127\.0\.0\.1:(\d+)\r?$')
+$ports = [regex]::Matches($stdout, $portPattern)
 $hostIds = [regex]::Matches($stdout, '(?m)^Loopback host process: (\d+)\r?$')
 if ($run.Completion -ne 'Exited' -or $ports.Count -ne 1 -or $hostIds.Count -ne 1) {
     throw "Fixture did not complete with exactly one host positive control. Inspect $output"
@@ -78,12 +85,12 @@ $netsh = Join-Path $env:SystemRoot 'System32/netsh.exe'
 $matches = @()
 $senderDrops = @()
 $uniqueSender = if ($senders.Count -eq 1) { @($senders.Values)[0] } else { $null }
-$nativeStatus = Get-SahneLoopbackAcceptance -Completion $run.Completion -ExitCode $run.ExitCode -Stdout $stdout -Stderr $stderr
+$nativeStatus = Get-SahneLoopbackAcceptance -Completion $run.Completion -ExitCode $run.ExitCode -Stdout $stdout -Stderr $stderr -IPv6:$IPv6
 $directions = if ($nativeStatus -ne 'ExplicitDenialConfirmed') { @('localport', 'remoteport') }
 foreach ($direction in $directions) {
     $eventPath = Join-Path $output "$direction.xml"
     $queryOutput = & $netsh wfp show netevents "file=$eventPath" protocol=6 `
-        localaddr=127.0.0.1 remoteaddr=127.0.0.1 "$direction=$port" timewindow=30 2>&1
+        "localaddr=$address" "remoteaddr=$address" "$direction=$port" timewindow=30 2>&1
     $queryExit = $LASTEXITCODE
     $queryOutput | Set-Content -LiteralPath (Join-Path $output "$direction-query.log")
     if ($queryExit -ne 0) { throw "WFP query failed ($queryExit). Inspect $output" }
@@ -99,20 +106,21 @@ foreach ($direction in $directions) {
         $events.Load($reader)
         $matches += @(Find-SahneLoopbackDrop -Events $events -ListenerPort $port `
             -HostProcessId ([int]$hostIds[0].Groups[1].Value) -HostImage $binary `
-            -StartedUtc $started -FinishedUtc $finished)
+            -StartedUtc $started -FinishedUtc $finished -IPv6:$IPv6)
         if ($null -ne $uniqueSender -and $uniqueSender.ListenerPort -eq $port) {
             $senderDrops += @(Find-SahneLoopbackDrop -Events $events -ListenerPort $port `
                 -HostProcessId ([int]$hostIds[0].Groups[1].Value) -HostImage $binary `
-                -StartedUtc $started -FinishedUtc $finished -SenderPort $uniqueSender.SenderPort)
+                -StartedUtc $started -FinishedUtc $finished -SenderPort $uniqueSender.SenderPort -IPv6:$IPv6)
         }
     }
     finally { $reader.Dispose() }
 }
 $senderCorrelated = $senderDrops.Count -gt 0
 $status = Get-SahneLoopbackAcceptance -Completion $run.Completion -ExitCode $run.ExitCode `
-    -Stdout $stdout -Stderr $stderr -SenderCorrelated $senderCorrelated
+    -Stdout $stdout -Stderr $stderr -SenderCorrelated $senderCorrelated -IPv6:$IPv6
 [ordered]@{
     Status = $status
+    Address = $address
     StartedUtc = $started.ToString('O')
     FinishedUtc = [DateTime]::UtcNow.ToString('O')
     BinarySha256 = $binaryHash
@@ -125,8 +133,8 @@ $status = Get-SahneLoopbackAcceptance -Completion $run.Completion -ExitCode $run
     SenderObservations = @($senders.Values)
     SenderCorrelated = $senderCorrelated
     SenderMatchingDrops = $senderDrops
-    Note = 'Controlled IPv4 TCP loopback accepts explicit native denial or a native timeout with a WFP block correlated to the verified worker source port. Overall G2 is assessed separately.'
+    Note = 'Controlled TCP loopback accepts explicit native denial or a native timeout with a WFP block correlated to the verified worker source port. Overall G2 is assessed separately.'
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'summary.json')
 Write-Output "Loopback diagnostics retained at $output"
 if ($status -eq 'Inconclusive') { throw 'Loopback acceptance requires explicit denial or a WFP block correlated to the test worker.' }
-Write-Output "$status. Controlled IPv4 TCP loopback accepted."
+Write-Output "$status. Controlled TCP loopback accepted for $address."
