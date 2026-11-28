@@ -75,6 +75,8 @@ On 2026-11-27, all 57 package cases passed with the expanded unexpected-message 
 
 On 2026-11-28, all 59 package cases passed. The two new cases verified that AppContainer intake rejects package-defined font faces and font-family selection during compilation and cleans up the helper profile. The font-face fixture included the referenced TrueType file. Local report: `target/script-preview-validation/c4dee13c1009437794a4280b2b4f61d7/summary.json`.
 
+A subsequent isolated live fixture verified that `console`, `print`, `fetch`, `require`, `std` and `os` were absent during package callbacks while the bounded DOM update path remained usable. All 60 cases passed when the suite ran on its own. Two earlier concurrent validation runs each recorded one lifecycle initialization rejection while other heavy checks were running. The standalone result does not establish behavior under system-wide load. Local report: `target/script-preview-validation/36092ee0ddcd4c45a65ac0dc3eab1504/summary.json`.
+
 The November 27, 2026 package regression passed all 49 cases. Its stale-batch case observed one accepted snapshot, a terminal context rejection and both AppContainer profile cleanups. Local report: `target/script-preview-validation/a0a163885e044380838b98afef58e944/summary.json`.
 
 A follow-up run passed all 50 cases. Its truncated-response case distinguished incomplete data from clean end of stream and preserved the first accepted snapshot while cleaning up both profiles. Local report: `target/script-preview-validation/be50656d4e77491d9c3a6ce57a90e2dd/summary.json`.
