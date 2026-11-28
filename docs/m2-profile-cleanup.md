@@ -8,6 +8,8 @@ After the test exited, a read-only check opened the same user's mapping parent a
 
 A separate headless test observed the execution profile's exact per-user mapping while its preview host was alive. It terminated only the preview process it had started, verified that the orphan's ownership record contained the recorded worker PID, and confirmed that the same mapping still existed. The explicit `--recover-preview-profile` command then succeeded and a new read-only open confirmed the mapping was absent. This covers the registry mapping for explicit orphan recovery after an abrupt host exit. Local report: `target/registry-recovery-validation/438ede7375924a0b939bbfa07aa8c367/result.json`.
 
+Process rundown in the existing Registry trace identified the other actor as `svchost.exe`. Its PID accounted for all 84 exact-profile-linked value events outside the preview and worker PIDs. For each profile, the trace showed successful writes and removals of three SID-derived values, including the `-In-Block` and `-Out-Block` variants. The capture establishes the process image and recorded operations. Service identity and separate profile hive lifetime remain unresolved. The filtered process rundown is in the same Registry trace directory as `registry-actor.tsv`.
+
 Date: November 12, 2026. Status: trusted Windows continuation after 544fa56; partial G2 evidence. This strengthens host cleanup acceptance without granting worker access.
 
 ## Run and acceptance
