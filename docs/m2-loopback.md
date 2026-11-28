@@ -79,6 +79,12 @@ Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case network-e
 
 On November 28, 2026, Windows returned an explicit access denial and the probe verified profile cleanup. This covers the fixed IPv6 TCP egress attempt on the tested Windows configuration. Local report: `target/ipv6-egress-validation/3798b3780fd6434a85a55592a4929552/result.json`.
 
+## UDP egress fixtures
+
+Run the release probe with `--case network-egress-udp` for `192.0.2.1:9` or `--case network-egress-udp-v6` for `[2001:db8::1]:9`. Each fixed fixture binds an ephemeral UDP socket and attempts to send one empty datagram. The strict probe requires an explicit access denial from the send operation. A socket bind error, successful send or routing error does not pass. [Winsock sendto](https://learn.microsoft.com/windows/win32/api/winsock/nf-winsock-sendto) · [RFC 3849](https://www.rfc-editor.org/info/rfc3849/)
+
+On November 28, 2026, both sends returned success and both AppContainer profiles were cleaned up. The strict probes remained inconclusive. A read-only WFP query found two IPv4 outbound classify drops from the UWP Default Outbound Block Rule. The destination, UDP protocol, blocking filter, staged worker image and PID from each ownership record matched. The corresponding IPv6 query returned no events. The IPv4 observation covers only the tested documentation endpoint on this Windows configuration. IPv6 UDP egress remains unverified. Local reports: `target/udp-egress-validation/624b8128e5624aeaac0078109155539d/`, including `ipv4-worker-drops.json`.
+
 ## Primary sources reviewed
 
 - [Microsoft: troubleshooting UWP connectivity with WFP](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall), consulted November 14, 2026: loopback isolation and correlation of classify-drop events. Its exemption instructions are not applied here.

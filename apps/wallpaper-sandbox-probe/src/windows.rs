@@ -300,6 +300,8 @@ fn worker(args: &[String]) -> Result<()> {
         | "network-loopback-udp-v6"
         | "network-egress"
         | "network-egress-v6"
+        | "network-egress-udp"
+        | "network-egress-udp-v6"
         | "memory"
         | "memory-incremental"
         | "cpu-busy"
@@ -354,12 +356,14 @@ fn worker(args: &[String]) -> Result<()> {
             | "network-loopback-udp-v6"
             | "network-egress"
             | "network-egress-v6"
+            | "network-egress-udp"
+            | "network-egress-udp-v6"
     ) {
         // Both egress addresses are reserved for documentation, with no DNS or payload.
         // A timeout or routing failure never counts as proof of sandbox denial.
         let socket = match case.as_str() {
-            "network-egress" => SocketAddr::from(([192, 0, 2, 1], 9)),
-            "network-egress-v6" => {
+            "network-egress" | "network-egress-udp" => SocketAddr::from(([192, 0, 2, 1], 9)),
+            "network-egress-v6" | "network-egress-udp-v6" => {
                 SocketAddr::from((std::net::Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1), 9))
             }
             "network-loopback-v6" | "network-loopback-udp-v6" => {
@@ -375,6 +379,14 @@ fn worker(args: &[String]) -> Result<()> {
                 drop(sender);
                 Ok(())
             })
+        } else if case.starts_with("network-egress-udp") {
+            let bind_address = if socket.is_ipv6() {
+                SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, 0))
+            } else {
+                SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, 0))
+            };
+            let sender = std::net::UdpSocket::bind(bind_address)?;
+            sender.send_to(&[], socket).map(|_| ())
         } else {
             TcpStream::connect_timeout(&socket, Duration::from_secs(2)).map(|_| ())
         };
@@ -638,6 +650,9 @@ fn host(args: &[String]) -> Result<()> {
             "IPv6 egress case: network-egress-v6. Tests TCP [2001:db8::1]:9 without DNS or application payload."
         );
         println!(
+            "UDP egress cases: network-egress-udp and network-egress-udp-v6. Each attempts one empty datagram to a documentation address."
+        );
+        println!(
             "UDP loopback cases: network-loopback-udp (IPv4) and network-loopback-udp-v6 (IPv6). Each uses a fixed datagram and a host-verified local listener. A send without an access denial is inconclusive unless the receiver observes delivery."
         );
         println!(
@@ -726,6 +741,8 @@ fn host(args: &[String]) -> Result<()> {
             "network-loopback-udp-v6",
             "network-egress",
             "network-egress-v6",
+            "network-egress-udp",
+            "network-egress-udp-v6",
             "memory",
             "memory-incremental",
             "cpu-busy",
@@ -815,6 +832,8 @@ fn host(args: &[String]) -> Result<()> {
                 | "network-loopback-udp-v6"
                 | "network-egress"
                 | "network-egress-v6"
+                | "network-egress-udp"
+                | "network-egress-udp-v6"
                 | "memory"
                 | "memory-incremental"
                 | "process"
@@ -882,6 +901,9 @@ fn host(args: &[String]) -> Result<()> {
                     println!(
                         "Explicit UDP access denial confirmed; host received no worker datagram."
                     );
+                }
+                if case.starts_with("network-egress-udp") {
+                    println!("Explicit UDP access denial confirmed for {case}.");
                 }
                 if case == "memory" {
                     println!(
