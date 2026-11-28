@@ -85,6 +85,8 @@ Run the release probe with `--case network-egress-udp` for `192.0.2.1:9` or `--c
 
 On November 28, 2026, both sends returned success and both AppContainer profiles were cleaned up. The strict probes remained inconclusive. A read-only WFP query found two IPv4 outbound classify drops from the UWP Default Outbound Block Rule. The destination, UDP protocol, blocking filter, staged worker image and PID from each ownership record matched. The corresponding IPv6 query returned no events. The IPv4 observation covers only the tested documentation endpoint on this Windows configuration. IPv6 UDP egress remains unverified. Local reports: `target/udp-egress-validation/624b8128e5624aeaac0078109155539d/`, including `ipv4-worker-drops.json`.
 
+A follow-up checked the OS route and tried a connected IPv6 UDP socket as a diagnostic. Windows selected a preferred IPv6 source and an on-link default route. The connection setup and empty send returned success, profile cleanup passed, and the immediate destination-filtered WFP query returned zero events. A successful UDP call does not confirm delivery. The connected-socket variant added no acceptance evidence, so the repository retains the original fixture. Local report: `target/udp-egress-validation/40510146cd4748e1812593e43c5fde65/`. [Winsock connect](https://learn.microsoft.com/windows/win32/api/winsock2/nf-winsock2-connect)
+
 ## Primary sources reviewed
 
 - [Microsoft: troubleshooting UWP connectivity with WFP](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall), consulted November 14, 2026: loopback isolation and correlation of classify-drop events. Its exemption instructions are not applied here.
