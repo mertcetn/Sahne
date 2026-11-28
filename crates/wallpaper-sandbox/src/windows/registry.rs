@@ -1,8 +1,43 @@
 use super::*;
 use windows_sys::Win32::{
+    Security::Isolation::GetAppContainerRegistryLocation,
     Storage::FileSystem::{DELETE, WRITE_OWNER},
     System::Registry::*,
 };
+
+fn verify_private_storage() -> io::Result<()> {
+    let mut handle = ptr::null_mut();
+    // SAFETY: The caller verified its AppContainer token. The API writes one HKEY
+    // for the current profile into this live output slot.
+    hresult(unsafe {
+        GetAppContainerRegistryLocation(KEY_QUERY_VALUE | KEY_SET_VALUE, &mut handle)
+    })
+    .map_err(|error| io::Error::other(format!("Private registry open: {error}")))?;
+    if handle.is_null() {
+        return Err(io::Error::other("Null private registry handle"));
+    }
+    let mut key = Key(handle);
+    set_sentinel(&key)?;
+    let value = wide("Sentinel")?;
+    let (mut kind, mut length) = (0, DATA.len() as u32);
+    let mut bytes = [0u8; DATA.len()];
+    // SAFETY: The owned key and terminated value name remain valid. The length
+    // provided to RegQueryValueExW is the exact capacity of bytes.
+    winerror(unsafe {
+        RegQueryValueExW(
+            key.0,
+            value.as_ptr(),
+            ptr::null(),
+            &mut kind,
+            bytes.as_mut_ptr(),
+            &mut length,
+        )
+    })?;
+    if kind != REG_BINARY || length as usize != DATA.len() || bytes != DATA {
+        return Err(io::Error::other("Private registry sentinel mismatch"));
+    }
+    key.close()
+}
 
 const DATA: &[u8] = b"Sahne synthetic registry sentinel";
 const RIGHTS: [u32; 8] = [
@@ -273,7 +308,7 @@ pub fn probe_registry(host: u32, session: u64) -> io::Result<()> {
         }
     }
     match delete(HKEY_CURRENT_USER, &key_name) {
-        Err(error) if error.raw_os_error() == Some(5) => Ok(()),
+        Err(error) if error.raw_os_error() == Some(5) => verify_private_storage(),
         other => Err(io::Error::other(format!(
             "Registry deletion was not denied: {other:?}"
         ))),

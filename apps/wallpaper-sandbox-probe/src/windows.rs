@@ -885,7 +885,7 @@ fn host(args: &[String]) -> Result<()> {
                 }
                 if case == "registry" {
                     println!(
-                        "Registry matrix verified: eight access opens and direct child creation/key deletion denied with error 5; mask=0x8017."
+                        "Registry matrix verified: eight access opens and direct child creation/key deletion denied with error 5; private profile sentinel written and read; mask=0x8017."
                     );
                 }
                 if case.starts_with("js-") {

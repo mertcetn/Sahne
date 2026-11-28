@@ -428,6 +428,8 @@ The fixed filesystem case stages original synthetic private/read-only files. Onl
 
 The worker separately confirms staged text/executable reads, staging enumeration and two-byte header reads from the fixed System32 files kernel32.dll, KernelBase.dll and ntdll.dll. After stop/join, the host checks synthetic contents and namespace. These observations cover a subset of filesystem reads. Broader G2 and production policy remain open. See [Filesystem matrix and permitted reads](m2-filesystem.md).
 
+The fixed registry probe also writes and reads a sentinel using a handle scoped to the worker's own AppContainer registry storage. It closes that handle before the host deletes the profile. See [Registry matrix](m2-registry.md).
+
 ## 26. M2 explicit profile-storage cleanup
 
 The native Profile owner resolves its actual SID's data directory, binds the returned path to its generated profile root and verifies a nonempty synthetic storage control before launch. After Job stop/wait and reader join, normal completion explicitly deletes the owned OS profile and requires the previously observed root to be absent. Errors propagate before recovery admits another worker. Drop remains a best-effort fallback for partial construction/early failure.

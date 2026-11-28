@@ -10,6 +10,10 @@ cargo run --release -p wallpaper-sandbox-probe --locked -- --case registry
 
 The case requires successful host positive controls, ten direct worker access denials with error 5, exact report mask 0x8017, ordinary protocol/EOF and exit zero. After worker stop and both I/O joins, the host requires unchanged synthetic contents/namespace, closes the fixture handle, deletes the owned key and requires reopening it to fail with error 2. Profile deletion remains independently required. All checks are agent-executable without visual judgment or physical input.
 
+The worker also opens its own private registry storage through `GetAppContainerRegistryLocation`, writes a fixed binary sentinel, reads it back with an exact-size buffer, and closes the handle before reporting success. This establishes a positive control for observing private registry storage. The host's existing profile-directory check verifies filesystem cleanup. Independently confirming the private registry hive's lifetime and unload remains open. [GetAppContainerRegistryLocation](https://learn.microsoft.com/en-us/windows/win32/api/userenv/nf-userenv-getappcontainerregistrylocation)
+
+On November 28, 2026, the expanded registry case passed in the rebuilt default Windows suite. All 50 cases and 56 profile cleanups passed. Formatting, Clippy with warnings denied and 184 Rust tests also passed. Local report: `target/sandbox-validation/936f56cc213a47df883edaa2d64d8c0f/summary.json`.
+
 ## Owned volatile fixture
 
 The host opens the existing HKEY_CURRENT_USER/Software container in the 64-bit registry view and creates one unique Sahne.Probe.<host-pid>.<session> child with REG_OPTION_VOLATILE. The cryptographic session is already part of the native launch identity. RegCreateKeyEx must report REG_CREATED_NEW_KEY before the instance assumes deletion ownership; an existing-key disposition fails without changing/deleting that key.
