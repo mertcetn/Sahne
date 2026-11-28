@@ -2,7 +2,7 @@ use std::{
     error::Error,
     fs,
     io::{self, Read, Write},
-    net::{SocketAddr, TcpStream},
+    net::{SocketAddr, TcpStream, ToSocketAddrs},
     path::PathBuf,
     sync::mpsc,
     time::{Duration, Instant},
@@ -19,6 +19,9 @@ type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 const EXPECTED: u32 = 23;
 const HANDLES_ARMED: u32 = EXPECTED | 256;
 const INVALID_HANDLE_EXIT: u32 = 0xc0000008;
+fn dns_fixture_name(session: u64) -> String {
+    format!("sahne-probe-{session:016x}.invalid.")
+}
 #[derive(Debug, PartialEq, Eq)]
 enum ProbeReply {
     Report(u32),
@@ -302,6 +305,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "network-egress-v6"
         | "network-egress-udp"
         | "network-egress-udp-v6"
+        | "network-dns"
         | "memory"
         | "memory-incremental"
         | "cpu-busy"
@@ -348,6 +352,31 @@ fn worker(args: &[String]) -> Result<()> {
         .open(&marker)
         .is_err_and(|e| e.raw_os_error() == Some(5));
     let process_denied = wallpaper_sandbox::host_process_access_denied(hostpid)?;
+    if case == "network-dns" {
+        let name = dns_fixture_name(session);
+        let lookup = (name.as_str(), 0).to_socket_addrs();
+        if !lookup
+            .as_ref()
+            .is_err_and(|error| matches!(error.raw_os_error(), Some(10013) | Some(5)))
+        {
+            write_frame(
+                &mut output,
+                &envelope(
+                    session,
+                    2,
+                    Body::Reject {
+                        code: 1,
+                        message: format!(
+                            "DNS policy result inconclusive: {:?}",
+                            lookup.map(|_| ()).map_err(|error| error.raw_os_error())
+                        ),
+                    },
+                ),
+            )?;
+            output.flush()?;
+            return Ok(());
+        }
+    }
     if matches!(
         case.as_str(),
         "network"
@@ -653,6 +682,9 @@ fn host(args: &[String]) -> Result<()> {
             "UDP egress cases: network-egress-udp and network-egress-udp-v6. Each attempts one empty datagram to a documentation address."
         );
         println!(
+            "DNS isolation case: network-dns. Attempts one fixed-format .invalid lookup. Name-not-found and timeouts are inconclusive."
+        );
+        println!(
             "UDP loopback cases: network-loopback-udp (IPv4) and network-loopback-udp-v6 (IPv6). Each uses a fixed datagram and a host-verified local listener. A send without an access denial is inconclusive unless the receiver observes delivery."
         );
         println!(
@@ -743,6 +775,7 @@ fn host(args: &[String]) -> Result<()> {
             "network-egress-v6",
             "network-egress-udp",
             "network-egress-udp-v6",
+            "network-dns",
             "memory",
             "memory-incremental",
             "cpu-busy",
@@ -834,6 +867,7 @@ fn host(args: &[String]) -> Result<()> {
                 | "network-egress-v6"
                 | "network-egress-udp"
                 | "network-egress-udp-v6"
+                | "network-dns"
                 | "memory"
                 | "memory-incremental"
                 | "process"
@@ -904,6 +938,9 @@ fn host(args: &[String]) -> Result<()> {
                 }
                 if case.starts_with("network-egress-udp") {
                     println!("Explicit UDP access denial confirmed for {case}.");
+                }
+                if case == "network-dns" {
+                    println!("Explicit DNS API access denial confirmed.");
                 }
                 if case == "memory" {
                     println!(

@@ -89,6 +89,12 @@ A follow-up checked the OS route and tried a connected IPv6 UDP socket as a diag
 
 A separate controlled test used an IPv6 link-local UDP listener in Ubuntu WSL on the host's virtual network. The listener echoed the host's control datagram and received no worker datagram during the four-second observation. WFP recorded an IPv6 UDP outbound classify drop at that listener port under the UWP Default Outbound Block Rule. The blocking filter, staged worker image and worker PID from the ownership record matched. The probe verified profile cleanup. This confirms IPv6 UDP blocking to a reachable non-loopback peer on this Windows configuration. The original documentation-address attempt remains inconclusive and no public IPv6 destination was tested. The test-only address was removed from the source and the standard probe rebuilt. Local proof: `target/ipv6-peer-validation/16a2fbeb6d5e4333a9b87f8bbf23c395/verified-drop.json`. [WSL networking](https://learn.microsoft.com/windows/wsl/networking)
 
+## Windows resolver fixture
+
+Run the release probe with `--case network-dns` to request one absolute name under `.invalid` through the system resolver. The name includes the unique fixture session and the probe logs that name and the verified worker PID for correlation. Only explicit OS access denial passes. Name-not-found, a timeout or a returned address leaves isolation unverified. An `.invalid` lookup can receive a negative answer without a wire request. [RFC 6761](https://www.rfc-editor.org/info/rfc6761/)
+
+On November 28, 2026, both the AppContainer probe and a separate host control returned Windows socket error 11001. The probe verified profile cleanup and exited inconclusive. The DNS Client Operational event channel was disabled on this machine, and the run changed no logging or resolver settings. The result does not determine whether Windows forwarded the request through a broker. Local report: `target/dns-validation/8c3afca7f7154b1c9ad71244bf8a1ecc/result.json`.
+
 ## Primary sources reviewed
 
 - [Microsoft: troubleshooting UWP connectivity with WFP](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall), consulted November 14, 2026: loopback isolation and correlation of classify-drop events. Its exemption instructions are not applied here.

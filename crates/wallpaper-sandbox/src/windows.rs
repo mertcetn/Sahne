@@ -687,6 +687,7 @@ pub fn spawn_probe(
         "network-egress-v6",
         "network-egress-udp",
         "network-egress-udp-v6",
+        "network-dns",
         "memory",
         "memory-incremental",
         "process",

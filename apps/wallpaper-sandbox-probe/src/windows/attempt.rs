@@ -139,6 +139,13 @@ impl ProbeAttempt {
                 sandbox.worker_process_id()?
             );
         }
+        if case == "network-dns" {
+            println!("DNS fixture name: {}", super::dns_fixture_name(session));
+            println!(
+                "DNS fixture worker process: {}",
+                sandbox.worker_process_id()?
+            );
+        }
         println!(
             "Verified AppContainer identity and zero capabilities; Job memory=256 MiB, active processes=1. Case={case}"
         );
