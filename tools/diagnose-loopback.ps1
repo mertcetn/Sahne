@@ -5,7 +5,6 @@ param([switch] $IPv6, [switch] $Udp)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (-not $IsWindows) { throw 'This diagnostic requires Windows.' }
-if ($IPv6 -and $Udp) { throw 'The UDP fixture uses IPv4.' }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($identity)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -21,7 +20,9 @@ if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
 $output = Join-Path $repo ("target/loopback-diagnostics/" + [guid]::NewGuid().ToString('N'))
 $started = [DateTime]::UtcNow
 $binaryHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash
-$case, $address, $endpoint, $netstatProtocol = if ($Udp) {
+$case, $address, $endpoint, $netstatProtocol = if ($Udp -and $IPv6) {
+    'network-loopback-udp-v6', '::1', '[::1]', 'udpv6'
+} elseif ($Udp) {
     'network-loopback-udp', '127.0.0.1', '127.0.0.1', 'udp'
 } elseif ($IPv6) {
     'network-loopback-v6', '::1', '[::1]', 'tcpv6'

@@ -70,12 +70,12 @@ impl ProbeAttempt {
         let base = std::env::current_dir()?.join("target/sandbox-runs");
         fs::create_dir_all(&base)?;
         let root = base.join(format!("{}-{session:016x}", std::process::id()));
-        let bind_address = if case == "network-loopback-v6" {
+        let bind_address = if matches!(case, "network-loopback-v6" | "network-loopback-udp-v6") {
             SocketAddr::from((Ipv6Addr::LOCALHOST, 0))
         } else {
             SocketAddr::from(([127, 0, 0, 1], 0))
         };
-        let listener = if case == "network-loopback-udp" {
+        let listener = if case.starts_with("network-loopback-udp") {
             let receiver = UdpSocket::bind(bind_address)?;
             let control = UdpSocket::bind(bind_address)?;
             let address = receiver.local_addr()?;
@@ -133,7 +133,7 @@ impl ProbeAttempt {
             listener.port()?,
             previous_session,
         )?;
-        if case == "network-loopback-udp" {
+        if case.starts_with("network-loopback-udp") {
             println!(
                 "UDP loopback worker process: {}",
                 sandbox.worker_process_id()?

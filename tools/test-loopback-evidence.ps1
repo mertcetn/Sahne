@@ -72,6 +72,12 @@ if (@(Find-SahneLoopbackDrop -Events $fixtureUdp @parameters -Udp -SenderPort 54
 if (@(Find-SahneLoopbackDrop -Events $fixtureUdp @parameters).Count -ne 0) { throw 'UDP drop accepted for TCP' }
 if (@(Find-SahneLoopbackDrop -Events $fixtureUdp @parameters -Udp -SenderPort 54739).Count -ne 0) { throw 'Wrong UDP sender accepted' }
 Write-Output 'UDP matcher checks passed: 1 positive, 2 negative.'
+[xml]$fixtureUdpV6 = $fixtureV6.OuterXml.Replace('<ipProtocol>6</ipProtocol>','<ipProtocol>17</ipProtocol>')
+$fixtureUdpV6.SelectSingleNode('/netEvents/item/header/remoteAddrV6.byteArray16').InnerText = '::1'
+if (@(Find-SahneLoopbackDrop -Events $fixtureUdpV6 @parameters -IPv6 -Udp -SenderPort 54738).Count -ne 1) { throw 'IPv6 UDP positive fixture rejected' }
+if (@(Find-SahneLoopbackDrop -Events $fixtureUdpV6 @parameters -IPv6).Count -ne 0) { throw 'IPv6 UDP drop accepted for TCP' }
+if (@(Find-SahneLoopbackDrop -Events $fixtureUdpV6 @parameters -Udp).Count -ne 0) { throw 'IPv6 UDP drop accepted for IPv4' }
+Write-Output 'IPv6 UDP matcher checks passed: 1 positive, 2 negative.'
 
 $verified = "Verified AppContainer identity and zero capabilities;`nProfile cleanup verified: test`n"
 $explicit = $verified + "Explicit TCP access denial confirmed for network.`nProbe passed; test`n"

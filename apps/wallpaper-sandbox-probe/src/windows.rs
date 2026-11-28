@@ -297,6 +297,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "network"
         | "network-loopback-v6"
         | "network-loopback-udp"
+        | "network-loopback-udp-v6"
         | "network-egress"
         | "memory"
         | "memory-incremental"
@@ -346,17 +347,23 @@ fn worker(args: &[String]) -> Result<()> {
     let process_denied = wallpaper_sandbox::host_process_access_denied(hostpid)?;
     if matches!(
         case.as_str(),
-        "network" | "network-loopback-v6" | "network-loopback-udp" | "network-egress"
+        "network"
+            | "network-loopback-v6"
+            | "network-loopback-udp"
+            | "network-loopback-udp-v6"
+            | "network-egress"
     ) {
         // TEST-NET-1 is reserved for documentation; use no DNS or application payload.
         // A timeout or routing failure never counts as proof of sandbox denial.
         let socket = match case.as_str() {
             "network-egress" => SocketAddr::from(([192, 0, 2, 1], 9)),
-            "network-loopback-v6" => SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port)),
+            "network-loopback-v6" | "network-loopback-udp-v6" => {
+                SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port))
+            }
             _ => SocketAddr::from(([127, 0, 0, 1], port)),
         };
-        let attempt = if case == "network-loopback-udp" {
-            std::net::UdpSocket::bind((std::net::Ipv4Addr::LOCALHOST, 0)).and_then(|sender| {
+        let attempt = if case.starts_with("network-loopback-udp") {
+            std::net::UdpSocket::bind((socket.ip(), 0)).and_then(|sender| {
                 sender.send_to(b"sahne-udp-worker", socket)?;
                 // Keep the fixed sender socket alive for a separate host-side PID check.
                 std::thread::sleep(Duration::from_secs(1));
@@ -623,7 +630,7 @@ fn host(args: &[String]) -> Result<()> {
             "IPv6 loopback case: network-loopback-v6. Tests only TCP [::1] with a verified host listener. A timeout is inconclusive."
         );
         println!(
-            "UDP loopback case: network-loopback-udp. Uses a fixed IPv4 datagram and a host-verified local listener. A send without an access denial is inconclusive unless the receiver observes delivery."
+            "UDP loopback cases: network-loopback-udp (IPv4) and network-loopback-udp-v6 (IPv6). Each uses a fixed datagram and a host-verified local listener. A send without an access denial is inconclusive unless the receiver observes delivery."
         );
         println!(
             "Host-write cases: ipc-write-drain and ipc-write-stall. A dedicated writer sends one Ping plus a fixed 1 MiB pressure fixture. Drain validates every byte and EOF; stall must keep the writer pending until the host deadline kills the worker and both I/O threads join. This is a transport-only fixture, not package/source input."
@@ -708,6 +715,7 @@ fn host(args: &[String]) -> Result<()> {
             "network",
             "network-loopback-v6",
             "network-loopback-udp",
+            "network-loopback-udp-v6",
             "network-egress",
             "memory",
             "memory-incremental",
@@ -795,6 +803,7 @@ fn host(args: &[String]) -> Result<()> {
                 | "network"
                 | "network-loopback-v6"
                 | "network-loopback-udp"
+                | "network-loopback-udp-v6"
                 | "network-egress"
                 | "memory"
                 | "memory-incremental"
@@ -856,7 +865,7 @@ fn host(args: &[String]) -> Result<()> {
                 if matches!(case, "network" | "network-loopback-v6" | "network-egress") {
                     println!("Explicit TCP access denial confirmed for {case}.");
                 }
-                if case == "network-loopback-udp" {
+                if case.starts_with("network-loopback-udp") {
                     println!(
                         "Explicit UDP access denial confirmed; host received no worker datagram."
                     );

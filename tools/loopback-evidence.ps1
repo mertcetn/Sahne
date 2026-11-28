@@ -15,7 +15,6 @@ function Find-SahneLoopbackDrop {
     # also require the exact live host PID, narrow run interval and listener port.
     if ($HostImage -notmatch '^[A-Za-z]:\\' -or $FinishedUtc -lt $StartedUtc) { return }
     $suffix = $HostImage.Substring(2)
-    if ($IPv6 -and $Udp) { return }
     $protocol = if ($Udp) { '17' } else { '6' }
     $version, $address, $localField, $remoteField = if ($IPv6) {
         'FWP_IP_VERSION_V6', '::1', 'localAddrV6.byteArray16', 'remoteAddrV6.byteArray16'
@@ -62,7 +61,7 @@ function Get-SahneLoopbackAcceptance {
         return 'Inconclusive'
     }
     if ($Udp) {
-        if ($IPv6 -or $Stdout -notmatch '(?m)^UDP loopback receiver had no worker datagram\.\r?$') { return 'Inconclusive' }
+        if ($Stdout -notmatch '(?m)^UDP loopback receiver had no worker datagram\.\r?$') { return 'Inconclusive' }
         if ($ExitCode -eq 0 -and $Stdout -match '(?m)^Explicit UDP access denial confirmed; host received no worker datagram\.\r?$' -and
             $Stdout -match '(?m)^Probe passed;') { return 'ExplicitDenialConfirmed' }
         if ($ExitCode -eq 1 -and $SenderCorrelated -and
