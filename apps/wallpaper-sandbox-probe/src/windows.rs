@@ -299,6 +299,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "network-loopback-udp"
         | "network-loopback-udp-v6"
         | "network-egress"
+        | "network-egress-v6"
         | "memory"
         | "memory-incremental"
         | "cpu-busy"
@@ -352,11 +353,15 @@ fn worker(args: &[String]) -> Result<()> {
             | "network-loopback-udp"
             | "network-loopback-udp-v6"
             | "network-egress"
+            | "network-egress-v6"
     ) {
-        // TEST-NET-1 is reserved for documentation; use no DNS or application payload.
+        // Both egress addresses are reserved for documentation, with no DNS or payload.
         // A timeout or routing failure never counts as proof of sandbox denial.
         let socket = match case.as_str() {
             "network-egress" => SocketAddr::from(([192, 0, 2, 1], 9)),
+            "network-egress-v6" => {
+                SocketAddr::from((std::net::Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1), 9))
+            }
             "network-loopback-v6" | "network-loopback-udp-v6" => {
                 SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port))
             }
@@ -630,6 +635,9 @@ fn host(args: &[String]) -> Result<()> {
             "IPv6 loopback case: network-loopback-v6. Tests only TCP [::1] with a verified host listener. A timeout is inconclusive."
         );
         println!(
+            "IPv6 egress case: network-egress-v6. Tests TCP [2001:db8::1]:9 without DNS or application payload."
+        );
+        println!(
             "UDP loopback cases: network-loopback-udp (IPv4) and network-loopback-udp-v6 (IPv6). Each uses a fixed datagram and a host-verified local listener. A send without an access denial is inconclusive unless the receiver observes delivery."
         );
         println!(
@@ -717,6 +725,7 @@ fn host(args: &[String]) -> Result<()> {
             "network-loopback-udp",
             "network-loopback-udp-v6",
             "network-egress",
+            "network-egress-v6",
             "memory",
             "memory-incremental",
             "cpu-busy",
@@ -805,6 +814,7 @@ fn host(args: &[String]) -> Result<()> {
                 | "network-loopback-udp"
                 | "network-loopback-udp-v6"
                 | "network-egress"
+                | "network-egress-v6"
                 | "memory"
                 | "memory-incremental"
                 | "process"
@@ -862,7 +872,10 @@ fn host(args: &[String]) -> Result<()> {
                 println!(
                     "Direct OS denials confirmed: sentinel read, sentinel write, host process VM access. Probe bits={bits:#x}"
                 );
-                if matches!(case, "network" | "network-loopback-v6" | "network-egress") {
+                if matches!(
+                    case,
+                    "network" | "network-loopback-v6" | "network-egress" | "network-egress-v6"
+                ) {
                     println!("Explicit TCP access denial confirmed for {case}.");
                 }
                 if case.starts_with("network-loopback-udp") {

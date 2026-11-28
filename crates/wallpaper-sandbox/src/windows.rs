@@ -684,6 +684,7 @@ pub fn spawn_probe(
         "network-loopback-udp",
         "network-loopback-udp-v6",
         "network-egress",
+        "network-egress-v6",
         "memory",
         "memory-incremental",
         "process",

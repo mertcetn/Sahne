@@ -73,6 +73,12 @@ On November 28, 2026, the UDP diagnostic confirmed a receiving-side app isolatio
 
 The IPv6 variant uses `--case network-loopback-udp-v6` and the same controls on `[::1]`. Run `pwsh -NoProfile -File tools/diagnose-loopback.ps1 -Udp -IPv6` from an elevated PowerShell. On November 28, the diagnostic matched the IPv6 UDP receiving-side AppContainer block to the verified worker's source port. Both profiles for the two separate IPv4 and IPv6 UDP invocations were cleaned up. Local reports: `target/loopback-diagnostics/b09893ad80da443d9e1537022a4e2933/summary.json` (IPv6) and `target/loopback-diagnostics/c34ab2a1a97e4047a5bde0eb57370428/summary.json` (IPv4). UDP egress remains open.
 
+## IPv6 TCP egress fixture
+
+Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case network-egress-v6`. The zero-capability AppContainer attempts one TCP connection to `[2001:db8::1]:9`, using a documentation-only address. The worker performs no DNS lookup and sends no application payload. Only an explicit access denial satisfies the test. A timeout, routing error or successful connection fails the case. [RFC 3849](https://www.rfc-editor.org/info/rfc3849/)
+
+On November 28, 2026, Windows returned an explicit access denial and the probe verified profile cleanup. This covers the fixed IPv6 TCP egress attempt on the tested Windows configuration. Local report: `target/ipv6-egress-validation/3798b3780fd6434a85a55592a4929552/result.json`.
+
 ## Primary sources reviewed
 
 - [Microsoft: troubleshooting UWP connectivity with WFP](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall), consulted November 14, 2026: loopback isolation and correlation of classify-drop events. Its exemption instructions are not applied here.
