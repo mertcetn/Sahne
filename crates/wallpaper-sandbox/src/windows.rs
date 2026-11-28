@@ -671,6 +671,7 @@ pub fn spawn_probe(
         "groups-basic",
         "groups-invalid",
         "network",
+        "network-loopback-v6",
         "network-egress",
         "memory",
         "memory-incremental",

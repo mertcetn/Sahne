@@ -295,6 +295,7 @@ fn worker(args: &[String]) -> Result<()> {
         | "groups-basic"
         | "groups-invalid"
         | "network"
+        | "network-loopback-v6"
         | "network-egress"
         | "memory"
         | "memory-incremental"
@@ -342,13 +343,16 @@ fn worker(args: &[String]) -> Result<()> {
         .open(&marker)
         .is_err_and(|e| e.raw_os_error() == Some(5));
     let process_denied = wallpaper_sandbox::host_process_access_denied(hostpid)?;
-    if case == "network" || case == "network-egress" {
+    if matches!(
+        case.as_str(),
+        "network" | "network-loopback-v6" | "network-egress"
+    ) {
         // TEST-NET-1 is reserved for documentation; use no DNS or application payload.
         // A timeout or routing failure never counts as proof of sandbox denial.
-        let socket = if case == "network-egress" {
-            SocketAddr::from(([192, 0, 2, 1], 9))
-        } else {
-            SocketAddr::from(([127, 0, 0, 1], port))
+        let socket = match case.as_str() {
+            "network-egress" => SocketAddr::from(([192, 0, 2, 1], 9)),
+            "network-loopback-v6" => SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port)),
+            _ => SocketAddr::from(([127, 0, 0, 1], port)),
         };
         let connection = TcpStream::connect_timeout(&socket, Duration::from_secs(2));
         let network_denied = connection
@@ -605,6 +609,9 @@ fn host(args: &[String]) -> Result<()> {
             "Filesystem case: filesystem. Synthetic private/staged targets have host positive controls. Worker file-rights, private listing and file/directory creation requests must be denied. Staged data/executable reads, staging listing and header reads from System32 kernel32.dll, KernelBase.dll and ntdll.dll must succeed. No user files are inspected; post-stop contents/namespace are checked."
         );
         println!(
+            "IPv6 loopback case: network-loopback-v6. Tests only TCP [::1] with a verified host listener. A timeout is inconclusive."
+        );
+        println!(
             "Host-write cases: ipc-write-drain and ipc-write-stall. A dedicated writer sends one Ping plus a fixed 1 MiB pressure fixture. Drain validates every byte and EOF; stall must keep the writer pending until the host deadline kills the worker and both I/O threads join. This is a transport-only fixture, not package/source input."
         );
         println!(
@@ -685,6 +692,7 @@ fn host(args: &[String]) -> Result<()> {
             "groups-basic",
             "groups-invalid",
             "network",
+            "network-loopback-v6",
             "network-egress",
             "memory",
             "memory-incremental",
@@ -769,6 +777,7 @@ fn host(args: &[String]) -> Result<()> {
                 | "groups-basic"
                 | "groups-invalid"
                 | "network"
+                | "network-loopback-v6"
                 | "network-egress"
                 | "memory"
                 | "memory-incremental"
@@ -827,7 +836,7 @@ fn host(args: &[String]) -> Result<()> {
                 println!(
                     "Direct OS denials confirmed: sentinel read, sentinel write, host process VM access. Probe bits={bits:#x}"
                 );
-                if case == "network" || case == "network-egress" {
+                if matches!(case, "network" | "network-loopback-v6" | "network-egress") {
                     println!("Explicit TCP access denial confirmed for {case}.");
                 }
                 if case == "memory" {

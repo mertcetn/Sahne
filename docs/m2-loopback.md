@@ -55,6 +55,12 @@ The elevated diagnostic was repeated on November 27, 2026 with the current local
 
 A separate elevated run on November 27 returned `SenderCorrelated=true`. Windows reported one sender observation for worker PID 7760 on source port 63362, connected toward listener port 63360. Both matched receiving-side WFP drops reported remote port 63362 and filter 73076. The matcher suite passed two positive and twenty-one negative cases. Local report: `target/loopback-diagnostics/85bb6cf829aa4ac5b74d12ff9b13587b/summary.json`.
 
+## IPv6 TCP fixture
+
+Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case network-loopback-v6` to test TCP on `[::1]`. A host connection to the same listener is accepted and drained before the zero-capability AppContainer worker tries to connect. The worker sends no application payload and performs no DNS lookup. The fixture accepts an explicit OS access denial. A timeout stays inconclusive. The IPv4 WFP diagnostic and its matching rules apply to the IPv4 fixture. [Microsoft WFP loopback diagnostics](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall)
+
+On November 28, 2026, the host control passed on `[::1]:55719`. The worker's connection attempt timed out and the AppContainer profile cleanup passed. The strict fixture exited with an inconclusive result. Local report: `target/ipv6-loopback-validation/b16ccabd065f4c85b358809cf3130bb8/result.json`. Formatting, Clippy, 184 Rust tests and all 50 default Windows sandbox cases passed with 56 profile cleanups.
+
 ## Primary sources reviewed
 
 - [Microsoft: troubleshooting UWP connectivity with WFP](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall), consulted November 14, 2026: loopback isolation and correlation of classify-drop events. Its exemption instructions are not applied here.

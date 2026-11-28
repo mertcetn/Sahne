@@ -5,7 +5,7 @@ use super::{
 use std::{
     fs,
     io::{self, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{Ipv6Addr, SocketAddr, TcpListener, TcpStream},
     path::PathBuf,
     sync::{
         Arc,
@@ -56,8 +56,13 @@ impl ProbeAttempt {
         let base = std::env::current_dir()?.join("target/sandbox-runs");
         fs::create_dir_all(&base)?;
         let root = base.join(format!("{}-{session:016x}", std::process::id()));
-        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))?;
-        if case == "network" {
+        let bind_address = if case == "network-loopback-v6" {
+            SocketAddr::from((Ipv6Addr::LOCALHOST, 0))
+        } else {
+            SocketAddr::from(([127, 0, 0, 1], 0))
+        };
+        let listener = TcpListener::bind(bind_address)?;
+        if matches!(case, "network" | "network-loopback-v6") {
             // Prove this exact listener accepts a host connection before testing
             // the restricted worker. Drain that control connection from its backlog.
             let address = listener.local_addr()?;
@@ -69,7 +74,7 @@ impl ProbeAttempt {
             }
             drop(accepted);
             drop(control);
-            println!("Loopback host control passed: 127.0.0.1:{}", address.port());
+            println!("Loopback host control passed: {address}");
             println!("Loopback host process: {}", std::process::id());
             println!(
                 "Loopback worker image: {}",
