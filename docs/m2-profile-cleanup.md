@@ -6,6 +6,8 @@ An approved Windows Performance Recorder Registry capture covered the headless `
 
 After the test exited, a read-only check opened the same user's mapping parent as a positive control and confirmed that neither test SID's mapping remained. This verifies the two mapping keys for a normal package run. The trace also showed profile-linked registry value operations in other processes. Attribution of those processes, separate profile registry storage and hive lifetime, and the abrupt-exit path remain open. The local `mapping-readback.json` and `profile-registry-summary.json` are under `target/package-trace-validation/65dd9ea0db7a481ebcb254e28a4eccfe/`. The original ETL remains local and the temporary system-wide XML export was removed. [Registry ETW event fields](https://learn.microsoft.com/en-us/windows/win32/etw/registry-typegroup1) · [DeleteAppContainerProfile](https://learn.microsoft.com/en-us/windows/win32/api/userenv/nf-userenv-deleteappcontainerprofile)
 
+A separate headless test observed the execution profile's exact per-user mapping while its preview host was alive. It terminated only the preview process it had started, verified that the orphan's ownership record contained the recorded worker PID, and confirmed that the same mapping still existed. The explicit `--recover-preview-profile` command then succeeded and a new read-only open confirmed the mapping was absent. This covers the registry mapping for explicit orphan recovery after an abrupt host exit. Local report: `target/registry-recovery-validation/438ede7375924a0b939bbfa07aa8c367/result.json`.
+
 Date: November 12, 2026. Status: trusted Windows continuation after 544fa56; partial G2 evidence. This strengthens host cleanup acceptance without granting worker access.
 
 ## Run and acceptance
