@@ -582,6 +582,15 @@ pub struct Sandbox {
     started: std::time::Instant,
 }
 impl Sandbox {
+    pub fn worker_process_id(&self) -> io::Result<u32> {
+        // SAFETY: The sandbox owns the live process handle.
+        let pid = unsafe { GetProcessId(self.child.process.as_raw_handle()) };
+        if pid == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(pid)
+    }
+
     pub fn verify_incremental_memory(&self) -> io::Result<()> {
         memory::verify_peak(self)
     }
@@ -672,6 +681,7 @@ pub fn spawn_probe(
         "groups-invalid",
         "network",
         "network-loopback-v6",
+        "network-loopback-udp",
         "network-egress",
         "memory",
         "memory-incremental",

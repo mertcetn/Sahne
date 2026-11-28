@@ -67,6 +67,12 @@ $fixtureV6.SelectSingleNode('/netEvents/item/header/remoteAddrV6.byteArray16').I
 if (@(Find-SahneLoopbackDrop -Events $fixtureV6 @parameters -IPv6).Count -ne 0) { throw 'Non-loopback IPv6 peer accepted' }
 Write-Output 'IPv6 matcher checks passed: 1 positive, 3 negative.'
 
+[xml]$fixtureUdp = $fixture.OuterXml.Replace('<ipProtocol>6</ipProtocol>','<ipProtocol>17</ipProtocol>')
+if (@(Find-SahneLoopbackDrop -Events $fixtureUdp @parameters -Udp -SenderPort 54738).Count -ne 1) { throw 'UDP positive fixture rejected' }
+if (@(Find-SahneLoopbackDrop -Events $fixtureUdp @parameters).Count -ne 0) { throw 'UDP drop accepted for TCP' }
+if (@(Find-SahneLoopbackDrop -Events $fixtureUdp @parameters -Udp -SenderPort 54739).Count -ne 0) { throw 'Wrong UDP sender accepted' }
+Write-Output 'UDP matcher checks passed: 1 positive, 2 negative.'
+
 $verified = "Verified AppContainer identity and zero capabilities;`nProfile cleanup verified: test`n"
 $explicit = $verified + "Explicit TCP access denial confirmed for network.`nProbe passed; test`n"
 $timeout = 'Network test inconclusive or allowed: Err((TimedOut, None))'
@@ -81,3 +87,9 @@ if ((Get-SahneLoopbackAcceptance Exited 0 ($explicit.Replace('for network.', 'fo
 if ((Get-SahneLoopbackAcceptance Exited 0 ($explicit.Replace('for network.', 'for network-loopback-v6.')) '' $false -IPv6) -ne 'ExplicitDenialConfirmed') { throw 'Native IPv6 denial rejected' }
 if ((Get-SahneLoopbackAcceptance Exited 0 $explicit '' $false -IPv6) -ne 'Inconclusive') { throw 'Native IPv4 denial accepted for IPv6' }
 Write-Output 'Loopback acceptance checks passed: 3 positive, 7 negative.'
+$udpVerified = $verified + "UDP loopback receiver had no worker datagram.`n"
+$udpSent = 'Network test inconclusive or allowed: Ok(())'
+if ((Get-SahneLoopbackAcceptance Exited 1 $udpVerified $udpSent $true -Udp) -ne 'LoopbackDropConfirmed') { throw 'Correlated UDP drop rejected' }
+if ((Get-SahneLoopbackAcceptance Exited 1 $udpVerified $udpSent $false -Udp) -ne 'Inconclusive') { throw 'Uncorrelated UDP drop accepted' }
+if ((Get-SahneLoopbackAcceptance Exited 1 $verified $udpSent $true -Udp) -ne 'Inconclusive') { throw 'Missing UDP receiver observation accepted' }
+Write-Output 'UDP acceptance checks passed: 1 positive, 2 negative.'

@@ -5,7 +5,7 @@ use super::{
 use std::{
     fs,
     io::{self, Write},
-    net::{Ipv6Addr, SocketAddr, TcpListener, TcpStream},
+    net::{Ipv6Addr, SocketAddr, TcpListener, TcpStream, UdpSocket},
     path::PathBuf,
     sync::{
         Arc,
@@ -20,6 +20,20 @@ type Response = std::result::Result<Result<ProbeReply>, mpsc::RecvTimeoutError>;
 pub(super) const PRESSURE_CHUNKS: usize = 256;
 pub(super) const PRESSURE_CHUNK_BYTES: usize = 4096;
 pub(super) const PRESSURE_BYTES: usize = PRESSURE_CHUNKS * PRESSURE_CHUNK_BYTES;
+enum Listener {
+    Tcp(TcpListener),
+    Udp(UdpSocket),
+}
+impl Listener {
+    fn port(&self) -> io::Result<u16> {
+        Ok(match self {
+            Self::Tcp(listener) => listener.local_addr()?,
+            Self::Udp(listener) => listener.local_addr()?,
+        }
+        .port())
+    }
+}
+
 pub(super) struct ProbeAttempt {
     pub session: u64,
     pub nonce: u64,
@@ -36,7 +50,7 @@ pub(super) struct ProbeAttempt {
     writing_pressure: Arc<AtomicBool>,
     written: Arc<AtomicUsize>,
     roundtrips: Arc<AtomicUsize>,
-    _listener: TcpListener,
+    listener: Listener,
 }
 impl ProbeAttempt {
     pub fn start(case: &str, previous_session: Option<u64>) -> Result<Self> {
@@ -61,8 +75,34 @@ impl ProbeAttempt {
         } else {
             SocketAddr::from(([127, 0, 0, 1], 0))
         };
-        let listener = TcpListener::bind(bind_address)?;
-        if matches!(case, "network" | "network-loopback-v6") {
+        let listener = if case == "network-loopback-udp" {
+            let receiver = UdpSocket::bind(bind_address)?;
+            let control = UdpSocket::bind(bind_address)?;
+            let address = receiver.local_addr()?;
+            receiver.set_read_timeout(Some(Duration::from_secs(1)))?;
+            let marker = b"sahne-udp-control";
+            if control.send_to(marker, address)? != marker.len() {
+                return Err("UDP host control sent a partial datagram".into());
+            }
+            let mut buffer = [0; 32];
+            let (len, sender) = receiver.recv_from(&mut buffer)?;
+            if &buffer[..len] != marker || sender != control.local_addr()? {
+                return Err("UDP host control datagram mismatch".into());
+            }
+            receiver.set_nonblocking(true)?;
+            println!("UDP loopback host control passed: {address}");
+            println!("Loopback host process: {}", std::process::id());
+            println!(
+                "Loopback worker image: {}",
+                root.join("bin/probe.exe").display()
+            );
+            Listener::Udp(receiver)
+        } else {
+            Listener::Tcp(TcpListener::bind(bind_address)?)
+        };
+        if let Listener::Tcp(listener) = &listener
+            && matches!(case, "network" | "network-loopback-v6")
+        {
             // Prove this exact listener accepts a host connection before testing
             // the restricted worker. Drain that control connection from its backlog.
             let address = listener.local_addr()?;
@@ -90,9 +130,15 @@ impl ProbeAttempt {
             &root,
             session,
             case,
-            listener.local_addr()?.port(),
+            listener.port()?,
             previous_session,
         )?;
+        if case == "network-loopback-udp" {
+            println!(
+                "UDP loopback worker process: {}",
+                sandbox.worker_process_id()?
+            );
+        }
         println!(
             "Verified AppContainer identity and zero capabilities; Job memory=256 MiB, active processes=1. Case={case}"
         );
@@ -128,7 +174,7 @@ impl ProbeAttempt {
             writing_pressure: Arc::new(AtomicBool::new(false)),
             written: Arc::new(AtomicUsize::new(0)),
             roundtrips: Arc::new(AtomicUsize::new(0)),
-            _listener: listener,
+            listener,
         };
         let pressure = matches!(case, "ipc-write-stall" | "ipc-write-drain");
         let writing = Arc::clone(&attempt.writing_pressure);
@@ -221,6 +267,20 @@ impl ProbeAttempt {
     }
     pub fn roundtrips_completed(&self) -> usize {
         self.roundtrips.load(Ordering::SeqCst)
+    }
+
+    pub fn verify_udp_receiver(&self) -> Result<()> {
+        if let Listener::Udp(receiver) = &self.listener {
+            let mut buffer = [0; 32];
+            match receiver.recv_from(&mut buffer) {
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    println!("UDP loopback receiver had no worker datagram.");
+                }
+                Err(error) => return Err(error.into()),
+                Ok(_) => return Err("A datagram reached the UDP test listener".into()),
+            }
+        }
+        Ok(())
     }
     pub fn write_pressure_pending(&self) -> bool {
         self.pressure_stall

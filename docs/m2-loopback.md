@@ -63,6 +63,14 @@ On November 28, 2026, the host control passed on `[::1]:55719`. The worker's con
 
 The elevated IPv6 diagnostic then reported `LoopbackDropConfirmed` and `SenderCorrelated=true`. The IPv4 regression produced the same result with the default option. These are local TCP loopback results. IPv6 egress, UDP and DNS remain open. Local reports: `target/loopback-diagnostics/f11eaa9cc4ea4abf93c456b705bf612c/summary.json` (IPv6) and `target/loopback-diagnostics/90e2887248d245faaa702c0234170db4/summary.json` (IPv4).
 
+## IPv4 UDP fixture
+
+Run `cargo run --release -p wallpaper-sandbox-probe --locked -- --case network-loopback-udp`. The host sends and verifies one fixed control datagram on an ephemeral IPv4 loopback port. The restricted worker attempts one fixed datagram to that port. The strict fixture requires an explicit access denial from the worker's socket operation and checks that the host received no worker datagram. Receipt fails the test. A send that returns success with no observed receipt stays inconclusive because the send result does not prove delivery. [Winsock sendto](https://learn.microsoft.com/windows/win32/api/winsock/nf-winsock-sendto)
+
+From an elevated PowerShell, run `pwsh -NoProfile -File tools/diagnose-loopback.ps1 -Udp`. The diagnostic accepts the inconclusive send only when the host receiver reports no worker datagram and a WFP receiving-side AppContainer Loopback block matches the exact host process, listener port, IPv4 addresses, UDP protocol and the source port independently observed for the verified worker. The worker holds its sender socket open for one second after a successful send so that the diagnostic can observe the port. No firewall rule or network exemption changes.
+
+On November 28, 2026, the UDP diagnostic confirmed a receiving-side app isolation drop with `SenderCorrelated=true` and verified profile cleanup. The native check reported a successful send and no received datagram, so the explicit-denial check alone remained inconclusive. Both TCP diagnostics also passed after the UDP change. The UDP result covers the controlled IPv4 loopback datagram on this machine. UDP egress and IPv6 UDP remain open. Local report: `target/loopback-diagnostics/609c67fcb3d3400aa53490618bcbe187/summary.json`.
+
 ## Primary sources reviewed
 
 - [Microsoft: troubleshooting UWP connectivity with WFP](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall), consulted November 14, 2026: loopback isolation and correlation of classify-drop events. Its exemption instructions are not applied here.

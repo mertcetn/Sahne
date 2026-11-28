@@ -8,12 +8,15 @@ function Find-SahneLoopbackDrop {
         [Parameter(Mandatory)][DateTimeOffset] $StartedUtc,
         [Parameter(Mandatory)][DateTimeOffset] $FinishedUtc,
         [ValidateRange(0, 65535)][int] $SenderPort = 0,
-        [switch] $IPv6
+        [switch] $IPv6,
+        [switch] $Udp
     )
     # Netsh records NT device paths. Compare the full path below the drive and
     # also require the exact live host PID, narrow run interval and listener port.
     if ($HostImage -notmatch '^[A-Za-z]:\\' -or $FinishedUtc -lt $StartedUtc) { return }
     $suffix = $HostImage.Substring(2)
+    if ($IPv6 -and $Udp) { return }
+    $protocol = if ($Udp) { '17' } else { '6' }
     $version, $address, $localField, $remoteField = if ($IPv6) {
         'FWP_IP_VERSION_V6', '::1', 'localAddrV6.byteArray16', 'remoteAddrV6.byteArray16'
     } else {
@@ -27,7 +30,7 @@ function Find-SahneLoopbackDrop {
             $time = [DateTimeOffset]::Parse([string]$header.timeStamp, [Globalization.CultureInfo]::InvariantCulture)
             if ($time -lt $StartedUtc -or $time -gt $FinishedUtc) { continue }
             if ([string]$event.type -notin @('FWPM_NET_EVENT_TYPE_CLASSIFY_DROP', 'FWPM_NET_EVENT_TYPE_PUBLIC_CLASSIFY_DROP')) { continue }
-            if ([string]$header.ipVersion -ne $version -or [string]$header.ipProtocol -ne '6') { continue }
+            if ([string]$header.ipVersion -ne $version -or [string]$header.ipProtocol -ne $protocol) { continue }
             if ($header.SelectSingleNode($localField).InnerText -ne $address -or
                 $header.SelectSingleNode($remoteField).InnerText -ne $address) { continue }
             if ([int]$header.localPort -ne $ListenerPort -or [int]$header.remotePort -lt 1 -or [int]$header.remotePort -gt 65535) { continue }
@@ -52,10 +55,18 @@ function Find-SahneLoopbackDrop {
 }
 
 function Get-SahneLoopbackAcceptance {
-    param([string] $Completion, [int] $ExitCode, [string] $Stdout, [string] $Stderr, [bool] $SenderCorrelated, [switch] $IPv6)
+    param([string] $Completion, [int] $ExitCode, [string] $Stdout, [string] $Stderr, [bool] $SenderCorrelated, [switch] $IPv6, [switch] $Udp)
     if ($Completion -ne 'Exited' -or $Stderr.Contains('Attempt cleanup failed:') -or
         ([regex]::Matches($Stdout, '(?m)^Profile cleanup verified:')).Count -ne 1 -or
         -not $Stdout.Contains('Verified AppContainer identity and zero capabilities;')) {
+        return 'Inconclusive'
+    }
+    if ($Udp) {
+        if ($IPv6 -or $Stdout -notmatch '(?m)^UDP loopback receiver had no worker datagram\.\r?$') { return 'Inconclusive' }
+        if ($ExitCode -eq 0 -and $Stdout -match '(?m)^Explicit UDP access denial confirmed; host received no worker datagram\.\r?$' -and
+            $Stdout -match '(?m)^Probe passed;') { return 'ExplicitDenialConfirmed' }
+        if ($ExitCode -eq 1 -and $SenderCorrelated -and
+            $Stderr.Contains('Network test inconclusive or allowed: Ok(())')) { return 'LoopbackDropConfirmed' }
         return 'Inconclusive'
     }
     $case = if ($IPv6) { 'network-loopback-v6' } else { 'network' }
